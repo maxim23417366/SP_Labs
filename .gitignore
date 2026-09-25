@@ -2,3 +2,10 @@ build/
 *.o
 *.elf
 .DS_Store
+*.bin
+*.hex
+*.map
+*.d
+*.lst
+.metadata/
+.settings/
