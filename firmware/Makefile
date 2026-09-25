@@ -37,6 +37,7 @@ BUILD_DIR = build
 # C sources
 C_SOURCES =  \
 Core/Src/main.c \
+Core/Src/periph_check.c \
 Core/Src/gpio.c \
 Core/Src/i2c.c \
 Core/Src/spi.c \

@@ -6,6 +6,7 @@
 #   make clean    — видалити артефакти збірки
 #   make flash    — зібрати і прошити плату через ST-Link
 #   make monitor  — відкрити UART-термінал (ST-Link VCP, 115200 8N1)
+#   make test     — тести коду на ПК з імітованим HAL (без плати)
 #   make image    — (пере)зібрати Docker-образ з docker/Dockerfile
 #
 # Налаштування під конкретний комп'ютер (шлях до прошивальника, COM-порт)
@@ -18,6 +19,7 @@ IMAGE     ?= stm32-builder
 FW_DIR    := firmware
 BUILD_DIR := $(FW_DIR)/build
 TARGET    := firmware
+TESTS_DIR := tests/periph_check
 BAUD      ?= 115200
 JOBS      ?= 4
 
@@ -41,7 +43,7 @@ endif
 DOCKER_RUN = docker run --rm $(DOCKER_USER) -v "$(CURDIR):/workspace" -w /workspace $(IMAGE)
 
 .DEFAULT_GOAL := build
-.PHONY: build clean flash monitor image help
+.PHONY: build clean test flash monitor image help
 
 # Образ збирається з кешу за секунду, тому build завжди спирається на актуальний Dockerfile
 image:
@@ -52,6 +54,11 @@ build: image
 
 clean: image
 	$(DOCKER_RUN) make -C $(FW_DIR) clean
+	$(DOCKER_RUN) make -C $(TESTS_DIR) clean
+
+# Тести збираються звичайним gcc у тому ж образі (build-essential)
+test: image
+	$(DOCKER_RUN) make -C $(TESTS_DIR) run
 
 flash: build
 	$(FLASH_CMD)
@@ -62,6 +69,7 @@ monitor:
 help:
 	@echo make build   - build firmware in Docker
 	@echo make clean   - remove build artifacts
+	@echo make test    - run host tests with mocked HAL, no board needed
 	@echo make flash   - build and flash the board via ST-Link
 	@echo make monitor - open UART terminal, PORT=$(PORT) BAUD=$(BAUD)
 	@echo make image   - rebuild Docker image
