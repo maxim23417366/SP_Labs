@@ -1,49 +1,67 @@
-# Назва вихідного файлу прошивки
-TARGET = firmware
+# -----------------------------------------------------------------------------
+# Кореневий Makefile — обгортка над Docker-тулчейном.
+# Саму прошивку збирає згенерований CubeMX firmware/Makefile всередині контейнера.
+#
+#   make build    — зібрати прошивку: firmware/build/firmware.{elf,bin,hex}
+#   make clean    — видалити артефакти збірки
+#   make flash    — зібрати і прошити плату через ST-Link
+#   make monitor  — відкрити UART-термінал (ST-Link VCP, 115200 8N1)
+#   make image    — (пере)зібрати Docker-образ з docker/Dockerfile
+#
+# Налаштування під конкретний комп'ютер (шлях до прошивальника, COM-порт)
+# задаються у local.mk, який не комітиться. Шаблон — local.mk.example.
+# -----------------------------------------------------------------------------
 
-# Папка для скомпільованих бінарних файлів
-BUILD_DIR = build
+-include local.mk
 
-# Крос-компілятор для ARM Cortex-M
-CC = arm-none-eabi-gcc
-OBJCOPY = arm-none-eabi-objcopy
-SIZE = arm-none-eabi-size
+IMAGE     ?= stm32-builder
+FW_DIR    := firmware
+BUILD_DIR := $(FW_DIR)/build
+TARGET    := firmware
+BAUD      ?= 115200
+JOBS      ?= 4
 
-# Налаштування процесора 
-MCU = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
+# Git Bash (MSYS) інакше перетворює /workspace на C:/Program Files/Git/workspace
+export MSYS_NO_PATHCONV := 1
 
-# Прапорці компілятора
-CFLAGS = $(MCU) -Wall -fdata-sections -ffunction-sections -O2 --specs=nano.specs --specs=nosys.specs
+ifeq ($(OS),Windows_NT)
+  DOCKER_USER :=
+  PROGRAMMER  ?= STM32_Programmer_CLI
+  FLASH_CMD    = "$(PROGRAMMER)" -c port=SWD -w $(BUILD_DIR)/$(TARGET).hex -v -rst
+  PORT        ?= COM3
+  MONITOR_CMD  = python -m serial.tools.miniterm $(PORT) $(BAUD)
+else
+  # --user: щоб файли в build/ належали користувачу, а не root
+  DOCKER_USER := --user $(shell id -u):$(shell id -g)
+  FLASH_CMD    = st-flash --reset write $(BUILD_DIR)/$(TARGET).bin 0x08000000
+  PORT        ?= $(firstword $(wildcard /dev/ttyACM* /dev/tty.usbmodem*))
+  MONITOR_CMD  = picocom -b $(BAUD) --imap lfcrlf $(PORT)
+endif
 
-# Список сирцевих файлів 
-C_SOURCES = $(wildcard src/*.c) main.c
+DOCKER_RUN = docker run --rm $(DOCKER_USER) -v "$(CURDIR):/workspace" -w /workspace $(IMAGE)
 
-# Назва Docker-образу
-DOCKER_IMAGE = stm32-builder
+.DEFAULT_GOAL := build
+.PHONY: build clean flash monitor image help
 
-# --- Основні цілі ---
+# Образ збирається з кешу за секунду, тому build завжди спирається на актуальний Dockerfile
+image:
+	docker build -q -t $(IMAGE) docker/
 
-.PHONY: all clean docker-build
+build: image
+	$(DOCKER_RUN) make -C $(FW_DIR) -j$(JOBS) all
 
-# Ціль за замовчуванням: збирає прошивку
-all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).bin $(BUILD_DIR)/$(TARGET).hex
+clean: image
+	$(DOCKER_RUN) make -C $(FW_DIR) clean
 
-# Створення папки build та компіляція
-$(BUILD_DIR)/$(TARGET).elf: $(C_SOURCES)
-	mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) $(C_SOURCES) -o $@
-	$(SIZE) $@
+flash: build
+	$(FLASH_CMD)
 
-$(BUILD_DIR)/$(TARGET).bin: $(BUILD_DIR)/$(TARGET).elf
-	$(OBJCOPY) -O binary $< $@
+monitor:
+	$(MONITOR_CMD)
 
-$(BUILD_DIR)/$(TARGET).hex: $(BUILD_DIR)/$(TARGET).elf
-	$(OBJCOPY) -O ihex $< $@
-
-# Очищення зібраних файлів
-clean:
-	rm -rf $(BUILD_DIR)
-
-# Збірка проєкту всередині Docker-контейнера однією командою
-docker-build:
-	docker run --rm -v "$(CURDIR)":/workspace $(DOCKER_IMAGE) make all
+help:
+	@echo make build   - build firmware in Docker
+	@echo make clean   - remove build artifacts
+	@echo make flash   - build and flash the board via ST-Link
+	@echo make monitor - open UART terminal, PORT=$(PORT) BAUD=$(BAUD)
+	@echo make image   - rebuild Docker image
