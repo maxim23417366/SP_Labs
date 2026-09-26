@@ -54,6 +54,7 @@ PeriphCheck_Result periph_check;
  * реалізація _write() або __io_putchar(), лог піде в UART без змін тут. */
 __attribute__((weak)) int __io_putchar(int ch)
 {
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
   return ch;
 }
 
@@ -230,7 +231,7 @@ static void check_pwm(void)
 
   uint32_t tick_hz = tim_clk / (htim3.Instance->PSC + 1U);
   uint32_t period  = htim3.Instance->ARR + 1U;
-  uint32_t pulse   = htim3.Instance->CCR1;
+  uint32_t pulse  = htim3.Instance->CCR1;
 
   periph_check.pwm_freq_hz  = tick_hz / period;
   periph_check.pwm_pulse_us = (uint32_t)(((uint64_t)pulse * 1000000U) / tick_hz);
