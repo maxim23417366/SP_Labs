@@ -6,7 +6,7 @@
 
 #define LD2_Pin             GPIO_PIN_5
 #define LD2_GPIO_Port       GPIOA
-#define FLASH_CS_Pin        GPIO_PIN_2
+#define FLASH_CS_Pin        GPIO_PIN_10
 #define FLASH_CS_GPIO_Port  GPIOB
 
 void Error_Handler(void);
