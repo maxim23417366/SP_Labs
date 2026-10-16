@@ -159,3 +159,21 @@ HAL_StatusTypeDef HAL_TIM_PWM_Start(TIM_HandleTypeDef *htim, uint32_t channel)
   }
   return mock.pwm_start_status;
 }
+
+/* ---- UART ---------------------------------------------------------------- */
+HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *huart, const uint8_t *data,
+                                    uint16_t size, uint32_t timeout)
+{
+  (void)timeout;
+
+  mock.uart_last_handle = huart;
+  for (uint16_t i = 0U; i < size; i++)
+  {
+    if (mock.uart_tx_count < sizeof(mock.uart_tx))
+    {
+      mock.uart_tx[mock.uart_tx_count] = data[i];
+    }
+    mock.uart_tx_count++;
+  }
+  return HAL_OK;
+}

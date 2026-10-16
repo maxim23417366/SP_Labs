@@ -43,6 +43,7 @@ typedef struct
 
 #define GPIO_PIN_2              ((uint16_t)0x0004)
 #define GPIO_PIN_5              ((uint16_t)0x0020)
+#define GPIO_PIN_10             ((uint16_t)0x0400)
 #define GPIO_MODE_OUTPUT_PP     0x00000001U
 #define GPIO_NOPULL             0x00000000U
 #define GPIO_SPEED_FREQ_LOW     0x00000000U
@@ -149,6 +150,11 @@ typedef struct
   HAL_UART_StateTypeDef gState;
 } UART_HandleTypeDef;
 
+#define HAL_MAX_DELAY           0xFFFFFFFFU
+
+HAL_StatusTypeDef HAL_UART_Transmit(UART_HandleTypeDef *huart, const uint8_t *data,
+                                    uint16_t size, uint32_t timeout);
+
 /* ---- Хендли, які в прошивці створює CubeMX ------------------------------- */
 extern I2C_HandleTypeDef  hi2c1;
 extern SPI_HandleTypeDef  hspi2;
@@ -168,7 +174,7 @@ typedef struct
   /* SPI2 + CS флешки */
   uint8_t           jedec_id[3];
   HAL_StatusTypeDef spi_status;
-  uint8_t           flash_cs_level;     /* поточний рівень PB2 */
+  uint8_t           flash_cs_level;     /* поточний рівень FLASH_CS (PB10) */
   uint32_t          flash_transfers;
   uint32_t          flash_protocol_errors;  /* CS не опущений або команда не 0x9F */
 
@@ -180,6 +186,11 @@ typedef struct
 
   /* TIM3 */
   HAL_StatusTypeDef pwm_start_status;
+
+  /* USART2: що прошивка відправила через printf-хук __io_putchar() */
+  uint8_t           uart_tx[64];
+  uint32_t          uart_tx_count;
+  const UART_HandleTypeDef *uart_last_handle;
 
   /* LD2 і час */
   uint32_t          tick_ms;

@@ -68,8 +68,9 @@ void Error_Handler(void);
 #define CAM_D2_GPIO_Port GPIOC
 #define CAM_D3_Pin GPIO_PIN_3
 #define CAM_D3_GPIO_Port GPIOC
-#define BTN_1_Pin GPIO_PIN_0
-#define BTN_1_GPIO_Port GPIOA
+#define PIR_SENSOR_Pin GPIO_PIN_0
+#define PIR_SENSOR_GPIO_Port GPIOA
+#define PIR_SENSOR_EXTI_IRQn EXTI0_IRQn
 #define BTN_2_Pin GPIO_PIN_1
 #define BTN_2_GPIO_Port GPIOA
 #define USART_TX_Pin GPIO_PIN_2
@@ -88,7 +89,7 @@ void Error_Handler(void);
 #define CAM_D5_GPIO_Port GPIOC
 #define LOCK_SW_Pin GPIO_PIN_0
 #define LOCK_SW_GPIO_Port GPIOB
-#define FLASH_CS_Pin GPIO_PIN_2
+#define FLASH_CS_Pin GPIO_PIN_10
 #define FLASH_CS_GPIO_Port GPIOB
 #define CAM_D6_Pin GPIO_PIN_6
 #define CAM_D6_GPIO_Port GPIOC
@@ -99,9 +100,8 @@ void Error_Handler(void);
 #define CAM_VSYNC_EXTI_IRQn EXTI9_5_IRQn
 #define CAM_XCLK_Pin GPIO_PIN_8
 #define CAM_XCLK_GPIO_Port GPIOA
-#define PIR_SENSOR_Pin GPIO_PIN_9
-#define PIR_SENSOR_GPIO_Port GPIOA
-#define PIR_SENSOR_EXTI_IRQn EXTI9_5_IRQn
+#define BTN_1_Pin GPIO_PIN_9
+#define BTN_1_GPIO_Port GPIOA
 #define CAM_PCLK_Pin GPIO_PIN_10
 #define CAM_PCLK_GPIO_Port GPIOA
 #define TMS_Pin GPIO_PIN_13
