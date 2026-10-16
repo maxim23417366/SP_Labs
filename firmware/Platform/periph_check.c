@@ -7,7 +7,7 @@
   *            - LD2: повільно (1 Гц) — усе OK; швидко (5 Гц) — якийсь пристрій
   *              не відповідає; світиться постійно — спрацював Error_Handler();
   *            - змінна periph_check у дебагері;
-  *            - лог через printf (з'явиться, коли буде _write()-хук з кроку 4).
+  *            - лог через printf, який Platform/retarget.c відправляє в USART2.
   ******************************************************************************
   */
 #include "periph_check.h"
@@ -47,16 +47,6 @@
 #define LED_FAST_PERIOD_MS      100U
 
 PeriphCheck_Result periph_check;
-
-/* Поки немає _write()-хука з кроку 4, згенерований syscalls.c викликав би
- * неіснуючий __io_putchar і процесор упав би в HardFault. Ця слабка заглушка
- * робить printf безпечним: вивід просто відкидається. Щойно з'явиться сильна
- * реалізація _write() або __io_putchar(), лог піде в UART без змін тут. */
-__attribute__((weak)) int __io_putchar(int ch)
-{
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  return ch;
-}
 
 static const char *ok_str(uint8_t ok)
 {
@@ -274,8 +264,8 @@ void PeriphCheck_Loop(void)
     periph_check.loop_count++;
 
     /* Постійна активність для логічного аналізатора:
-     *   I2C1: START, 0x68+W, ACK/NACK, STOP (PB6 = SCL, PB7 = SDA)
-     *   SPI2: CS вниз, 9F + 3 байти, CS вгору (PB2 = CS, PB13 = SCK)
+     *   I2C1: START, 0x68+W, ACK/NACK, STOP (PB8 = SCL, PB9 = SDA)
+     *   SPI2: CS вниз, 9F + 3 байти, CS вгору (PB10 = CS, PB13 = SCK)
      * Заодно видно, якщо пристрій від'єднали або підключили на ходу. */
     HAL_StatusTypeDef st = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(I2C_ADDR_MPU6050 << 1),
                                                  1U, I2C_PROBE_TIMEOUT_MS);

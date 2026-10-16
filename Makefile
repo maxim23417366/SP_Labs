@@ -1,12 +1,13 @@
 # -----------------------------------------------------------------------------
 # Кореневий Makefile — обгортка над Docker-тулчейном.
-# Саму прошивку збирає згенерований CubeMX firmware/Makefile всередині контейнера.
+# Прошивку збирає firmware/firmware.mk всередині контейнера. Згенерований CubeMX
+# firmware/Makefile не використовується: CubeMX перезаписує його при кожній генерації.
 #
 #   make build    — зібрати прошивку: firmware/build/firmware.{elf,bin,hex}
 #   make clean    — видалити артефакти збірки
 #   make flash    — зібрати і прошити плату через ST-Link
 #   make monitor  — відкрити UART-термінал (ST-Link VCP, 115200 8N1)
-#   make test     — тести коду на ПК з імітованим HAL (без плати)
+#   make test     — тести на ПК без плати: periph_check (ЛР1) + unit-тести драйверів
 #   make image    — (пере)зібрати Docker-образ з docker/Dockerfile
 #
 # Налаштування під конкретний комп'ютер (шлях до прошивальника, COM-порт)
@@ -17,9 +18,10 @@
 
 IMAGE     ?= stm32-builder
 FW_DIR    := firmware
+FW_MAKE   := make -C $(FW_DIR) -f firmware.mk
 BUILD_DIR := $(FW_DIR)/build
 TARGET    := firmware
-TESTS_DIR := tests/periph_check
+TESTS_DIR := tests
 BAUD      ?= 115200
 JOBS      ?= 4
 
@@ -50,10 +52,10 @@ image:
 	docker build -q -t $(IMAGE) docker/
 
 build: image
-	$(DOCKER_RUN) make -C $(FW_DIR) -j$(JOBS) all
+	$(DOCKER_RUN) $(FW_MAKE) -j$(JOBS) all
 
 clean: image
-	$(DOCKER_RUN) make -C $(FW_DIR) clean
+	$(DOCKER_RUN) $(FW_MAKE) clean
 	$(DOCKER_RUN) make -C $(TESTS_DIR) clean
 
 # Тести збираються звичайним gcc у тому ж образі (build-essential)
