@@ -246,6 +246,21 @@ static void test_loop_hot_unplug_and_led(void)
   CHECK(periph_check.all_ok);
 }
 
+/* Platform/retarget.c. На ПК printf іде в консоль, тому хук викликаємо
+ * напряму, як це робить newlib на платі: кожен символ має піти в USART2. */
+int __io_putchar(int ch);
+
+static void test_printf_hook_uses_usart2(void)
+{
+  CHECK(__io_putchar('O') == 'O');
+  CHECK(__io_putchar('K') == 'K');
+
+  CHECK(mock.uart_tx_count == 2U);
+  CHECK(mock.uart_tx[0] == 'O');
+  CHECK(mock.uart_tx[1] == 'K');
+  CHECK(mock.uart_last_handle == &huart2);
+}
+
 /* ------------------------------------------------------------------------- */
 
 typedef struct
@@ -267,6 +282,7 @@ static const TestCase tests[] =
   { "SPI2 handle not initialized",           test_spi_handle_not_ready },
   { "PWM start error",                       test_pwm_start_error },
   { "loop: hot unplug + LED blink rate",     test_loop_hot_unplug_and_led },
+  { "printf hook sends bytes to USART2",     test_printf_hook_uses_usart2 },
 };
 
 int main(void)
