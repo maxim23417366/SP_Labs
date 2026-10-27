@@ -1,0 +1,20 @@
+# UART-лог self-test зі стенда (USART2, 115200 8N1)
+# Джерело: docs/captures/uart_selftest.sr, канал TX (PA2 через CN3 «RX»), декодер sigrok uart.
+# Записано прошивкою до коміту 79d2c32: поточна прошивка для тих самих байтів DHT11 друкує rh=34.9.
+# Формат: <час від початку запису, мс>  <рядок>
+   500.2090 ms  # SmartLock selftest v2 (LR2)
+   503.1800 ms  ST,UART,OK,baud=115200
+   518.0180 ms  I2C,scan,0x1D,0x21,0x6B,0x77
+   521.0150 ms  ST,MPU6050,SKIP,err=nack,note=GY-521_faulty_FR06_on_LSM303D
+   539.1200 ms  ST,BMP180,OK,id=0x55,t_c=20.7,p_hpa=1002.73
+   543.8460 ms  ST,L3GD20,OK,addr=0x6B,who=0xD4
+   547.9890 ms  ST,LSM303D,WARN,addr=0x1D,who=0x49,role=FR06_accel,raw=7FF8,7FF8,33CD,a_g=2.938,ax_g=1.998,ay_g=1.998,az_g=0.808
+   558.9620 ms  ST,W25QXX,OK,jedec=EF4017,size_mbit=64
+  1564.5320 ms  ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=30
+  1794.5140 ms  ST,DHT11,OK,t_c=21.5,rh=34,raw=2209150545,crc=OK
+  1799.3450 ms  ST,SERVO_PWM,OK,freq_hz=50,pulse_us=1500,note=no_feedback
+  1805.0610 ms  ST,GPIO,OK,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+  1810.2730 ms  ST,SUMMARY,WARN,ok=8,warn=1,fail=0,skip=1
+  1814.4090 ms  # commands: s selftest | i i2c scan | g gpio watch on/off | m accel x10 (LSM303D, FR-06) | b bmp180
+  1824.0860 ms  #           h dht11 x5 | j jedec | f flash r/w | 1/2/3 servo 1000/1500/2000us
+  1831.6710 ms  #           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help
