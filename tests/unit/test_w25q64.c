@@ -10,6 +10,7 @@
 #include "fake_delay.h"
 #include "mock_spi.h"
 #include "w25q64.h"
+#include "capture_vectors.h"
 
 static w25q64_t dev;
 
@@ -58,6 +59,22 @@ static void test_init_reads_jedec_id(void)
   TEST_ASSERT_EQUAL_HEX8(0xEF, dev.jedec_id[0]);
   TEST_ASSERT_EQUAL_HEX8(0x40, dev.jedec_id[1]);
   TEST_ASSERT_EQUAL_HEX8(0x17, dev.jedec_id[2]);
+}
+
+/* Вектор зі spi_w25q64_jedec.sr (команда j, 8.335 мс): один кадр CS#,
+ * MOSI 9F FF FF FF, MISO FF EF 40 17; UART: SPI,jedec=EF4017,err=ok */
+static void test_capture_jedec_frame(void)
+{
+  uint8_t id[3] = { 0U };
+
+  mock_spi_set_miso(0U, cap_w25q64_jedec_miso, sizeof(cap_w25q64_jedec_miso));
+  dev.bus      = mock_spi_bus();
+  dev.delay_ms = fake_delay_ms;
+  TEST_ASSERT_EQUAL(DEV_OK, w25q64_read_jedec_id(&dev, id));
+
+  TEST_ASSERT_EQUAL_size_t(1U, mock_spi_frame_count());
+  assert_frame(0U, cap_w25q64_jedec_mosi, sizeof(cap_w25q64_jedec_mosi));
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(&cap_w25q64_jedec_miso[1], id, 3U);
 }
 
 static void test_init_no_chip_reads_ff(void)
@@ -288,6 +305,7 @@ int main(void)
 {
   UNITY_BEGIN();
   RUN_TEST(test_init_reads_jedec_id);
+  RUN_TEST(test_capture_jedec_frame);
   RUN_TEST(test_init_no_chip_reads_ff);
   RUN_TEST(test_init_other_chip_rejected);
   RUN_TEST(test_init_spi_error_releases_cs);

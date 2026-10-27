@@ -9,6 +9,7 @@
 #include "bmp180.h"
 #include "fake_delay.h"
 #include "fake_i2c.h"
+#include "capture_vectors.h"
 
 /* Числовий приклад з datasheet BMP180 («Calculating pressure and temperature»):
  * oss = 0, UT = 27898, UP = 23843 -> T = 150 (15.0 °C), p = 69964 Па. */
@@ -202,6 +203,54 @@ static void test_init_calibration_read_timeout(void)
   TEST_ASSERT_EQUAL(DEV_ERR_TIMEOUT, bmp180_init(&dev, fake_i2c_bus(), fake_delay_ms, 0U));
 }
 
+/* Імітація чипа байтами з uart_selftest.sr: 0xF6.. після 0x2E — 55 91, після 0x34 — A8 02 00 */
+static void bmp180_capture_hook(uint8_t *r, uint8_t reg, uint8_t value)
+{
+  const uint8_t *src = (value == BMP180_CMD_TEMP) ? &cap_st_bmp180_ut_read_wire[3] : &cap_st_bmp180_up_read_wire[3];
+  size_t n = (value == BMP180_CMD_TEMP) ? 2U : 3U;
+
+  if (reg == BMP180_REG_CTRL_MEAS)
+  {
+    memcpy(&r[BMP180_REG_OUT_MSB], src, n);
+  }
+}
+
+static void assert_wire(size_t i, const uint8_t *expected, size_t len)
+{
+  const fake_i2c_xfer_t *x = fake_i2c_log(i);
+
+  TEST_ASSERT_EQUAL(DEV_OK, x->result);
+  TEST_ASSERT_EQUAL_size_t(len, x->wire_len);
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, x->wire, len);
+}
+
+/* Вектор з uart_selftest.sr (self-test, 526.8–538.5 мс): драйвер відправляє ті самі
+ * чотири транзакції, що й на записі, і отримує ті самі UT/UP. Калібрування цього
+ * датчика в запис не потрапило (читається в App_Init до запису), тому повний
+ * перерахунок у t_c=20.7 / p_hpa=1002.73 тут неможливий; формат цих значень
+ * в UART перевіряє test_self_test.c. */
+static void test_capture_selftest_ut_up_wire(void)
+{
+  int32_t ut = 0;
+  int32_t up = 0;
+
+  fake_i2c_set_write_hook(BMP180_I2C_ADDR, bmp180_capture_hook);
+  TEST_ASSERT_EQUAL(DEV_OK, bmp180_init(&dev, fake_i2c_bus(), fake_delay_ms, 0U));
+  TEST_ASSERT_EQUAL(DEV_OK, bmp180_read_raw(&dev, &ut, &up));
+
+  TEST_ASSERT_EQUAL_INT32(CAP_ST_BMP180_UT, ut);
+  TEST_ASSERT_EQUAL_INT32(CAP_ST_BMP180_UP, up);
+  TEST_ASSERT_EQUAL_INT32(21905, ut);
+  TEST_ASSERT_EQUAL_INT32(43010, up);
+  TEST_ASSERT_EQUAL_size_t(6U, fake_i2c_log_count());
+  assert_wire(2U, cap_st_bmp180_ut_cmd_wire, sizeof(cap_st_bmp180_ut_cmd_wire));
+  assert_wire(3U, cap_st_bmp180_ut_read_wire, sizeof(cap_st_bmp180_ut_read_wire));
+  assert_wire(4U, cap_st_bmp180_up_cmd_wire, sizeof(cap_st_bmp180_up_cmd_wire));
+  assert_wire(5U, cap_st_bmp180_up_read_wire, sizeof(cap_st_bmp180_up_read_wire));
+  /* На записі між командою і читанням 5.6 мс (T) і 5.5 мс (p): драйвер чекає 5 + 5 мс */
+  TEST_ASSERT_EQUAL_UINT32(10U, fake_delay_total_ms);
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -218,5 +267,6 @@ int main(void)
   RUN_TEST(test_read_oversampling_3);
   RUN_TEST(test_read_bus_errors_propagate);
   RUN_TEST(test_init_calibration_read_timeout);
+  RUN_TEST(test_capture_selftest_ut_up_wire);
   return UNITY_END();
 }
