@@ -30,12 +30,20 @@ BINS      := $(DRIVERS:%=$(BUILD)/test_%)
 DEV_HDRS  := $(wildcard $(FW_DEV)/*.h)
 DBL_HDRS  := $(wildcard doubles/*.h)
 
-.PHONY: all run periph unit coverage clean
+.PHONY: all run periph unit selftest coverage clean
 .SECONDARY: $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ)
 
 all: run
 
-run: periph unit
+run: periph unit selftest
+
+selftest:
+	@mkdir -p $(BUILD)
+	$(CC) -std=c11 -Wall -Wextra -Werror \
+		-I../firmware/App -I../firmware/Devices \
+		test_self_test.c ../firmware/App/self_test.c \
+		-o $(BUILD)/test_self_test
+	./$(BUILD)/test_self_test
 
 periph:
 	$(MAKE) -C periph_check run
