@@ -8,6 +8,8 @@
 #   make flash    — зібрати і прошити плату через ST-Link
 #   make monitor  — відкрити UART-термінал (ST-Link VCP, 115200 8N1)
 #   make test     — тести на ПК без плати: periph_check (ЛР1) + unit-тести драйверів
+#   make coverage — unit-тести + покриття шару драйверів (gcov), поріг COV_MIN
+#   make check-deps — правила залежностей між шарами (scripts/check_deps.sh)
 #   make image    — (пере)зібрати Docker-образ з docker/Dockerfile
 #
 # Налаштування під конкретний комп'ютер (шлях до прошивальника, COM-порт)
@@ -45,7 +47,7 @@ endif
 DOCKER_RUN = docker run --rm $(DOCKER_USER) -v "$(CURDIR):/workspace" -w /workspace $(IMAGE)
 
 .DEFAULT_GOAL := build
-.PHONY: build clean test flash monitor image help
+.PHONY: build clean test coverage check-deps flash monitor image help
 
 # Образ збирається з кешу за секунду, тому build завжди спирається на актуальний Dockerfile
 image:
@@ -62,6 +64,14 @@ clean: image
 test: image
 	$(DOCKER_RUN) make -C $(TESTS_DIR) run
 
+coverage: image
+	$(DOCKER_RUN) make -C $(TESTS_DIR) coverage
+
+# Правила залежностей між шарами Core / Platform / Devices / App
+# tr прибирає CR: на Windows скрипт може прийти з CRLF, а sh у контейнері його не розбере
+check-deps: image
+	$(DOCKER_RUN) sh -c "tr -d '\r' < scripts/check_deps.sh | sh"
+
 flash: build
 	$(FLASH_CMD)
 
@@ -72,6 +82,8 @@ help:
 	@echo make build   - build firmware in Docker
 	@echo make clean   - remove build artifacts
 	@echo make test    - run host tests with mocked HAL, no board needed
+	@echo make coverage - host unit tests + driver coverage, COV_MIN=90
+	@echo make check-deps - check include rules between firmware layers
 	@echo make flash   - build and flash the board via ST-Link
 	@echo make monitor - open UART terminal, PORT=$(PORT) BAUD=$(BAUD)
 	@echo make image   - rebuild Docker image

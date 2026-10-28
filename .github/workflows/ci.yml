@@ -1,0 +1,27 @@
+# Збірка прошивки і хостові тести на кожен pull request (вимога 4.6 ЛР2).
+# Використовуються ті самі цілі кореневого Makefile і той самий Docker-образ,
+# що й локально, тому результат CI збігається з make на комп'ютері учасника.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependency rule (Devices/ without HAL)
+        run: make check-deps
+
+      - name: Firmware build (Docker, arm-none-eabi-gcc)
+        run: make build
+
+      - name: Host tests (periph_check + Unity unit tests)
+        run: make test
+
+      - name: Driver coverage (gcov, threshold 90 %)
+        run: make coverage

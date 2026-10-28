@@ -18,6 +18,7 @@
 #   App/      -> platform.h, Devices/      (без HAL, CubeMX, board.h)
 #   Platform/ -> Core/, HAL, Devices/      (не залежить від App/)
 #   Devices/  -> лише dev_bus.h і libc     (без HAL, CubeMX, Platform, App)
+# Автоматична перевірка правил: make check-deps (scripts/check_deps.sh)
 # -----------------------------------------------------------------------------
 
 TARGET    := firmware
@@ -71,10 +72,11 @@ C_INCLUDES := \
 CFLAGS_BASE := $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -std=gnu11 -g -gdwarf-2 \
                -fdata-sections -ffunction-sections -MMD -MP
 
-# Попередження окремо для нашого коду і для вендорського HAL
-# (зараз ті самі, що в згенерованому CubeMX Makefile)
-WARN_OWN    := -Wall
-WARN_VENDOR := -Wall
+# Наш код і код CubeMX: без жодного попередження (вимога 4.5 ЛР2)
+WARN_OWN    := -Wall -Wextra -Werror
+# Вендорський HAL: придушено рівно одне попередження і тільки для нього —
+# у HAL є колбеки з параметрами, які вони не використовують
+WARN_VENDOR := -Wall -Wextra -Wno-unused-parameter
 
 LDSCRIPT := STM32F411xx_FLASH.ld
 LDFLAGS  := $(MCU) -specs=nano.specs -T$(LDSCRIPT) -lc -lm -lnosys \
