@@ -19,7 +19,7 @@ CFLAGS_OWN    := -std=gnu11 -Wall -Wextra -Werror -O0 -g -I$(FW_DEV) -Idoubles -
 CFLAGS_VENDOR := -std=gnu11 -O0 -g -w
 COVFLAGS      := --coverage
 
-DRIVERS := bmp180 mpu6050 w25q64
+DRIVERS := bmp180 dht11 lsm303d mpu6050 w25q64
 DOUBLES := fake_i2c mock_spi fake_delay
 
 DRV_OBJS  := $(DRIVERS:%=$(BUILD)/dev/%.o)
