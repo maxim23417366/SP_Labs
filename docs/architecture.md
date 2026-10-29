@@ -29,6 +29,7 @@
 
 Модуль firmware/App/self_test.c формує структурований звіт
 про результати перевірки пристроїв.
+Перевірки пристроїв стенда — firmware/App/stand_test.c, UART-команди стенда — firmware/App/bench.c.
 
 Підтримувані статуси: OK, WARN, FAIL, SKIP.
 

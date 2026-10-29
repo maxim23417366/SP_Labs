@@ -218,3 +218,22 @@ bool SelfTest_Report(
            summary.warn == 0U &&
            summary.skip == 0U;
 }
+
+/* Передає один готовий рядок у налаштований вивід */
+bool SelfTest_Emit(const char *line)
+{
+    if (s_output == NULL || line == NULL)
+    {
+        return false;
+    }
+
+    s_output(line, s_output_context);
+
+    return true;
+}
+
+/* Повертає текстовий код помилки драйвера */
+const char *SelfTest_ErrorText(dev_status_t error)
+{
+    return error_text(error);
+}

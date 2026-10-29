@@ -13,6 +13,7 @@
 
 #include "bmp180.h"
 #include "dev_bus.h"
+#include "lsm303d.h"
 #include "mpu6050.h"
 #include "w25q64.h"
 
@@ -28,6 +29,11 @@ typedef struct
 
   w25q64_t     flash;
   dev_status_t flash_status;
+
+  /* FR-06 (удар/вібрація): акселерометр LSM303D на GY-89 замість MPU-6050,
+   * поки модуль GY-521 несправний (журнал проблем ЛР2) */
+  lsm303d_t    accel;
+  dev_status_t accel_status;
 } App_Devices;
 
 extern App_Devices app_devices;

@@ -8,8 +8,10 @@
 
 #include "app.h"
 
+#include "bench.h"
 #include "platform.h"
 #include "self_test.h"
+#include "stand_test.h"
 
 #include <stdio.h>
 
@@ -49,44 +51,21 @@ static void devices_init(void)
         Platform_FlashSpi(),
         Platform_DelayMs
     );
+
+    d->accel_status = lsm303d_init(
+        &d->accel,
+        Platform_SensorI2c(),
+        LSM303D_I2C_ADDR
+    );
 }
 
-/* Формування структурованого звіту самоперевірки */
+/* Формування структурованого звіту самоперевірки:
+ * перевірки всіх пристроїв стенда (stand_test.c) і звіт (self_test.c) */
 static void devices_self_test(void)
 {
-    const App_Devices *d = &app_devices;
-
-    const self_test_device_t results[] =
-    {
-        {
-            "MPU6050",
-            d->mpu_status == DEV_OK
-                ? SELF_TEST_OK : SELF_TEST_FAIL,
-            d->mpu_status,
-            NULL
-        },
-        {
-            "BMP180",
-            d->baro_status == DEV_OK
-                ? SELF_TEST_OK : SELF_TEST_FAIL,
-            d->baro_status,
-            NULL
-        },
-        {
-            "W25Q64",
-            d->flash_status == DEV_OK
-                ? SELF_TEST_OK : SELF_TEST_FAIL,
-            d->flash_status,
-            NULL
-        }
-    };
-
     SelfTest_SetOutput(self_test_uart_output, NULL);
 
-    (void)SelfTest_Report(
-        results,
-        sizeof(results) / sizeof(results[0])
-    );
+    (void)StandTest_Run();
 }
 
 /* Запуск прикладної логіки */
@@ -95,10 +74,12 @@ void App_Init(void)
     Platform_BringUp();
     devices_init();
     devices_self_test();
+    Bench_Help();
 }
 
 /* Основний цикл програми */
 void App_Loop(void)
 {
     Platform_Poll();
+    Bench_Poll();
 }

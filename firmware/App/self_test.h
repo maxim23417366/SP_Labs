@@ -65,4 +65,11 @@ bool SelfTest_Report(
     size_t count
 );
 
+/* Передача одного готового рядка (без символу нового рядка)
+ * у налаштований вивід; false, якщо вивід не налаштовано */
+bool SelfTest_Emit(const char *line);
+
+/* Текстовий код помилки драйвера, як у полі err= */
+const char *SelfTest_ErrorText(dev_status_t error);
+
 #endif /* SELF_TEST_H */
