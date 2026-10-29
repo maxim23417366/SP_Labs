@@ -135,14 +135,14 @@ bool SelfTest_FormatSummary(
     }
 
     n = snprintf(
-        buffer, size,
-        "ST,SUMMARY,%s,ok=%zu,warn=%zu,fail=%zu,skip=%zu",
-        state,
-        summary->ok,
-        summary->warn,
-        summary->fail,
-        summary->skip
-    );
+    buffer, size,
+    "ST,SUMMARY,%s,ok=%lu,warn=%lu,fail=%lu,skip=%lu",
+    state,
+    (unsigned long)summary->ok,
+    (unsigned long)summary->warn,
+    (unsigned long)summary->fail,
+    (unsigned long)summary->skip
+);
 
     return n >= 0 && (size_t)n < size;
 }
