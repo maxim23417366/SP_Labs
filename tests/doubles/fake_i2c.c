@@ -164,6 +164,13 @@ void fake_i2c_set_write_hook(uint8_t addr7, fake_i2c_write_hook_t hook)
   }
 }
 
+uint8_t *fake_i2c_device_regs(uint8_t addr7)
+{
+  fake_dev_t *dev = find(addr7);
+
+  return (dev != NULL) ? dev->regs : NULL;
+}
+
 void fake_i2c_fail_at(size_t n, dev_status_t status)
 {
   fail_index  = n;

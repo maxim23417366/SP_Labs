@@ -39,6 +39,10 @@ const dev_i2c_bus_t *fake_i2c_bus(void);
 uint8_t *fake_i2c_add_device(uint8_t addr7);
 void fake_i2c_set_write_hook(uint8_t addr7, fake_i2c_write_hook_t hook);
 
+/* Регістри пристрою за адресою або NULL, якщо його на шині немає. Без запису
+ * в журнал: так fake_platform відповідає на проби адрес і SCCB-читання. */
+uint8_t *fake_i2c_device_regs(uint8_t addr7);
+
 /* Транзакція з номером n (від 0) завершиться заданою помилкою. */
 void fake_i2c_fail_at(size_t n, dev_status_t status);
 
