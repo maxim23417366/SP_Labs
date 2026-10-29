@@ -87,8 +87,12 @@ void Error_Handler(void);
 #define CAM_D4_GPIO_Port GPIOC
 #define CAM_D5_Pin GPIO_PIN_5
 #define CAM_D5_GPIO_Port GPIOC
-#define LOCK_SW_Pin GPIO_PIN_0
-#define LOCK_SW_GPIO_Port GPIOB
+#define SPARE_PB0_Pin GPIO_PIN_0
+#define SPARE_PB0_GPIO_Port GPIOB
+#define DOOR_REED_Pin GPIO_PIN_4
+#define DOOR_REED_GPIO_Port GPIOB
+#define DHT11_DATA_Pin GPIO_PIN_6
+#define DHT11_DATA_GPIO_Port GPIOB
 #define FLASH_CS_Pin GPIO_PIN_10
 #define FLASH_CS_GPIO_Port GPIOB
 #define CAM_D6_Pin GPIO_PIN_6
