@@ -1,0 +1,20 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: main 23fecf8, локальна збірка Arm GNU Toolchain 15.3.Rel2, firmware.bin sha256 9f3ae74fe970c753ae726ebcf3f1202a4742b3700a8a4afde372bd39eec518d4.
+# Після перепідключення модулів і перепрошивки. Команди: s, i, j.
+#
+# SmartLock selftest v2 (LR2)
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,START
+ST,UART,OK,baud=115200
+ST,MPU6050,WARN,who=0x68,a_g=0.930,ax_g=-0.930,ay_g=-0.010,az_g=-0.006,gyro_max_dps=12.0,t_c=22.6
+ST,BMP180,OK,id=0x55,t_c=20.2,p_hpa=1002.70
+ST,L3GD20,OK,addr=0x6B,who=0xD4
+ST,LSM303D,WARN,addr=0x1D,who=0x49,role=FR06_accel,raw=7FF8,7FF8,1D2B,a_g=2.861,ax_g=1.998,ay_g=1.998,az_g=0.455
+ST,W25Q64,OK,jedec=EF4017,size_mbit=64
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=30
+ST,DHT11,OK,t_c=21.8,rh=42.7,raw=2A0715084E,crc=OK
+ST,SERVO_PWM,OK,freq_hz=50,pulse_us=1500,note=no_feedback
+ST,GPIO,OK,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+SPI,jedec=EF4017,err=ok

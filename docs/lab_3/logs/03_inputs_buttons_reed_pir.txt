@@ -1,0 +1,42 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: стендова прошивка ЛР2, що була на платі до перепрошивки (образ 35 760 Б; текстові рядки збігаються з main 23fecf8).
+# Команда g (стеження за входами, антидребезг 20 мс), 120 с. Час у дужках — мс від старту МК.
+# Дії: кнопки коду 1, 2, 3, 4 по черзі; один раз магніт до геркона; рух перед PIR.
+#
+# gpio watch on (prints on change)
+[32197] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[36348] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[39004] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[42313] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[43339] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[76300] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[77271] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[79397] GPIO,btn=0111,lock_b1=1,door=1,pir=0,mpu_int=0
+[80466] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[82182] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[83153] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[85239] GPIO,btn=1011,lock_b1=1,door=1,pir=0,mpu_int=0
+[86299] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[88123] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[89094] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[90352] GPIO,btn=1101,lock_b1=1,door=1,pir=0,mpu_int=0
+[91418] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[93925] GPIO,btn=1110,lock_b1=1,door=1,pir=0,mpu_int=0
+[94970] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[96531] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[98082] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[110255] GPIO,btn=1111,lock_b1=1,door=0,pir=0,mpu_int=0
+[110879] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[120615] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[122193] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[126275] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[127246] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[132650] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[133621] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[138601] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[139662] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[143046] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[144683] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[149562] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[150533] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+# gpio watch off

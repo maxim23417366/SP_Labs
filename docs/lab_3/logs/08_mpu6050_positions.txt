@@ -1,0 +1,32 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: стендова прошивка ЛР2, що була на платі до перепрошивки (образ 35 760 Б; текстові рядки збігаються з main 23fecf8).
+# Команда m, по шість вимірів у кожному положенні (рядки LSM303D прибрано).
+#
+## положення 1: модуль рівно, мікросхемою вгору
+ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.139,ay_g=-0.022,az_g=1.093,gyro_max_dps=11.8,t_c=22.4
+ST,MPU6050,WARN,who=0x68,a_g=1.103,ax_g=0.133,ay_g=-0.022,az_g=1.095,gyro_max_dps=11.8,t_c=22.5
+ST,MPU6050,WARN,who=0x68,a_g=1.116,ax_g=0.139,ay_g=-0.023,az_g=1.108,gyro_max_dps=11.8,t_c=22.4
+ST,MPU6050,WARN,who=0x68,a_g=1.111,ax_g=0.131,ay_g=-0.028,az_g=1.103,gyro_max_dps=11.8,t_c=22.5
+ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.129,ay_g=-0.022,az_g=1.099,gyro_max_dps=11.7,t_c=22.4
+ST,MPU6050,WARN,who=0x68,a_g=1.115,ax_g=0.133,ay_g=-0.019,az_g=1.107,gyro_max_dps=11.9,t_c=22.5
+## положення 2: на ребрі, вісь X вниз
+ST,MPU6050,WARN,who=0x68,a_g=1.065,ax_g=1.056,ay_g=-0.010,az_g=0.139,gyro_max_dps=11.3,t_c=22.4
+ST,MPU6050,WARN,who=0x68,a_g=1.066,ax_g=1.063,ay_g=-0.016,az_g=0.089,gyro_max_dps=12.1,t_c=22.4
+ST,MPU6050,WARN,who=0x68,a_g=1.060,ax_g=1.060,ay_g=-0.019,az_g=0.039,gyro_max_dps=10.5,t_c=22.5
+ST,MPU6050,WARN,who=0x68,a_g=1.057,ax_g=1.057,ay_g=-0.012,az_g=0.015,gyro_max_dps=11.9,t_c=22.4
+ST,MPU6050,WARN,who=0x68,a_g=1.055,ax_g=1.055,ay_g=-0.015,az_g=0.025,gyro_max_dps=11.9,t_c=22.4
+ST,MPU6050,WARN,who=0x68,a_g=1.057,ax_g=1.057,ay_g=-0.016,az_g=0.016,gyro_max_dps=11.9,t_c=22.5
+## положення 3: на протилежному ребрі — під час перевертання модуль на мить втратив живлення; читання без скидання МК
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+## положення 3 після скидання МК (st-flash reset)
+ST,MPU6050,WARN,who=0x68,a_g=0.933,ax_g=-0.933,ay_g=-0.008,az_g=0.026,gyro_max_dps=11.9,t_c=22.0
+ST,MPU6050,WARN,who=0x68,a_g=0.929,ax_g=-0.929,ay_g=-0.001,az_g=0.025,gyro_max_dps=11.9,t_c=22.0
+ST,MPU6050,WARN,who=0x68,a_g=0.929,ax_g=-0.929,ay_g=-0.001,az_g=0.020,gyro_max_dps=11.7,t_c=22.2
+ST,MPU6050,WARN,who=0x68,a_g=0.932,ax_g=-0.932,ay_g=-0.006,az_g=0.016,gyro_max_dps=11.9,t_c=22.1
+ST,MPU6050,WARN,who=0x68,a_g=0.933,ax_g=-0.933,ay_g=-0.010,az_g=0.018,gyro_max_dps=12.0,t_c=22.2
+ST,MPU6050,WARN,who=0x68,a_g=0.936,ax_g=-0.936,ay_g=-0.004,az_g=0.027,gyro_max_dps=11.9,t_c=22.2

@@ -1,0 +1,21 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: стендова прошивка ЛР2, що була на платі до перепрошивки (образ 35 760 Б; текстові рядки збігаються з main 23fecf8).
+# Перший запуск після підключення стенда: шина I2C1 не працює (PB8 і PB9 у спокої низькі).
+# Команди: s, i, j.
+#
+# SmartLock selftest v2 (LR2)
+I2C,scan
+ST,START
+ST,UART,OK,baud=115200
+ST,MPU6050,SKIP,err=bus,note=GY-521_faulty_FR06_on_LSM303D
+ST,BMP180,FAIL,err=bus
+ST,L3GD20,FAIL,err=nack,addr=0x6B|0x6A
+ST,LSM303D,FAIL,err=bus
+ST,W25Q64,OK,jedec=EF4017,size_mbit=64
+ST,OV7670,FAIL,err=nack,vsync_hz=30,hint=check_MCLK_D7_PWDN0_RST1
+ST,DHT11,OK,t_c=19.7,rh=48.2,raw=300213074C,crc=OK
+ST,SERVO_PWM,OK,freq_hz=50,pulse_us=1500,note=no_feedback
+ST,GPIO,OK,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+ST,SUMMARY,FAIL,ok=5,warn=0,fail=4,skip=1
+I2C,scan
+SPI,jedec=EF4017,err=ok
