@@ -44,6 +44,17 @@ uint32_t Platform_Millis(void)
   return fake_platform.now_ms;
 }
 
+uint32_t Platform_Cycles(void)
+{
+  fake_platform.cycles_calls++;
+  return (fake_platform.now_ms * 1000U) + (fake_platform.cycles_calls * fake_platform.cycles_step);
+}
+
+uint32_t Platform_CyclesToUs(uint32_t cycles)
+{
+  return cycles;
+}
+
 void Platform_BringUp(void)
 {
   fake_platform.bringup_calls++;

@@ -1,0 +1,76 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-11.
+# Прошивка: main 23fecf8 + команди w, v, t з цього ж коміту; локальна збірка Arm GNU Toolchain 15.3.Rel2,
+# firmware.bin 34 284 Б, sha256 155885f0ea1d02147d046318afe68f254c846efe54d68d24ddb00ff79b185a48.
+# Команда t: тривалість одного читання, лічильник тактів ядра DWT CYCCNT, по 5 запусків на датчик.
+# i2c_absent — звернення до адреси 0x50, на якій нікого немає.
+#
+## run 1, all sensors connected
+TIME,name=dht11,n=5,ok=5,min_us=24745,avg_us=24952,max_us=25005,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12100,max_us=12506,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1568,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+## run 2, all sensors connected
+TIME,name=dht11,n=5,ok=5,min_us=24115,avg_us=24827,max_us=25006,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11998,avg_us=12100,max_us=12504,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=110,avg_us=110,max_us=111,last=nack
+## run 3, all sensors connected
+TIME,name=dht11,n=5,ok=5,min_us=24903,avg_us=24984,max_us=25005,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12099,max_us=12500,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+#
+# --- відмова DHT11: дріт даних (D10 -> BB1 рядок 41) від'єднано на працюючому стенді ---
+## run 1, DHT11 data wire disconnected
+TIME,name=dht11,n=5,ok=0,min_us=21148,avg_us=21150,max_us=21152,last=timeout
+TIME,name=bmp180,n=5,ok=5,min_us=11882,avg_us=11975,max_us=11999,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+## run 2, DHT11 data wire disconnected
+TIME,name=dht11,n=5,ok=0,min_us=20553,avg_us=21031,max_us=21151,last=timeout
+TIME,name=bmp180,n=5,ok=5,min_us=11878,avg_us=11974,max_us=11999,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+DHT,FAIL,err=timeout
+DHT,FAIL,err=timeout
+DHT,FAIL,err=timeout
+DHT,FAIL,err=timeout
+DHT,FAIL,err=timeout
+#
+# --- відмова BMP180: модуль GY-89 вийнято на працюючому стенді, DHT11 повернуто ---
+## GY-89 removed, no MCU reset since it was working
+I2C,scan,0x21,0x68
+## run 1, GY-89 removed
+TIME,name=dht11,n=5,ok=5,min_us=23724,avg_us=24237,max_us=24367,last=ok
+TIME,name=bmp180,n=5,ok=0,min_us=95,avg_us=107,max_us=111,last=nack
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+## run 2, GY-89 removed
+TIME,name=dht11,n=5,ok=5,min_us=24215,avg_us=24336,max_us=24367,last=ok
+TIME,name=bmp180,n=5,ok=0,min_us=95,avg_us=107,max_us=111,last=nack
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+ST,BMP180,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,LSM303D,FAIL,err=nack
+ST,MPU6050,WARN,who=0x68,a_g=1.111,ax_g=0.106,ay_g=-0.023,az_g=1.106,gyro_max_dps=11.7,t_c=20.4
+#
+# --- модуль GY-89 повернуто; плату при цьому вимикали (uptime_ms=13762 у логу 12), тобто це новий старт ---
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,BMP180,OK,id=0x55,t_c=18.3,p_hpa=991.21
+ST,BMP180,OK,id=0x55,t_c=18.3,p_hpa=991.21
+TIME,name=dht11,n=5,ok=5,min_us=24867,avg_us=24977,max_us=25041,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12111,max_us=12561,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,BMP180,OK,id=0x55,t_c=18.2,p_hpa=991.21
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0

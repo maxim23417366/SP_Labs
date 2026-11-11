@@ -23,6 +23,12 @@ const dev_spi_bus_t *Platform_FlashSpi(void);
 void     Platform_DelayMs(uint32_t ms);
 uint32_t Platform_Millis(void);
 
+/* Лічильник тактів ядра (DWT CYCCNT) для вимірювання тривалості операцій.
+ * Різниця двох значень коректна і після одного переповнення (при 96 МГц —
+ * інтервали до ~44 с). Platform_CyclesToUs() переводить різницю в мікросекунди. */
+uint32_t Platform_Cycles(void);
+uint32_t Platform_CyclesToUs(uint32_t cycles);
+
 /* Перевірка периферії МК з ЛР1 (periph_check): ініціалізація, тактування,
  * скан I2C, JEDEC ID, ШІМ. Викликати один раз після MX_*_Init(). */
 void Platform_BringUp(void);

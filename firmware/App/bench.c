@@ -32,6 +32,15 @@
 
 #define GPIO_DEBOUNCE_MS 20U
 
+/* Сталий шаблон перевірки збереження даних флеш-пам'яті: байт i = i * 7 + 0x3C */
+#define FLASH_PERSIST_STEP 7U
+#define FLASH_PERSIST_SEED 0x3CU
+
+/* Вимір тривалості читання датчиків: кількість запусків і пауза між читаннями
+ * DHT11 (та сама, що й у команді h) */
+#define TIME_RUNS        5U
+#define TIME_DHT_GAP_MS  2000U
+
 #define LINE_SIZE        192U
 
 static int s_gpio_watch;
@@ -196,6 +205,190 @@ static void flash_rw_test(void)
            (unsigned)sizeof(rd), bad, rd[0], rd[1], rd[2], rd[3]);
 }
 
+/* ---- збереження даних флеш-пам'яті після перезапуску (команди w, v) -------- */
+
+/* Адреса тестового сектора: останній сектор, той самий, що і в команді f */
+static uint32_t flash_test_addr(void)
+{
+    w25q64_t *f = &app_devices.flash;
+
+    f->bus = Platform_FlashSpi();
+    f->delay_ms = Platform_DelayMs;
+    return flash_size_bytes() - W25Q64_SECTOR_SIZE;
+}
+
+/* Сталий шаблон: не залежить від часу, тому його можна звірити після перезапуску */
+static uint8_t flash_persist_byte(unsigned i)
+{
+    return (uint8_t)((i * FLASH_PERSIST_STEP) + FLASH_PERSIST_SEED);
+}
+
+/* Команда w: стерти тестовий сектор і записати сторінку сталого шаблону */
+static void flash_persist_write(void)
+{
+    static uint8_t wr[W25Q64_PAGE_SIZE];
+    w25q64_t *f = &app_devices.flash;
+    uint32_t addr = flash_test_addr();
+    dev_status_t s;
+    unsigned i;
+
+    for (i = 0U; i < W25Q64_PAGE_SIZE; ++i)
+    {
+        wr[i] = flash_persist_byte(i);
+    }
+
+    s = w25q64_erase_sector(f, addr);
+
+    if (s == DEV_OK)
+    {
+        s = w25q64_write_page(f, addr, wr, sizeof(wr));
+    }
+
+    if (s != DEV_OK)
+    {
+        printf("FLASH,persist=FAIL,addr=0x%06lX,err=%s\r\n",
+               (unsigned long)addr, StandTest_ErrStr(s));
+        return;
+    }
+
+    printf("FLASH,persist=WRITTEN,addr=0x%06lX,bytes=%u,"
+           "first=%02X%02X%02X%02X,uptime_ms=%lu\r\n",
+           (unsigned long)addr, (unsigned)sizeof(wr),
+           wr[0], wr[1], wr[2], wr[3], (unsigned long)Platform_Millis());
+}
+
+/* Команда v: лише прочитати сторінку і звірити зі сталим шаблоном.
+ * Нічого не стирає і не записує; uptime_ms показує, що МК перезапускався. */
+static void flash_persist_verify(void)
+{
+    static uint8_t rd[W25Q64_PAGE_SIZE];
+    w25q64_t *f = &app_devices.flash;
+    uint32_t addr = flash_test_addr();
+    dev_status_t s = w25q64_read(f, addr, rd, sizeof(rd));
+    unsigned bad = 0U;
+    unsigned i;
+
+    if (s != DEV_OK)
+    {
+        printf("FLASH,persist=FAIL,addr=0x%06lX,err=%s\r\n",
+               (unsigned long)addr, StandTest_ErrStr(s));
+        return;
+    }
+
+    for (i = 0U; i < sizeof(rd); ++i)
+    {
+        if (rd[i] != flash_persist_byte(i))
+        {
+            ++bad;
+        }
+    }
+
+    printf("FLASH,persist=%s,addr=0x%06lX,bytes=%u,mismatch=%u,"
+           "first=%02X%02X%02X%02X,uptime_ms=%lu\r\n",
+           (bad == 0U) ? "PASS" : "FAIL", (unsigned long)addr,
+           (unsigned)sizeof(rd), bad, rd[0], rd[1], rd[2], rd[3],
+           (unsigned long)Platform_Millis());
+}
+
+/* ---- тривалість читання датчиків (команда t) ------------------------------ */
+
+typedef dev_status_t (*timed_fn)(void);
+
+static dev_status_t timed_dht11(void)
+{
+    uint16_t us[40];
+
+    return Platform_Dht11Capture(us);
+}
+
+static dev_status_t timed_bmp180(void)
+{
+    int32_t t;
+    int32_t p;
+
+    if (app_devices.baro.bus == NULL)
+    {
+        return DEV_ERR_PARAM;   /* датчика не було під час App_Init() */
+    }
+
+    return bmp180_read(&app_devices.baro, &t, &p);
+}
+
+static dev_status_t timed_mpu6050(void)
+{
+    mpu6050_raw_t r;
+
+    if (app_devices.mpu.bus == NULL)
+    {
+        return DEV_ERR_PARAM;
+    }
+
+    return mpu6050_read_raw(&app_devices.mpu, &r);
+}
+
+/* Звернення до адреси, на якій нікого немає: ціна відмови на шині I2C */
+static dev_status_t timed_i2c_absent(void)
+{
+    return Platform_I2cProbe(ADDR_NACK_DEMO);
+}
+
+/* Виміряти fn TIME_RUNS разів лічильником тактів ядра; gap_ms — пауза між
+ * запусками (DHT11 не можна опитувати частіше ніж раз на секунду) */
+static void time_one(const char *name, timed_fn fn, uint32_t gap_ms)
+{
+    uint32_t min = 0U;
+    uint32_t max = 0U;
+    uint32_t sum = 0U;
+    unsigned ok = 0U;
+    dev_status_t last = DEV_OK;
+    unsigned i;
+
+    for (i = 0U; i < TIME_RUNS; ++i)
+    {
+        uint32_t start = Platform_Cycles();
+        uint32_t us;
+
+        last = fn();
+        us = Platform_CyclesToUs(Platform_Cycles() - start);
+
+        if (last == DEV_OK)
+        {
+            ++ok;
+        }
+
+        if (i == 0U || us < min)
+        {
+            min = us;
+        }
+
+        if (us > max)
+        {
+            max = us;
+        }
+
+        sum += us;
+
+        if (gap_ms != 0U && (i + 1U) < TIME_RUNS)
+        {
+            Platform_DelayMs(gap_ms);
+        }
+    }
+
+    printf("TIME,name=%s,n=%u,ok=%u,min_us=%lu,avg_us=%lu,max_us=%lu,last=%s\r\n",
+           name, (unsigned)TIME_RUNS, ok, (unsigned long)min,
+           (unsigned long)(sum / TIME_RUNS), (unsigned long)max,
+           StandTest_ErrStr(last));
+}
+
+/* Команда t: скільки триває (і на скільки блокує цикл) кожне читання */
+static void time_sensors(void)
+{
+    time_one("dht11", timed_dht11, TIME_DHT_GAP_MS);
+    time_one("bmp180", timed_bmp180, 0U);
+    time_one("mpu6050", timed_mpu6050, 0U);
+    time_one("i2c_absent", timed_i2c_absent, 0U);
+}
+
 /* Команда h: рядок DHT11 з коротким префіксом "DHT,..." замість "ST,DHT11,..." */
 static void dht11_line(void)
 {
@@ -231,6 +424,8 @@ void Bench_Help(void)
     printf("#           a accel diag (LSM303D) | c camera id | "
            "k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | "
            "? help\r\n");
+    printf("#           w flash persist write | v flash persist verify | "
+           "t sensor read timing\r\n");
 }
 
 /* ---- команди ------------------------------------------------------------- */
@@ -307,6 +502,18 @@ static void cmd(int c)
 
         case 'f':
             flash_rw_test();
+            break;
+
+        case 'w':
+            flash_persist_write();
+            break;
+
+        case 'v':
+            flash_persist_verify();
+            break;
+
+        case 't':
+            time_sensors();
             break;
 
         case '1':

@@ -26,6 +26,11 @@ typedef struct
   uint32_t     now_ms;            /* Platform_Millis(); росте від Platform_DelayMs() */
   uint32_t     delay_total_ms;    /* сума всіх затримок */
 
+  /* Platform_Cycles(): 1 такт = 1 мкс; значення = now_ms * 1000 + cycles_step на
+   * кожен виклик. Так тест задає «тривалість» операції між двома зчитуваннями. */
+  uint32_t     cycles_step;
+  uint32_t     cycles_calls;
+
   uint32_t     inputs;            /* Platform_ReadInputs(): біти PLATFORM_IN_* */
 
   dev_status_t dht_status;        /* != DEV_OK — Platform_Dht11Capture() повертає цю помилку */
