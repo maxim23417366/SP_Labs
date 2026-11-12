@@ -1,0 +1,82 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-12.
+# Прошивка: коміт 9487e9b (стендові команди w, v, t), локальна збірка Arm GNU Toolchain 15.3.Rel2,
+# firmware.bin sha256 155885f0ea1d02147d046318afe68f254c846efe54d68d24ddb00ff79b185a48.
+# Поведінка шини I2C при відмовах: зависла шина, виймання і повернення модулів під напругою, серія вмикань.
+#
+# --- 1. Після підключення стенда шина не працює: PB8 (SCL) = 0, PB9 (SDA) = 0, скан порожній ---
+# Команда t у цьому стані: кожне звернення до шини триває близько 26 мс.
+TIME,name=dht11,n=5,ok=5,min_us=24558,avg_us=24950,max_us=25050,last=ok
+TIME,name=bmp180,n=5,ok=0,min_us=25891,avg_us=25977,max_us=25999,last=bus
+TIME,name=mpu6050,n=5,ok=0,min_us=25750,avg_us=25949,max_us=25999,last=bus
+TIME,name=i2c_absent,n=5,ok=0,min_us=25652,avg_us=25929,max_us=25999,last=bus
+# Після скидання МК (st-flash reset), без втручання в проводку: PB8 = 1, PB9 = 1
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+# Причина зникнення живлення модулів: хиткий дріт живлення на бредборді; дріт замінено.
+#
+# --- 2. Модуль GY-521 (MPU-6050) вийнято ---
+I2C,scan,0x1D,0x21,0x6B,0x77
+TIME,name=dht11,n=5,ok=5,min_us=24473,avg_us=24834,max_us=25047,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12130,max_us=12657,last=ok
+TIME,name=mpu6050,n=5,ok=0,min_us=95,avg_us=107,max_us=111,last=nack
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+TIME,name=dht11,n=5,ok=5,min_us=24037,avg_us=24708,max_us=24949,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12131,max_us=12660,last=ok
+TIME,name=mpu6050,n=5,ok=0,min_us=95,avg_us=107,max_us=111,last=nack
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+I2C,scan,0x1D,0x21,0x6B,0x77
+ST,MPU6050,SKIP,err=nack,note=GY-521_faulty_FR06_on_LSM303D
+ST,SUMMARY,WARN,ok=8,warn=1,fail=0,skip=1
+#
+# --- 3. GY-521 вставлено під напругою, МК не скидався (uptime_ms росте) ---
+FLASH,persist=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=3C434A51,uptime_ms=587694
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,MPU6050,WARN,who=0x68,a_g=0.000,ax_g=0.000,ay_g=0.000,az_g=0.000,gyro_max_dps=0.0,t_c=36.5
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+## after MCU reset (st-flash reset)
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.129,ay_g=-0.001,az_g=1.095,gyro_max_dps=11.8,t_c=22.1
+#
+# --- 4. Модуль GY-89 (BMP180) вийнято під напругою ---
+FLASH,persist=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=3C434A51,uptime_ms=164989
+I2C,scan,0x21,0x68
+ST,BMP180,FAIL,err=nack
+TIME,name=dht11,n=5,ok=5,min_us=24770,avg_us=24881,max_us=24995,last=ok
+TIME,name=bmp180,n=5,ok=0,min_us=95,avg_us=107,max_us=111,last=nack
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+ST,MPU6050,WARN,who=0x68,a_g=1.113,ax_g=0.122,ay_g=-0.013,az_g=1.107,gyro_max_dps=11.7,t_c=22.7
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=30
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=30
+#
+# --- 5. GY-89 вставлено під напругою, МК не скидався ---
+FLASH,persist=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=3C434A51,uptime_ms=342304
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,BMP180,OK,id=0x55,t_c=20.5,p_hpa=989.12
+ST,BMP180,OK,id=0x55,t_c=20.5,p_hpa=989.09
+ST,BMP180,OK,id=0x55,t_c=20.4,p_hpa=989.06
+TIME,name=dht11,n=5,ok=5,min_us=24349,avg_us=24818,max_us=24996,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12111,max_us=12560,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1558,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=109,avg_us=110,max_us=111,last=nack
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,BMP180,OK,id=0x55,t_c=20.2,p_hpa=989.03
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+#
+# --- 6. Серія з п'яти вмикань живлення (USB-кабель плати вийнято і вставлено), перевірка через ~6 с після старту ---
+power-on #1: I2C,scan,0x1D,0x21,0x68,0x6B,0x77 | flash PASS | uptime_ms=6592
+power-on #2: I2C,scan,0x1D,0x21,0x68,0x6B,0x77 | flash PASS | uptime_ms=6592
+power-on #3: I2C,scan,0x1D,0x21,0x68,0x6B,0x77 | flash PASS | uptime_ms=6437
+power-on #4: I2C,scan,0x1D,0x21,0x68,0x6B,0x77 | flash PASS | uptime_ms=6419
+power-on #5: I2C,scan,0x1D,0x21,0x68,0x6B,0x77 | flash PASS | uptime_ms=6405
+#
+# --- 7. Лічильник кадрів камери (команда c) під час роботи руками біля стенда і в спокої ---
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=4092
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=991
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=927
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=31
+vsync_hz=30 vsync_hz=30 vsync_hz=30 vsync_hz=30 vsync_hz=31 vsync_hz=30 vsync_hz=30 vsync_hz=30 vsync_hz=30 vsync_hz=30 
+
