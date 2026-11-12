@@ -1,0 +1,28 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-12.
+# Прошивка: коміт 9487e9b (стендові команди w, v, t), локальна збірка Arm GNU Toolchain 15.3.Rel2,
+# firmware.bin sha256 155885f0ea1d02147d046318afe68f254c846efe54d68d24ddb00ff79b185a48.
+# Час стирання сектора і запису сторінки W25Q64 під час команди w.
+# Логічний аналізатор fx2lafw, 12 МГц, канали D2 SCK, D3 MOSI, D4 MISO, D5 CS; декодер sigrok spi.
+# erase_ms — від кінця кадру 20h до першого статусу без BUSY; program_ms — те саме для 02h.
+# Драйвер опитує статус приблизно раз на 2 мс, тому час стирання визначено з точністю до одного опитування.
+#
+## запис 1
+ERASE cmd_ms=533.275 frame_ms=0.014 busy_until_ms=596.946 erase_ms=63.671 polls=33
+PROGRAM bytes=256 frame_ms=0.700 program_ms=1.277 polls=2
+TOTAL first_cs_ms=533.188 last_cs_ms=598.960 span_ms=65.772 frames=42
+## запис 2
+ERASE cmd_ms=529.502 frame_ms=0.014 busy_until_ms=593.517 erase_ms=64.015 polls=33
+PROGRAM bytes=256 frame_ms=0.700 program_ms=1.277 polls=2
+TOTAL first_cs_ms=529.415 last_cs_ms=595.531 span_ms=66.117 frames=42
+## запис 3
+ERASE cmd_ms=522.562 frame_ms=0.014 busy_until_ms=585.970 erase_ms=63.408 polls=33
+PROGRAM bytes=256 frame_ms=0.700 program_ms=1.277 polls=2
+TOTAL first_cs_ms=522.475 last_cs_ms=587.984 span_ms=65.510 frames=42
+## запис 4
+ERASE cmd_ms=529.865 frame_ms=0.014 busy_until_ms=593.604 erase_ms=63.740 polls=33
+PROGRAM bytes=256 frame_ms=0.700 program_ms=1.277 polls=2
+TOTAL first_cs_ms=529.778 last_cs_ms=595.618 span_ms=65.841 frames=42
+## запис 5
+ERASE cmd_ms=529.097 frame_ms=0.014 busy_until_ms=592.585 erase_ms=63.488 polls=33
+PROGRAM bytes=256 frame_ms=0.700 program_ms=1.277 polls=2
+TOTAL first_cs_ms=529.010 last_cs_ms=594.599 span_ms=65.589 frames=42
