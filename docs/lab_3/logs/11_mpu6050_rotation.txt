@@ -1,0 +1,76 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: main 23fecf8, локальна збірка Arm GNU Toolchain 15.3.Rel2, firmware.bin sha256 9f3ae74fe970c753ae726ebcf3f1202a4742b3700a8a4afde372bd39eec518d4.
+# Команда m кожні ~1,1 с; стенд повертали в руках приблизно з 13-ї по 37-му секунду, решту часу він лежав рівно.
+# Рядок FAULT: читання повернуло помилку шини або нулі, хост скинув МК (st-flash reset) і продовжив.
+# Перше число — секунди від початку запису (час хоста). Запис зупинено на 87-й секунді.
+#
+   1.1 ST,MPU6050,WARN,who=0x68,a_g=1.107,ax_g=0.046,ay_g=-0.027,az_g=1.106,gyro_max_dps=11.5,t_c=22.6
+   2.3 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.049,ay_g=-0.031,az_g=1.105,gyro_max_dps=11.5,t_c=22.6
+   3.4 ST,MPU6050,WARN,who=0x68,a_g=1.110,ax_g=0.045,ay_g=-0.025,az_g=1.109,gyro_max_dps=11.6,t_c=22.6
+   4.5 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.049,ay_g=-0.026,az_g=1.101,gyro_max_dps=11.5,t_c=22.6
+   5.7 ST,MPU6050,WARN,who=0x68,a_g=1.103,ax_g=0.045,ay_g=-0.027,az_g=1.102,gyro_max_dps=12.0,t_c=22.7
+   6.8 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.051,ay_g=-0.017,az_g=1.105,gyro_max_dps=12.2,t_c=22.7
+   7.9 ST,MPU6050,WARN,who=0x68,a_g=1.099,ax_g=0.050,ay_g=-0.021,az_g=1.098,gyro_max_dps=12.1,t_c=22.7
+   9.1 ST,MPU6050,WARN,who=0x68,a_g=1.105,ax_g=0.046,ay_g=-0.022,az_g=1.104,gyro_max_dps=11.7,t_c=22.7
+  10.2 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.044,ay_g=-0.025,az_g=1.101,gyro_max_dps=11.4,t_c=22.7
+  11.3 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.049,ay_g=-0.021,az_g=1.101,gyro_max_dps=11.8,t_c=22.6
+  12.5 ST,MPU6050,WARN,who=0x68,a_g=1.096,ax_g=0.048,ay_g=-0.028,az_g=1.095,gyro_max_dps=11.5,t_c=22.7
+  13.6 ST,MPU6050,WARN,who=0x68,a_g=1.041,ax_g=-0.350,ay_g=0.013,az_g=0.981,gyro_max_dps=49.1,t_c=22.7
+  14.8 ST,MPU6050,SKIP,err=bus,note=GY-521_faulty_FR06_on_LSM303D
+  14.8 # FAULT -> MCU reset #1 (st-flash reset)
+  19.5 ST,MPU6050,WARN,who=0x68,a_g=1.071,ax_g=0.998,ay_g=0.015,az_g=0.390,gyro_max_dps=26.6,t_c=22.7
+  20.6 ST,MPU6050,WARN,who=0x68,a_g=0.925,ax_g=0.723,ay_g=0.000,az_g=0.578,gyro_max_dps=91.7,t_c=22.6
+  21.7 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.068,ay_g=-0.025,az_g=1.104,gyro_max_dps=13.2,t_c=22.8
+  22.9 ST,MPU6050,WARN,who=0x68,a_g=1.074,ax_g=0.094,ay_g=0.798,az_g=0.714,gyro_max_dps=46.1,t_c=22.7
+  24.0 ST,MPU6050,OK,who=0x68,a_g=1.046,ax_g=0.126,ay_g=0.995,az_g=0.300,gyro_max_dps=3.4,t_c=22.8
+  25.1 ST,MPU6050,WARN,who=0x68,a_g=1.059,ax_g=0.102,ay_g=0.930,az_g=0.498,gyro_max_dps=60.1,t_c=22.7
+  26.3 ST,MPU6050,WARN,who=0x68,a_g=1.053,ax_g=0.151,ay_g=0.016,az_g=1.043,gyro_max_dps=35.9,t_c=22.8
+  27.4 ST,MPU6050,WARN,who=0x68,a_g=1.105,ax_g=0.055,ay_g=-0.021,az_g=1.104,gyro_max_dps=12.0,t_c=22.7
+  28.5 ST,MPU6050,SKIP,err=bus,note=GY-521_faulty_FR06_on_LSM303D
+  28.5 # FAULT -> MCU reset #2 (st-flash reset)
+  33.1 ST,MPU6050,SKIP,err=bus,note=GY-521_faulty_FR06_on_LSM303D
+  33.1 # FAULT -> MCU reset #3 (st-flash reset)
+  37.8 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.045,ay_g=-0.025,az_g=1.101,gyro_max_dps=11.9,t_c=22.8
+  38.9 ST,MPU6050,WARN,who=0x68,a_g=1.113,ax_g=0.047,ay_g=-0.017,az_g=1.112,gyro_max_dps=10.7,t_c=22.8
+  40.0 ST,MPU6050,WARN,who=0x68,a_g=1.104,ax_g=0.046,ay_g=-0.015,az_g=1.103,gyro_max_dps=11.7,t_c=22.9
+  41.2 ST,MPU6050,WARN,who=0x68,a_g=1.107,ax_g=0.047,ay_g=-0.015,az_g=1.106,gyro_max_dps=11.8,t_c=22.8
+  42.3 ST,MPU6050,WARN,who=0x68,a_g=1.097,ax_g=0.049,ay_g=-0.013,az_g=1.096,gyro_max_dps=11.8,t_c=22.9
+  43.4 ST,MPU6050,WARN,who=0x68,a_g=1.108,ax_g=0.052,ay_g=-0.017,az_g=1.107,gyro_max_dps=12.0,t_c=22.8
+  44.6 ST,MPU6050,WARN,who=0x68,a_g=1.098,ax_g=0.049,ay_g=-0.015,az_g=1.097,gyro_max_dps=11.9,t_c=22.8
+  45.7 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.049,ay_g=-0.012,az_g=1.101,gyro_max_dps=11.7,t_c=22.8
+  46.8 ST,MPU6050,WARN,who=0x68,a_g=1.103,ax_g=0.055,ay_g=-0.015,az_g=1.102,gyro_max_dps=11.6,t_c=22.8
+  47.9 ST,MPU6050,WARN,who=0x68,a_g=1.101,ax_g=0.056,ay_g=-0.016,az_g=1.100,gyro_max_dps=11.7,t_c=22.8
+  49.1 ST,MPU6050,WARN,who=0x68,a_g=1.103,ax_g=0.054,ay_g=-0.018,az_g=1.102,gyro_max_dps=11.7,t_c=22.9
+  50.2 ST,MPU6050,WARN,who=0x68,a_g=1.105,ax_g=0.049,ay_g=-0.009,az_g=1.104,gyro_max_dps=11.6,t_c=22.8
+  51.3 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.050,ay_g=-0.013,az_g=1.105,gyro_max_dps=11.6,t_c=22.9
+  52.5 ST,MPU6050,WARN,who=0x68,a_g=1.095,ax_g=0.055,ay_g=-0.017,az_g=1.094,gyro_max_dps=12.0,t_c=22.8
+  53.6 ST,MPU6050,WARN,who=0x68,a_g=1.099,ax_g=0.042,ay_g=-0.017,az_g=1.099,gyro_max_dps=11.8,t_c=22.9
+  54.7 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.052,ay_g=-0.021,az_g=1.105,gyro_max_dps=11.8,t_c=22.8
+  55.9 ST,MPU6050,WARN,who=0x68,a_g=1.092,ax_g=0.049,ay_g=-0.016,az_g=1.091,gyro_max_dps=11.5,t_c=22.8
+  57.0 ST,MPU6050,WARN,who=0x68,a_g=1.099,ax_g=0.059,ay_g=-0.011,az_g=1.098,gyro_max_dps=11.8,t_c=22.9
+  58.1 ST,MPU6050,WARN,who=0x68,a_g=1.103,ax_g=0.056,ay_g=-0.017,az_g=1.102,gyro_max_dps=11.9,t_c=22.9
+  59.3 ST,MPU6050,WARN,who=0x68,a_g=1.100,ax_g=0.042,ay_g=-0.014,az_g=1.100,gyro_max_dps=11.9,t_c=22.9
+  60.4 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.044,ay_g=-0.015,az_g=1.102,gyro_max_dps=11.9,t_c=22.8
+  61.5 ST,MPU6050,WARN,who=0x68,a_g=1.108,ax_g=0.052,ay_g=-0.010,az_g=1.107,gyro_max_dps=11.8,t_c=22.8
+  62.7 ST,MPU6050,WARN,who=0x68,a_g=1.096,ax_g=0.056,ay_g=-0.019,az_g=1.095,gyro_max_dps=12.0,t_c=22.8
+  63.8 ST,MPU6050,WARN,who=0x68,a_g=1.101,ax_g=0.055,ay_g=-0.020,az_g=1.100,gyro_max_dps=11.8,t_c=22.9
+  64.9 ST,MPU6050,WARN,who=0x68,a_g=1.088,ax_g=0.057,ay_g=-0.009,az_g=1.087,gyro_max_dps=11.9,t_c=22.8
+  66.1 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.052,ay_g=-0.012,az_g=1.101,gyro_max_dps=11.7,t_c=22.9
+  67.2 ST,MPU6050,WARN,who=0x68,a_g=1.104,ax_g=0.051,ay_g=-0.020,az_g=1.103,gyro_max_dps=11.8,t_c=22.8
+  68.3 ST,MPU6050,WARN,who=0x68,a_g=1.101,ax_g=0.054,ay_g=-0.022,az_g=1.100,gyro_max_dps=11.9,t_c=22.9
+  69.5 ST,MPU6050,WARN,who=0x68,a_g=1.104,ax_g=0.045,ay_g=-0.021,az_g=1.103,gyro_max_dps=12.0,t_c=22.8
+  70.6 ST,MPU6050,WARN,who=0x68,a_g=1.099,ax_g=0.045,ay_g=-0.011,az_g=1.099,gyro_max_dps=11.7,t_c=23.0
+  71.7 ST,MPU6050,WARN,who=0x68,a_g=1.108,ax_g=0.043,ay_g=-0.021,az_g=1.107,gyro_max_dps=11.8,t_c=22.9
+  72.9 ST,MPU6050,WARN,who=0x68,a_g=1.109,ax_g=0.046,ay_g=-0.007,az_g=1.109,gyro_max_dps=12.0,t_c=22.9
+  74.0 ST,MPU6050,WARN,who=0x68,a_g=1.105,ax_g=0.048,ay_g=-0.016,az_g=1.104,gyro_max_dps=11.9,t_c=22.9
+  75.1 ST,MPU6050,WARN,who=0x68,a_g=1.096,ax_g=0.049,ay_g=-0.016,az_g=1.095,gyro_max_dps=11.8,t_c=23.0
+  76.3 ST,MPU6050,WARN,who=0x68,a_g=1.109,ax_g=0.053,ay_g=-0.013,az_g=1.108,gyro_max_dps=11.8,t_c=22.8
+  77.4 ST,MPU6050,WARN,who=0x68,a_g=1.091,ax_g=0.052,ay_g=-0.014,az_g=1.090,gyro_max_dps=11.9,t_c=23.0
+  78.5 ST,MPU6050,WARN,who=0x68,a_g=1.101,ax_g=0.052,ay_g=-0.013,az_g=1.100,gyro_max_dps=11.5,t_c=22.9
+  79.7 ST,MPU6050,WARN,who=0x68,a_g=1.107,ax_g=0.053,ay_g=-0.018,az_g=1.106,gyro_max_dps=11.8,t_c=22.9
+  80.8 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.054,ay_g=-0.017,az_g=1.101,gyro_max_dps=12.1,t_c=22.9
+  81.9 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.050,ay_g=-0.016,az_g=1.105,gyro_max_dps=11.9,t_c=22.9
+  83.1 ST,MPU6050,WARN,who=0x68,a_g=1.101,ax_g=0.055,ay_g=-0.018,az_g=1.100,gyro_max_dps=11.8,t_c=23.0
+  84.2 ST,MPU6050,WARN,who=0x68,a_g=1.105,ax_g=0.056,ay_g=-0.015,az_g=1.104,gyro_max_dps=11.8,t_c=22.9
+  85.3 ST,MPU6050,WARN,who=0x68,a_g=1.110,ax_g=0.053,ay_g=-0.018,az_g=1.109,gyro_max_dps=11.9,t_c=22.9
+  86.5 ST,MPU6050,WARN,who=0x68,a_g=1.102,ax_g=0.052,ay_g=-0.017,az_g=1.101,gyro_max_dps=12.0,t_c=22.9

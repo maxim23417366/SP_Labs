@@ -1,0 +1,31 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: стендова прошивка ЛР2, що була на платі до перепрошивки (образ 35 760 Б; текстові рядки збігаються з main 23fecf8).
+# Команди: j, f x3, скидання МК (st-flash reset), j, f x2, h (DHT11 x5), b x10.
+#
+## flash before reset
+SPI,jedec=EF4017,err=ok
+FLASH,rw=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=FBFAF9F8
+FLASH,rw=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=41404342
+FLASH,rw=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=CECFCCCD
+## st-flash reset
+## flash after reset
+SPI,jedec=EF4017,err=ok
+FLASH,rw=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=D8D9DADB
+FLASH,rw=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=A7A6A5A4
+## dht11 x5
+DHT,OK,t_c=21.1,rh=41.3,raw=2903150142,crc=OK
+DHT,OK,t_c=21.1,rh=41.3,raw=2903150142,crc=OK
+DHT,OK,t_c=21.1,rh=41.3,raw=2903150142,crc=OK
+DHT,OK,t_c=21.1,rh=41.4,raw=2904150143,crc=OK
+DHT,OK,t_c=21.1,rh=41.4,raw=2904150143,crc=OK
+## bmp180 x10
+ST,BMP180,OK,id=0x55,t_c=19.6,p_hpa=1003.49
+ST,BMP180,OK,id=0x55,t_c=19.5,p_hpa=1003.43
+ST,BMP180,OK,id=0x55,t_c=19.5,p_hpa=1003.43
+ST,BMP180,OK,id=0x55,t_c=19.5,p_hpa=1003.38
+ST,BMP180,OK,id=0x55,t_c=19.5,p_hpa=1003.38
+ST,BMP180,OK,id=0x55,t_c=19.5,p_hpa=1003.38
+ST,BMP180,OK,id=0x55,t_c=19.5,p_hpa=1003.40
+ST,BMP180,OK,id=0x55,t_c=19.6,p_hpa=1003.49
+ST,BMP180,OK,id=0x55,t_c=19.5,p_hpa=1003.43
+ST,BMP180,OK,id=0x55,t_c=19.6,p_hpa=1003.49

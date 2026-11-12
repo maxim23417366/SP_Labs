@@ -1,0 +1,8 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: стендова прошивка ЛР2, що була на платі до перепрошивки (образ 35 760 Б; текстові рядки збігаються з main 23fecf8).
+# Команда g, 120 с. PIR накритий непрозорою коробкою, стенд не чіпали.
+#
+# gpio watch on (prints on change)
+[497568] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[499605] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+# gpio watch off

@@ -1,0 +1,35 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-10.
+# Прошивка: стендова прошивка ЛР2, що була на платі до перепрошивки (образ 35 760 Б; текстові рядки збігаються з main 23fecf8).
+# Команда g, 60 с. Дії: USER B1 один раз; магніт до геркона чотири рази; далі спокій.
+#
+# gpio watch on (prints on change)
+[297236] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[297998] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[299268] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[302169] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[303138] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[303432] GPIO,btn=1111,lock_b1=0,door=1,pir=0,mpu_int=0
+[303656] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[308384] GPIO,btn=1111,lock_b1=1,door=0,pir=0,mpu_int=0
+[309179] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[310529] GPIO,btn=1111,lock_b1=1,door=0,pir=0,mpu_int=0
+[311667] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[315833] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[316944] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[317024] GPIO,btn=1111,lock_b1=1,door=0,pir=0,mpu_int=0
+[318492] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[320704] GPIO,btn=1111,lock_b1=1,door=0,pir=0,mpu_int=0
+[322386] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[323037] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[324050] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[326603] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[327572] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[329731] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[331244] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[333820] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[335377] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[338073] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[339851] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+[343298] GPIO,btn=1111,lock_b1=1,door=1,pir=1,mpu_int=0
+[344287] GPIO,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+# gpio watch off
