@@ -9,4 +9,5 @@ build/
 *.lst
 .metadata/
 .settings/
+.idea/
 local.mk

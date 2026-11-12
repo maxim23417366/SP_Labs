@@ -162,6 +162,7 @@ static void test_help_and_unknown(void)
     "# commands: s selftest | i i2c scan | g gpio watch on/off | m accel x10 (LSM303D, FR-06) | b bmp180\r\n"
     "#           h dht11 x5 | j jedec | f flash r/w | 1/2/3 servo 1000/1500/2000us\r\n"
     "#           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help\r\n"
+    "#           w flash persist write | v flash persist verify | t sensor read timing\r\n"
     "# unknown 'z', ? for help\r\n"
     "# unknown '.', ? for help\r\n", o);
 }
@@ -355,6 +356,135 @@ static void test_flash_rw_mismatch_and_error(void)
   TEST_ASSERT_EQUAL_STRING("FLASH,rw=FAIL,addr=0x7FF000,err=state\r\n", o);
 }
 
+/* Сталий шаблон команд w / v: байт i = i * 7 + 0x3C */
+static uint8_t persist_byte(unsigned i)
+{
+  return (uint8_t)((i * 7U) + 0x3CU);
+}
+
+static void test_flash_persist_write(void)
+{
+  static const uint8_t sr_wel[]   = { 0xFF, W25Q64_SR1_WEL };
+  static const uint8_t sr_ready[] = { 0xFF, 0x00 };
+  static const uint8_t se[]       = { 0x20, 0x7F, 0xF0, 0x00 };
+  static const uint8_t pp[]       = { 0x02, 0x7F, 0xF0, 0x00 };
+
+  init_only();
+  /* Кадри як у команді f, але без читання: 1 JEDEC; 2 WREN, 3 RDSR, 4 SE, 5 RDSR;
+   * 6 WREN, 7 RDSR, 8 PP, 9 RDSR */
+  mock_spi_set_miso(3U, sr_wel, sizeof(sr_wel));
+  mock_spi_set_miso(5U, sr_ready, sizeof(sr_ready));
+  mock_spi_set_miso(7U, sr_wel, sizeof(sr_wel));
+  mock_spi_set_miso(9U, sr_ready, sizeof(sr_ready));
+  fake_platform.now_ms = 1234U;
+
+  const char *o = run("w");
+  TEST_ASSERT_EQUAL_STRING_LEN("FLASH,persist=WRITTEN,addr=0x7FF000,bytes=256,first=3C434A51,uptime_ms=", o, 71);
+  /* стирався і записувався саме тестовий сектор, а в PP пішов сталий шаблон */
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(se, mock_spi_frame(4U)->mosi, sizeof(se));
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(pp, mock_spi_frame(8U)->mosi, sizeof(pp));
+  for (unsigned i = 0U; i < W25Q64_PAGE_SIZE; i++)
+  {
+    TEST_ASSERT_EQUAL_HEX8(persist_byte(i), mock_spi_frame(8U)->mosi[4U + i]);
+  }
+  /* читання в команді w немає: 10 кадрів разом з JEDEC ініціалізації (кадр 0) */
+  TEST_ASSERT_EQUAL_size_t(10U, mock_spi_frame_count());
+
+  setUp();
+  init_only();
+  /* кадр 3 (RDSR після WREN) без WEL: запис заборонено */
+  mock_spi_set_miso(3U, sr_ready, sizeof(sr_ready));
+  o = run("w");
+  TEST_ASSERT_EQUAL_STRING("FLASH,persist=FAIL,addr=0x7FF000,err=state\r\n", o);
+}
+
+static void test_flash_persist_verify(void)
+{
+  static const uint8_t rd_cmd[] = { 0x03, 0x7F, 0xF0, 0x00 };
+  static uint8_t read_frame[4U + W25Q64_PAGE_SIZE];
+
+  init_only();
+  /* Кадри: 1 JEDEC, 2 READ. У флеш-пам'яті лежить шаблон, записаний до «перезапуску» */
+  memset(read_frame, 0xFF, 4U);
+  for (unsigned i = 0U; i < W25Q64_PAGE_SIZE; i++) { read_frame[4U + i] = persist_byte(i); }
+  mock_spi_set_miso(2U, read_frame, sizeof(read_frame));
+  fake_platform.now_ms = 777U;
+
+  const char *o = run("v");
+  TEST_ASSERT_EQUAL_STRING("FLASH,persist=PASS,addr=0x7FF000,bytes=256,mismatch=0,"
+                           "first=3C434A51,uptime_ms=777\r\n", o);
+  /* звірка нічого не стирає і не записує: лише JEDEC ініціалізації, JEDEC і READ */
+  TEST_ASSERT_EQUAL_size_t(3U, mock_spi_frame_count());
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(rd_cmd, mock_spi_frame(2U)->mosi, sizeof(rd_cmd));
+
+  setUp();
+  init_only();
+  /* кадр 2 без сценарію: MISO = FF, тобто сектор стертий або шаблон не записували.
+   * Збігається лише байт 101: 101 * 7 + 0x3C = 0xFF (mod 256) */
+  o = run("v");
+  TEST_ASSERT_EQUAL_STRING("FLASH,persist=FAIL,addr=0x7FF000,bytes=256,mismatch=255,"
+                           "first=FFFFFFFF,uptime_ms=0\r\n", o);
+
+  setUp();
+  init_only();
+  mock_spi_fail_in_frame(2U, DEV_ERR_TIMEOUT);
+  o = run("v");
+  TEST_ASSERT_EQUAL_STRING("FLASH,persist=FAIL,addr=0x7FF000,err=timeout\r\n", o);
+}
+
+static void test_sensor_timing_all_present(void)
+{
+  static const uint8_t f[5] = { 0x23, 0x02, 0x15, 0x04, 0x3E };
+  uint8_t *b = fake_i2c_add_device(BMP180_I2C_ADDR);
+  uint8_t *m = fake_i2c_add_device(MPU6050_I2C_ADDR);
+  char expected[512];
+  uint32_t bmp_us;
+
+  b[BMP180_REG_ID] = BMP180_CHIP_ID;
+  memset(&b[BMP180_REG_CALIB], 0x12, BMP180_CALIB_LEN);
+  m[MPU6050_REG_WHO_AM_I] = MPU6050_WHO_AM_I_VALUE;
+  for (unsigned i = 0U; i < 40U; i++)
+  {
+    fake_platform.dht_high_us[i] = (f[i / 8U] & (0x80U >> (i % 8U))) ? 72U : 24U;
+  }
+  fake_platform.dht_status = DEV_OK;
+  init_only();
+  app_devices.baro_status = bmp180_init(&app_devices.baro, Platform_SensorI2c(), Platform_DelayMs, 0U);
+  app_devices.mpu_status  = mpu6050_init(&app_devices.mpu, Platform_SensorI2c(), MPU6050_I2C_ADDR);
+  TEST_ASSERT_EQUAL(DEV_OK, app_devices.baro_status);
+  TEST_ASSERT_EQUAL(DEV_OK, app_devices.mpu_status);
+
+  /* кожне зчитування лічильника тактів додає 250 «мкс»: операція без затримок
+   * триває 250 мкс, а BMP180 — ще й час двох перетворень (затримки драйвера) */
+  fake_platform.cycles_step    = 250U;
+  fake_platform.delay_total_ms = 0U;
+  const char *o = run("t");
+
+  /* 4 паузи DHT11 по 2 с; решта затримок — 5 читань BMP180 */
+  TEST_ASSERT_TRUE(fake_platform.delay_total_ms > (4U * 2000U));
+  bmp_us = 250U + (((fake_platform.delay_total_ms - (4U * 2000U)) / 5U) * 1000U);
+  snprintf(expected, sizeof(expected),
+           "TIME,name=dht11,n=5,ok=5,min_us=250,avg_us=250,max_us=250,last=ok\r\n"
+           "TIME,name=bmp180,n=5,ok=5,min_us=%lu,avg_us=%lu,max_us=%lu,last=ok\r\n"
+           "TIME,name=mpu6050,n=5,ok=5,min_us=250,avg_us=250,max_us=250,last=ok\r\n"
+           "TIME,name=i2c_absent,n=5,ok=0,min_us=250,avg_us=250,max_us=250,last=nack\r\n",
+           (unsigned long)bmp_us, (unsigned long)bmp_us, (unsigned long)bmp_us);
+  TEST_ASSERT_EQUAL_STRING(expected, o);
+}
+
+static void test_sensor_timing_reports_failures(void)
+{
+  /* стенд без MPU-6050 і BMP180 (драйвери не ініціалізовані), DHT11 мовчить */
+  init_only();
+  const char *o = run("t");
+
+  TEST_ASSERT_EQUAL_STRING(
+    "TIME,name=dht11,n=5,ok=0,min_us=0,avg_us=0,max_us=0,last=timeout\r\n"
+    "TIME,name=bmp180,n=5,ok=0,min_us=0,avg_us=0,max_us=0,last=param\r\n"
+    "TIME,name=mpu6050,n=5,ok=0,min_us=0,avg_us=0,max_us=0,last=param\r\n"
+    "TIME,name=i2c_absent,n=5,ok=0,min_us=0,avg_us=0,max_us=0,last=nack\r\n", o);
+}
+
 static void test_selftest_command(void)
 {
   init_only();
@@ -384,6 +514,10 @@ int main(void)
   RUN_TEST(test_dht_command_ok_line);
   RUN_TEST(test_flash_rw_pass);
   RUN_TEST(test_flash_rw_mismatch_and_error);
+  RUN_TEST(test_flash_persist_write);
+  RUN_TEST(test_flash_persist_verify);
+  RUN_TEST(test_sensor_timing_all_present);
+  RUN_TEST(test_sensor_timing_reports_failures);
   RUN_TEST(test_selftest_command);
   return UNITY_END();
 }

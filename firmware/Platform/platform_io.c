@@ -28,6 +28,17 @@ static inline uint32_t cyc(void)
   return DWT->CYCCNT;
 }
 
+uint32_t Platform_Cycles(void)
+{
+  return cyc();
+}
+
+uint32_t Platform_CyclesToUs(uint32_t cycles)
+{
+  /* до Platform_IoInit() дільник ще нульовий */
+  return (cycles_per_us != 0U) ? (cycles / cycles_per_us) : 0U;
+}
+
 static void delay_us(uint32_t us)
 {
   uint32_t start = cyc();
