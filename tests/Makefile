@@ -36,8 +36,8 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 
 # Тести App/ (перевірки стенда і команди без обладнання): кожен лінкується з усім App/,
 # усіма драйверами і fake_platform (імітація platform.h)
-APP_SRCS  := app bench self_test stand_test
-APP_TESTS := stand_test app
+APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue
+APP_TESTS := stand_test app sched
 APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(BUILD)/doubles/fake_platform.o
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
 APP_HDRS  := $(wildcard $(FW_APP)/*.h) $(FW_PLAT)/platform.h

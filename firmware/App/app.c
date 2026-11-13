@@ -3,13 +3,19 @@
   ******************************************************************************
   * @file    app.c
   * @brief   Ініціалізація пристроїв SmartLock в одній прошивці.
+  *
+  *          ЛР3 (I02): App_Loop() — один прохід Super Loop (sched.c) по задачах з
+  *          app_tasks.c. Стенд ЛР2 (self-test, однолітерні команди) збережено.
   ******************************************************************************
   */
 
 #include "app.h"
 
+#include "app_config.h"
+#include "app_tasks.h"
 #include "bench.h"
 #include "platform.h"
+#include "sched.h"
 #include "self_test.h"
 #include "stand_test.h"
 
@@ -68,18 +74,32 @@ static void devices_self_test(void)
     (void)StandTest_Run();
 }
 
+/* Перший рядок UART-логу: яка саме збірка працює (методичка §5.2) */
+static void print_banner(void)
+{
+    printf("BUILD,fw=SmartLock,lab=LR3,git=%s,cpu_hz=%lu,loop=superloop\r\n", GIT_HASH,
+           (unsigned long)Platform_CpuHz());
+}
+
 /* Запуск прикладної логіки */
 void App_Init(void)
 {
+    print_banner();
     Platform_BringUp();
     devices_init();
     devices_self_test();
     Bench_Help();
+    AppTasks_Init();   /* час, черга подій, таблиця задач (без виводу) */
 }
 
-/* Основний цикл програми */
+/* Один прохід Super Loop. Якщо App_Init() не викликали (хостові тести ЛР2),
+ * таблиця задач створюється при першому проході — без виводу. */
 void App_Loop(void)
 {
-    Platform_Poll();
-    Bench_Poll();
+    if (!Sched_Started())
+    {
+        AppTasks_Init();
+    }
+    Platform_Poll();     /* трафік ЛР1 (команда l), за замовчуванням вимкнено */
+    Sched_RunOnce();
 }

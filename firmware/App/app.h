@@ -41,7 +41,8 @@ extern App_Devices app_devices;
 /* Викликається з main.c (USER CODE 2) після всіх MX_*_Init(). */
 void App_Init(void);
 
-/* Викликається з main.c (USER CODE 3) у нескінченному циклі. */
+/* Викликається з main.c (USER CODE 3) у нескінченному циклі: один прохід
+ * Super Loop по всіх задачах (docs/tasks.md). */
 void App_Loop(void);
 
 #endif /* APP_H */

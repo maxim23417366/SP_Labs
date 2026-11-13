@@ -39,6 +39,11 @@ uint32_t Platform_CyclesToUs(uint32_t cycles)
   return (cycles_per_us != 0U) ? (cycles / cycles_per_us) : 0U;
 }
 
+uint32_t Platform_CpuHz(void)
+{
+  return HAL_RCC_GetHCLKFreq();
+}
+
 static void delay_us(uint32_t us)
 {
   uint32_t start = cyc();

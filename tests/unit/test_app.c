@@ -22,6 +22,7 @@
 #include "fake_platform.h"
 #include "mock_spi.h"
 #include "platform.h"
+#include "sched.h"
 #include "self_test.h"
 
 /* ---- перехоплення stdout ------------------------------------------------------- */
@@ -132,6 +133,13 @@ static void test_app_init_brings_up_and_runs_selftest(void)
   TEST_ASSERT_EQUAL(DEV_OK, app_devices.accel_status);
   TEST_ASSERT_EQUAL(DEV_ERR_NACK, app_devices.mpu_status);
   TEST_ASSERT_EQUAL(DEV_ERR_NACK, app_devices.baro_status);
+  /* ЛР3: перший рядок логу — ідентифікатор збірки (методичка §5.2) */
+  static const char banner[] = "BUILD,fw=SmartLock,lab=LR3,git=nogit,cpu_hz=1000000,loop=superloop\r\n";
+  TEST_ASSERT_EQUAL_STRING_LEN(banner, o, sizeof(banner) - 1U);
+  o += sizeof(banner) - 1U;
+  /* ЛР3: після App_Init() таблиця задач Super Loop запущена */
+  TEST_ASSERT_TRUE(Sched_Started());
+  TEST_ASSERT_EQUAL_INT(6, Sched_Count());
   /* Self-test, підсумок і довідка — в одному потоці, у порядку плати */
   TEST_ASSERT_EQUAL_STRING_LEN("\n# SmartLock selftest v2 (LR2)\nI2C,scan,0x1D,0x21,0x6B\n"
                                "ST,START\nST,UART,OK,baud=115200\n", o, 79);
