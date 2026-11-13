@@ -430,8 +430,8 @@ void Bench_Help(void)
 
 /* ---- команди ------------------------------------------------------------- */
 
-/* Виконання однієї команди */
-static void cmd(int c)
+/* Виконання однієї команди (з ЛР3 — публічна: її викликає uart-задача Super Loop) */
+void Bench_Command(int c)
 {
     static int slow_pclk = 0;
     static int loop_on = 0;
@@ -586,16 +586,10 @@ static void cmd(int c)
     }
 }
 
-/* Опитування UART і стеження за входами */
-void Bench_Poll(void)
+/* Стеження за входами (команда g): друк лише стабільної зміни */
+void Bench_Watch(void)
 {
     static uint32_t last_ms;
-    int c = Platform_UartGetChar();
-
-    if (c >= 0)
-    {
-        cmd(c);
-    }
 
     if (s_gpio_watch)
     {
@@ -617,4 +611,16 @@ void Bench_Poll(void)
             last_ms = now;
         }
     }
+}
+
+/* Опитування UART і стеження за входами (режим ЛР2; у ЛР3 це робить uart-задача) */
+void Bench_Poll(void)
+{
+    int c = Platform_UartGetChar();
+
+    if (c >= 0)
+    {
+        Bench_Command(c);
+    }
+    Bench_Watch();
 }

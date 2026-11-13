@@ -22,6 +22,7 @@
 #include "fake_platform.h"
 #include "mock_spi.h"
 #include "platform.h"
+#include "sched.h"
 #include "self_test.h"
 
 /* ---- перехоплення stdout ------------------------------------------------------- */
@@ -132,12 +133,23 @@ static void test_app_init_brings_up_and_runs_selftest(void)
   TEST_ASSERT_EQUAL(DEV_OK, app_devices.accel_status);
   TEST_ASSERT_EQUAL(DEV_ERR_NACK, app_devices.mpu_status);
   TEST_ASSERT_EQUAL(DEV_ERR_NACK, app_devices.baro_status);
+  /* ЛР3: перший рядок логу — ідентифікатор збірки (методичка §5.2) */
+  static const char banner[] = "BUILD,fw=SmartLock,lab=LR3,git=nogit,cpu_hz=96000000,loop=superloop\r\n";
+  TEST_ASSERT_EQUAL_STRING_LEN(banner, o, sizeof(banner) - 1U);
+  o += sizeof(banner) - 1U;
   /* Self-test, підсумок і довідка — в одному потоці, у порядку плати */
   TEST_ASSERT_EQUAL_STRING_LEN("\n# SmartLock selftest v2 (LR2)\nI2C,scan,0x1D,0x21,0x6B\n"
                                "ST,START\nST,UART,OK,baud=115200\n", o, 79);
   TEST_ASSERT_NOT_NULL(strstr(o, "ST,MPU6050,SKIP,err=nack,note=GY-521_faulty_FR06_on_LSM303D\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "ST,BMP180,FAIL,err=nack\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "ST,SUMMARY,FAIL,ok=6,warn=1,fail=2,skip=1\n# commands: s selftest"));
+  /* ЛР3: камера налаштовується ПІСЛЯ self-test (він міряє VSYNC у заводському режимі),
+   * далі — довідка рядкових команд і рядок пам'яті */
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00,"
+                                 "fmt=RGB565,w=160,h=120\r\n# LR3: STATS"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "\r\nMEM stack_used=0 stack_reserved=1024 "));
+  TEST_ASSERT_TRUE(Sched_Started());
+  TEST_ASSERT_EQUAL_INT(7, Sched_Count());
 }
 
 static void app_loop_once(void)
@@ -454,8 +466,10 @@ static void test_sensor_timing_all_present(void)
   TEST_ASSERT_EQUAL(DEV_OK, app_devices.baro_status);
   TEST_ASSERT_EQUAL(DEV_OK, app_devices.mpu_status);
 
-  /* кожне зчитування лічильника тактів додає 250 «мкс»: операція без затримок
-   * триває 250 мкс, а BMP180 — ще й час двох перетворень (затримки драйвера) */
+  /* 1 такт = 1 мкс (cpu_hz = 1 МГц), кожне зчитування лічильника тактів додає
+   * 250 тактів: операція без затримок триває 250 мкс, а BMP180 — ще й час двох
+   * перетворень (затримки драйвера рухають той самий лічильник) */
+  fake_platform.cpu_hz         = 1000000U;
   fake_platform.cycles_step    = 250U;
   fake_platform.delay_total_ms = 0U;
   const char *o = run("t");

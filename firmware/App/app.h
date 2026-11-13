@@ -15,6 +15,7 @@
 #include "dev_bus.h"
 #include "lsm303d.h"
 #include "mpu6050.h"
+#include "ov7670.h"
 #include "w25q64.h"
 
 /* Стан пристроїв після App_Init(): хендли драйверів і результат ініціалізації.
@@ -34,6 +35,10 @@ typedef struct
    * поки модуль GY-521 несправний (журнал проблем ЛР2) */
   lsm303d_t    accel;
   dev_status_t accel_status;
+
+  /* ЛР3, FR-07: камера OV7670 по SCCB (захоплення — Platform/camera_dvp.c) */
+  ov7670_t     cam;
+  dev_status_t cam_status;
 } App_Devices;
 
 extern App_Devices app_devices;
@@ -41,7 +46,8 @@ extern App_Devices app_devices;
 /* Викликається з main.c (USER CODE 2) після всіх MX_*_Init(). */
 void App_Init(void);
 
-/* Викликається з main.c (USER CODE 3) у нескінченному циклі. */
+/* Викликається з main.c (USER CODE 3) у нескінченному циклі: один прохід
+ * Super Loop по всіх задачах (docs/tasks.md). */
 void App_Loop(void);
 
 #endif /* APP_H */
