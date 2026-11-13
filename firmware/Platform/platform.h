@@ -29,6 +29,9 @@ uint32_t Platform_Millis(void);
 uint32_t Platform_Cycles(void);
 uint32_t Platform_CyclesToUs(uint32_t cycles);
 
+/* ЛР3 (I02): частота ядра HCLK, Гц (96 МГц) — для перерахунку періодів задач у такти */
+uint32_t Platform_CpuHz(void);
+
 /* Перевірка периферії МК з ЛР1 (periph_check): ініціалізація, тактування,
  * скан I2C, JEDEC ID, ШІМ. Викликати один раз після MX_*_Init(). */
 void Platform_BringUp(void);

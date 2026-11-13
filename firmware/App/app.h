@@ -15,7 +15,6 @@
 #include "dev_bus.h"
 #include "lsm303d.h"
 #include "mpu6050.h"
-#include "ov7670.h"
 #include "w25q64.h"
 
 /* Стан пристроїв після App_Init(): хендли драйверів і результат ініціалізації.
@@ -35,10 +34,6 @@ typedef struct
    * поки модуль GY-521 несправний (журнал проблем ЛР2) */
   lsm303d_t    accel;
   dev_status_t accel_status;
-
-  /* ЛР3, FR-07: камера OV7670 по SCCB (захоплення — Platform/camera_dvp.c) */
-  ov7670_t     cam;
-  dev_status_t cam_status;
 } App_Devices;
 
 extern App_Devices app_devices;

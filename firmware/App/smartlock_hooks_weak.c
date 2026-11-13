@@ -18,7 +18,6 @@
 #include "app.h"
 #include "dht11.h"
 #include "event_queue.h"
-#include "frame_store.h"
 #include "platform.h"
 
 #define DHT_THRESHOLD_US 48U   /* як у stand_test.c: HIGH > 48 мкс = 1 */
@@ -107,19 +106,4 @@ __attribute__((weak)) bool SmartLock_StoragePoll(uint32_t now_ms)
 {
     (void)now_ms;
     return false;
-}
-
-__attribute__((weak)) void SmartLock_OnCameraResult(const camera_result_t *r)
-{
-    printf("CAM,result,id=%lu,seq=%lu,status=%s,cap=%s,bytes=%lu,lines=%u,short=%u,vglitch=%u,"
-           "crc32=%08lX,capture_us=%lu,save_us=%lu,slot=%lu,store_rc=%d\r\n",
-           (unsigned long)r->event_id, (unsigned long)r->seq, Camera_StatusStr(r->status),
-           Camera_CapStatusStr(r->cap_status), (unsigned long)r->bytes, (unsigned)r->lines,
-           (unsigned)r->short_lines, (unsigned)r->vsync_glitches, (unsigned long)r->crc32, (unsigned long)r->capture_us,
-           (unsigned long)r->save_us, (unsigned long)r->slot, r->store_status);
-}
-
-__attribute__((weak)) const frame_store_ops_t *FrameStore_GetOps(void)
-{
-    return NULL;
 }

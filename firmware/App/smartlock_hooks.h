@@ -13,8 +13,6 @@
   *            SmartLock_SecurityPoll   — K05 (Коваль): PIR, MPU-6050, геркон
   *            SmartLock_EnvPoll        — K06 (Коваль): DHT11/BMP180, ENV_WARNING
   *            SmartLock_StoragePoll    — K07/H09: черга записів журналу W25Q64
-  *            SmartLock_OnCameraResult — K08: зв'язок фото з охоронною подією
-  *            FrameStore_GetOps        — H10 (Колодницький): write_frame/read_frame
   *
   *          Правила для всіх: функція не чекає (без HAL_Delay і очікувань у
   *          циклі), повертає true, якщо виконала корисну роботу, і викликається
@@ -32,17 +30,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "camera_service.h"
-
 /* Кожен прохід циклу. now_ms — Platform_Millis(). Забирає події з черги
  * SmartLock_TakeEvent() (event_queue.h) і змінює стан. */
 bool SmartLock_FsmStep(uint32_t now_ms);
 
-/* Раз на TBD_PERIOD_BUTTONS_US. b1_edge — був фронт USER B1 в EXTI (уже враховано
- * в LAT name=b1_react). Сирий рівень входів — Platform_ReadInputs(). */
+/* Раз на TBD_PERIOD_BUTTONS_US. b1_edge — був фронт USER B1 (мітки часу з EXTI
+ * підключає I04; до того false). Сирий рівень входів — Platform_ReadInputs(). */
 bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge);
 
-/* Раз на TBD_PERIOD_SECURITY_US. pir_edge / mpu_edge — фронти з EXTI. */
+/* Раз на TBD_PERIOD_SECURITY_US. pir_edge / mpu_edge — фронти з EXTI (з I04). */
 bool SmartLock_SecurityPoll(uint32_t now_ms, bool pir_edge, bool mpu_edge);
 
 /* Раз на TBD_PERIOD_ENV_US */
@@ -50,8 +46,5 @@ bool SmartLock_EnvPoll(uint32_t now_ms);
 
 /* Кожен прохід: одна порція роботи з чергою журналу */
 bool SmartLock_StoragePoll(uint32_t now_ms);
-
-/* Результат фото за запитом Camera_Request() (OK або причина помилки) */
-void SmartLock_OnCameraResult(const camera_result_t *r);
 
 #endif /* SMARTLOCK_HOOKS_H */

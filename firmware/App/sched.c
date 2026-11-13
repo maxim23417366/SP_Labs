@@ -134,7 +134,6 @@ void Sched_RunOnce(void)
     uint32_t window;
 
     (void)Perf_TimeUs64();   /* тримати 64-бітний час: прохід < 44 с */
-    PROBE_ON(PLATFORM_PROBE_LOOP);
 
     for (int i = 0; i < s_count; i++)
     {
@@ -158,15 +157,7 @@ void Sched_RunOnce(void)
         }
 
         t0 = Perf_Now();
-        if (t->probe >= 0)
-        {
-            PROBE_ON((unsigned)t->probe);
-        }
         did = t->fn();
-        if (t->probe >= 0)
-        {
-            PROBE_OFF((unsigned)t->probe);
-        }
         dur = Perf_Now() - t0;
 
         t->polls++;
@@ -179,7 +170,6 @@ void Sched_RunOnce(void)
         }
     }
 
-    PROBE_OFF(PLATFORM_PROBE_LOOP);
     Perf_StatAdd(&s_loop, Perf_Now() - t_loop);
     s_loops++;
 

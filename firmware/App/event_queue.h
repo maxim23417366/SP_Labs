@@ -13,7 +13,7 @@
   *                SmartLock_PostEvent  → xQueueSend(q, &ev, 0)
   *                SmartLock_TakeEvent  → xQueueReceive(q, &ev, timeout) у задачі FSM
   *
-  *          Порядок у проході fsm → buttons → security → … → camera, тож:
+  *          Порядок у проході fsm → buttons → security → …, тож:
   *            прохід k   : security бачить PIR → PostEvent(MOTION)
   *            прохід k+1 : fsm забирає MOTION (у LOCKED → Camera_Request(id)),
   *                         camera у тому ж проході знімає кадр
@@ -59,8 +59,7 @@ void SmartLock_EventsInit(void);
 /* false — черга повна, подію відкинуто (dropped++). */
 bool SmartLock_PostEvent(sl_event_type_t type, uint32_t arg);
 
-/* false — черга порожня. Час очікування в черзі додається до STAT evq_wait,
- * момент забирання — EVT name=fsm_event arg=<тип>. */
+/* false — черга порожня. Час очікування в черзі додається до статистики evq_wait. */
 bool SmartLock_TakeEvent(sl_event_t *ev);
 
 unsigned           SmartLock_EventsPending(void);

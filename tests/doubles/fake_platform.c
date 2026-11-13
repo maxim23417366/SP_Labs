@@ -55,6 +55,12 @@ uint32_t Platform_CyclesToUs(uint32_t cycles)
   return cycles;
 }
 
+/* 1 такт = 1 мкс, як і в Platform_Cycles() вище */
+uint32_t Platform_CpuHz(void)
+{
+  return 1000000U;
+}
+
 void Platform_BringUp(void)
 {
   fake_platform.bringup_calls++;

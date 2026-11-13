@@ -7,7 +7,6 @@
 #include "event_queue.h"
 
 #include "app_config.h"
-#include "evt.h"
 
 static sl_event_t  s_q[TBD_EVQ_LEN];
 static unsigned    s_head;
@@ -68,7 +67,6 @@ bool SmartLock_TakeEvent(sl_event_t *ev)
     s_tail = (s_tail + 1U) % TBD_EVQ_LEN;
     s_count--;
     Perf_StatAdd(&s_wait, Perf_Now() - ev->t_cycles);
-    Evt_LogArg("fsm_event", (uint32_t)ev->type);
     return true;
 }
 
