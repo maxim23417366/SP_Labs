@@ -2,8 +2,9 @@
   * @file    test_sched.c
   * @brief   ЛР3 (I02): каркас Super Loop без плати — планувальник (sched.c),
   *          час (perf.c), черга подій FSM (event_queue.c), таблиця задач
-  *          (app_tasks.c), слабкі точки підключення (smartlock_hooks_weak.c)
-  *          і службові GPIO для аналізатора (I05).
+  *          (app_tasks.c) і службові GPIO для аналізатора (I05). Слабкі точки
+  *          підключення (smartlock_hooks_weak.c) у бінарнику з модулями sl_*.c
+  *          заміщені — їх перевіряє test_hooks_weak.c.
   *
   *          Час — fake_platform: Platform_Cycles() = now_ms · 1000 + cycles_step на
   *          кожне зчитування, 1 такт = 1 мкс (Platform_CpuHz() = 1 МГц).
@@ -275,39 +276,6 @@ static void test_posted_event_reaches_fsm_next_pass(void)
   TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(0)->exec.count);   /* fsm мала роботу */
 }
 
-static void test_weak_hooks(void)
-{
-  SmartLock_EventsInit();
-  SmartLock_JournalInit();
-  SmartLock_FsmInit();
-  TEST_ASSERT_TRUE(SmartLock_ButtonsPoll(0U, true));
-  TEST_ASSERT_TRUE(SmartLock_SecurityPoll(0U, true, false));
-  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_EventsPending());   /* LOCK_REQUEST, MOTION */
-  TEST_ASSERT_TRUE(SmartLock_FsmStep(0U));
-  TEST_ASSERT_FALSE(SmartLock_FsmStep(0U));
-  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
-  /* ЛР3: FSM (K02) і storage (K07) уже сильні — LOCK_REQUEST дав один запис
-   * журналу (MOTION поза LOCKED ігнорується), storage вивантажує його за прохід */
-  TEST_ASSERT_EQUAL(SL_STATE_EXIT_DELAY, SmartLock_FsmState());
-  TEST_ASSERT_TRUE(SmartLock_StoragePoll(0U));
-  TEST_ASSERT_FALSE(SmartLock_StoragePoll(0U));
-  TEST_ASSERT_FALSE(SmartLock_CameraRequest(1U));   /* слабка заглушка: камери ще немає */
-
-  /* MPU-6050 є — security читає 14 байт; DHT11 відповідає — ENV,dht=ok */
-  app_devices.mpu_status = DEV_OK;
-  app_devices.mpu.bus = Platform_SensorI2c();
-  app_devices.mpu.addr7 = MPU6050_I2C_ADDR;
-  TEST_ASSERT_TRUE(SmartLock_SecurityPoll(0U, false, false));
-  fake_platform.dht_status = DEV_OK;
-  for (unsigned i = 0U; i < 40U; i++)
-  {
-    fake_platform.dht_high_us[i] = 24U;   /* усі біти 0: контрольна сума 0 збігається */
-  }
-  TEST_ASSERT_TRUE(SmartLock_EnvPoll(0U));
-  fake_platform.dht_status = DEV_ERR_TIMEOUT;
-  TEST_ASSERT_TRUE(SmartLock_EnvPoll(0U));
-}
-
 /* ---- I05: службові GPIO ---------------------------------------------------------- */
 static void test_loop_probe_pulses_every_pass(void)
 {
@@ -445,7 +413,6 @@ int main(void)
   RUN_TEST(test_event_queue_fifo_overflow_and_wait);
   RUN_TEST(test_app_tasks_table_order);
   RUN_TEST(test_posted_event_reaches_fsm_next_pass);
-  RUN_TEST(test_weak_hooks);
   RUN_TEST(test_uart_task_runs_lr2_commands);
   RUN_TEST(test_loop_probe_pulses_every_pass);
   RUN_TEST(test_task_probe_wraps_only_its_task);
