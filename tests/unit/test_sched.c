@@ -23,6 +23,9 @@
 #include "perf.h"
 #include "platform.h"
 #include "sched.h"
+#include "sl_camera_link.h"
+#include "sl_fsm.h"
+#include "sl_journal.h"
 #include "smartlock_hooks.h"
 
 /* ---- тестові задачі --------------------------------------------------------------- */
@@ -275,13 +278,20 @@ static void test_posted_event_reaches_fsm_next_pass(void)
 static void test_weak_hooks(void)
 {
   SmartLock_EventsInit();
+  SmartLock_JournalInit();
+  SmartLock_FsmInit();
   TEST_ASSERT_TRUE(SmartLock_ButtonsPoll(0U, true));
   TEST_ASSERT_TRUE(SmartLock_SecurityPoll(0U, true, false));
   TEST_ASSERT_EQUAL_UINT(2U, SmartLock_EventsPending());   /* LOCK_REQUEST, MOTION */
   TEST_ASSERT_TRUE(SmartLock_FsmStep(0U));
   TEST_ASSERT_FALSE(SmartLock_FsmStep(0U));
   TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
+  /* ЛР3: FSM (K02) і storage (K07) уже сильні — LOCK_REQUEST дав один запис
+   * журналу (MOTION поза LOCKED ігнорується), storage вивантажує його за прохід */
+  TEST_ASSERT_EQUAL(SL_STATE_EXIT_DELAY, SmartLock_FsmState());
+  TEST_ASSERT_TRUE(SmartLock_StoragePoll(0U));
   TEST_ASSERT_FALSE(SmartLock_StoragePoll(0U));
+  TEST_ASSERT_FALSE(SmartLock_CameraRequest(1U));   /* слабка заглушка: камери ще немає */
 
   /* MPU-6050 є — security читає 14 байт; DHT11 відповідає — ENV,dht=ok */
   app_devices.mpu_status = DEV_OK;
