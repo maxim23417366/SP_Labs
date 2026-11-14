@@ -31,6 +31,9 @@ typedef struct
   uint32_t     cycles_step;
   uint32_t     cycles_calls;
 
+  uint8_t      probe_level[4];    /* ЛР3 (I05): PROBE_ON/OFF — поточний рівень каналу */
+  uint32_t     probe_rises[4];    /* скільки разів канал піднімався в 1 */
+
   uint32_t     inputs;            /* Platform_ReadInputs(): біти PLATFORM_IN_* */
 
   dev_status_t dht_status;        /* != DEV_OK — Platform_Dht11Capture() повертає цю помилку */

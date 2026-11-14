@@ -32,6 +32,31 @@ uint32_t Platform_CyclesToUs(uint32_t cycles);
 /* ЛР3 (I02): частота ядра HCLK, Гц (96 МГц) — для перерахунку періодів задач у такти */
 uint32_t Platform_CpuHz(void);
 
+/* ---- ЛР3 (I05): службові GPIO для логічного аналізатора (методичка §5.3) ---------
+ * Усі чотири канали — на порту GPIOB, тому один запис у BSRR = один фронт.
+ * Піни вільні за docs/pinout.md (PB0 звільнено в ЛР2, PB1/PB2/PB12 не
+ * використовуються); налаштовує їх виходами Platform_IoInit(). */
+#define PLATFORM_PROBE_LOOP     0U   /* PB0  (A3)      — прохід Super Loop        */
+#define PLATFORM_PROBE_REACT    1U   /* PB1  (CN10-24) — FSM обробляє подію        */
+#define PLATFORM_PROBE_CAMERA   2U   /* PB2  (CN10-22) — захоплення кадру (I09); до того задача security */
+#define PLATFORM_PROBE_STORAGE  3U   /* PB12 (CN10-16) — запис кадру у Flash (I09); до того задача env  */
+#define PLATFORM_PROBE_COUNT    4U
+
+#if defined(STM32F411xE) && !defined(PLATFORM_PROBE_FUNCTIONS)
+/* На платі — один запис у GPIOB->BSRR без HAL і без виклику функції
+ * (RM0383: GPIOB = 0x40020400, BSRR = +0x18). Так platform.h лишається без
+ * заголовків HAL, а вимір додає лише кілька тактів. */
+#define PLATFORM_GPIOB_BSRR     (*(volatile uint32_t *)0x40020418UL)
+#define PLATFORM_PROBE_PIN(ch)  ((ch) == 0U ? 0U : (ch) == 1U ? 1U : (ch) == 2U ? 2U : 12U)
+#define PROBE_ON(ch)            (PLATFORM_GPIOB_BSRR = (1UL << PLATFORM_PROBE_PIN(ch)))
+#define PROBE_OFF(ch)           (PLATFORM_GPIOB_BSRR = (1UL << (PLATFORM_PROBE_PIN(ch) + 16U)))
+#else
+/* На ПК (хостові тести) — функція, яку реалізує fake_platform. */
+void Platform_ProbeWrite(unsigned ch, unsigned level);
+#define PROBE_ON(ch)            Platform_ProbeWrite((ch), 1U)
+#define PROBE_OFF(ch)           Platform_ProbeWrite((ch), 0U)
+#endif
+
 /* Перевірка периферії МК з ЛР1 (periph_check): ініціалізація, тактування,
  * скан I2C, JEDEC ID, ШІМ. Викликати один раз після MX_*_Init(). */
 void Platform_BringUp(void);

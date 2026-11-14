@@ -2,7 +2,8 @@
   * @file    test_sched.c
   * @brief   ЛР3 (I02): каркас Super Loop без плати — планувальник (sched.c),
   *          час (perf.c), черга подій FSM (event_queue.c), таблиця задач
-  *          (app_tasks.c) і слабкі точки підключення (smartlock_hooks_weak.c).
+  *          (app_tasks.c), слабкі точки підключення (smartlock_hooks_weak.c)
+  *          і службові GPIO для аналізатора (I05).
   *
   *          Час — fake_platform: Platform_Cycles() = now_ms · 1000 + cycles_step на
   *          кожне зчитування, 1 такт = 1 мкс (Platform_CpuHz() = 1 МГц).
@@ -295,6 +296,73 @@ static void test_weak_hooks(void)
   TEST_ASSERT_TRUE(SmartLock_EnvPoll(0U));
 }
 
+/* ---- I05: службові GPIO ---------------------------------------------------------- */
+static void test_loop_probe_pulses_every_pass(void)
+{
+  (void)Sched_Add("evt", event_task, 0U, SCHED_NO_PROBE);
+  Sched_Start();
+  for (int i = 0; i < 5; i++)
+  {
+    Sched_RunOnce();
+  }
+  TEST_ASSERT_EQUAL_UINT32(5U, fake_platform.probe_rises[PLATFORM_PROBE_LOOP]);
+  TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_LOOP]);   /* імпульс закрито */
+}
+
+static unsigned probe_seen_in_task;
+
+static bool probed_task(void)
+{
+  probe_seen_in_task = fake_platform.probe_level[PLATFORM_PROBE_CAMERA];
+  return true;
+}
+
+static void test_task_probe_wraps_only_its_task(void)
+{
+  (void)Sched_Add("cam", probed_task, 0U, (int)PLATFORM_PROBE_CAMERA);
+  Sched_Start();
+  Sched_RunOnce();
+  TEST_ASSERT_EQUAL_UINT(1U, probe_seen_in_task);                  /* 1 під час задачі */
+  TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_CAMERA]);
+  TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.probe_rises[PLATFORM_PROBE_CAMERA]);
+  Platform_ProbeWrite(PLATFORM_PROBE_COUNT, 1U);                   /* неіснуючий канал ігнорується */
+}
+
+static void test_react_probe_only_when_fsm_has_events(void)
+{
+  AppTasks_Init();
+  Sched_RunOnce();
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);   /* черга порожня */
+  (void)SmartLock_PostEvent(SL_EV_MOTION, 0U);
+  Sched_RunOnce();
+  TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
+  TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_REACT]);
+}
+
+/* Фізичний фронт → buttons/security (опитування) → черга → fsm з імпульсом PB1 */
+static void test_input_edges_reach_fsm_with_react_pulse(void)
+{
+  AppTasks_Init();                          /* B1 відпущена (1), PIR у спокої (0) */
+  fake_platform.now_ms = 10U;
+  Sched_RunOnce();                          /* перше опитування — без фронтів */
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
+
+  fake_platform.inputs &= ~PLATFORM_IN_LOCK;   /* B1 натиснули */
+  fake_platform.inputs |= PLATFORM_IN_PIR;     /* PIR спрацював */
+  fake_platform.now_ms = 20U;
+  Sched_RunOnce();                          /* buttons і security бачать фронти, кладуть події */
+  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_EventsPending());
+  Sched_RunOnce();                          /* наступний прохід: fsm забирає обидві */
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
+  TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
+
+  fake_platform.now_ms = 40U;               /* рівень не змінився — нових подій немає */
+  Sched_RunOnce();
+  TEST_ASSERT_EQUAL_UINT32(2U, SmartLock_EventsPosted());
+  /* security і env мають власні канали PB2 / PB12 */
+  TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_CAMERA] >= 2U);
+}
+
 static void test_uart_task_runs_lr2_commands(void)
 {
   AppTasks_Init();
@@ -319,5 +387,9 @@ int main(void)
   RUN_TEST(test_posted_event_reaches_fsm_next_pass);
   RUN_TEST(test_weak_hooks);
   RUN_TEST(test_uart_task_runs_lr2_commands);
+  RUN_TEST(test_loop_probe_pulses_every_pass);
+  RUN_TEST(test_task_probe_wraps_only_its_task);
+  RUN_TEST(test_react_probe_only_when_fsm_has_events);
+  RUN_TEST(test_input_edges_reach_fsm_with_react_pulse);
   return UNITY_END();
 }

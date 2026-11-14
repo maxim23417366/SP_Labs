@@ -74,6 +74,15 @@ void Platform_IoInit(void)
   g.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(DHT_PORT, &g);
 
+  /* ЛР3 (I05): службові GPIO для логічного аналізатора (platform.h, PLATFORM_PROBE_*).
+   * PB0 у firmware.ioc — SPARE_PB0 (вхід): тут він стає виходом разом з PB1/PB2/PB12. */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_12, GPIO_PIN_RESET);
+  g.Pin   = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_12;
+  g.Mode  = GPIO_MODE_OUTPUT_PP;
+  g.Pull  = GPIO_NOPULL;
+  g.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(GPIOB, &g);
+
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CYCCNT = 0U;
   DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
