@@ -2,9 +2,9 @@
   * @file    test_sched.c
   * @brief   ЛР3 (I02): каркас Super Loop без плати — планувальник (sched.c),
   *          час (perf.c), черга подій FSM (event_queue.c), таблиця задач
-  *          (app_tasks.c) і службові GPIO для аналізатора (I05). Слабкі точки
-  *          підключення (smartlock_hooks_weak.c) у бінарнику з модулями sl_*.c
-  *          заміщені — їх перевіряє test_hooks_weak.c.
+  *          (app_tasks.c), службові GPIO для аналізатора (I05) і точки підключення
+  *          (smartlock_hooks.h), заміщені сильними модулями sl_*.c; слабкі
+  *          (smartlock_hooks_weak.c) — у test_hooks_weak.c.
   *
   *          Час — fake_platform: Platform_Cycles() = now_ms · 1000 + cycles_step на
   *          кожне зчитування, 1 такт = 1 мкс (Platform_CpuHz() = 1 МГц).
@@ -24,12 +24,12 @@
 #include "perf.h"
 #include "platform.h"
 #include "sched.h"
-#include "sl_security.h"
-#include "sl_env.h"
 #include "sl_buttons.h"
 #include "sl_camera_link.h"
+#include "sl_env.h"
 #include "sl_fsm.h"
 #include "sl_journal.h"
+#include "sl_security.h"
 #include "smartlock_hooks.h"
 
 /* ---- тестові задачі --------------------------------------------------------------- */
@@ -412,6 +412,70 @@ static void test_mem_task_prints_stack_heap_only_on_new_maximum(void)
   TEST_ASSERT_NULL(strstr(capture_pass(), "STACK "));
 }
 
+/* ЛР3: усі п'ять точок підключення заміщені сильними модулями sl_*.c (слабкі
+ * реалізації перевіряє окремий бінарник test_hooks_weak). Ті самі прямі виклики
+ * хуків, що й раніше, але з контрактом сильних модулів: подія — лише зі
+ * стабільного рівня, FSM забирає всі події, storage вивантажує по запису за прохід,
+ * MPU-6050 і DHT11 справді читаються. */
+static void test_strong_hooks_replace_weak(void)
+{
+  SmartLock_EventsInit();
+  SmartLock_JournalInit();
+  SmartLock_FsmInit();
+  SmartLock_ButtonsInit();
+  SmartLock_SecurityInit();
+  SmartLock_EnvInit();
+  fake_platform_set_inputs(PLATFORM_IN_DOOR, 0);   /* магніт поруч: двері зачинені */
+
+  /* перший виклик лише запам'ятовує рівні; фронт B1 без стабільного рівня (завада) —
+   * не подія (слабкий хук тут клав LOCK_REQUEST одразу) */
+  TEST_ASSERT_FALSE(SmartLock_ButtonsPoll(0U, true));
+  TEST_ASSERT_FALSE(SmartLock_ButtonsPoll(10U, true));
+  TEST_ASSERT_FALSE(SmartLock_SecurityPoll(0U, false, false));   /* база PIR і геркона */
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
+
+  /* B1 утримується 20 мс — рівно одна LOCK_REQUEST з міткою прийняття */
+  fake_platform_set_inputs(PLATFORM_IN_LOCK, 0);
+  TEST_ASSERT_FALSE(SmartLock_ButtonsPoll(20U, false));
+  TEST_ASSERT_TRUE(SmartLock_ButtonsPoll(40U, false));
+  TEST_ASSERT_FALSE(SmartLock_ButtonsPoll(50U, false));          /* утримання — без автоповтору */
+  /* геркон стабільний 100 мс — DOOR_CLOSED; фронт PIR з EXTI — MOTION */
+  TEST_ASSERT_TRUE(SmartLock_SecurityPoll(100U, true, false));
+  TEST_ASSERT_EQUAL_UINT(3U, SmartLock_EventsPending());          /* LOCK_REQUEST, DOOR_CLOSED, MOTION */
+
+  TEST_ASSERT_TRUE(SmartLock_FsmStep(100U));
+  TEST_ASSERT_FALSE(SmartLock_FsmStep(100U));
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
+  /* LOCK_REQUEST і DOOR_CLOSED дали два записи (MOTION поза LOCKED ігнорується),
+   * storage вивантажує по одному за прохід */
+  TEST_ASSERT_EQUAL(SL_STATE_EXIT_DELAY, SmartLock_FsmState());
+  TEST_ASSERT_EQUAL_UINT32(SL_EXIT_DELAY_MS - 60U, SmartLock_FsmExitDelayRemainingMs(100U));   /* від 40 мс */
+  TEST_ASSERT_TRUE(SmartLock_StoragePoll(100U));
+  TEST_ASSERT_TRUE(SmartLock_StoragePoll(100U));
+  TEST_ASSERT_FALSE(SmartLock_StoragePoll(100U));
+  TEST_ASSERT_FALSE(SmartLock_CameraRequest(1U));   /* слабка заглушка: камери ще немає */
+
+  /* MPU-6050 «є», але не відповідає — security все одно звертається до шини */
+  app_devices.mpu_status = DEV_OK;
+  app_devices.mpu.bus = Platform_SensorI2c();
+  app_devices.mpu.addr7 = MPU6050_I2C_ADDR;
+  TEST_ASSERT_TRUE(SmartLock_SecurityPoll(120U, false, false));
+  TEST_ASSERT_EQUAL_UINT32(1U, SlSecurity_MpuErrors());
+
+  /* DHT11 відповідає — ENV,dht=ok і валідні T/RH; потім тайм-аут — лише лічильник */
+  fake_platform.dht_status = DEV_OK;
+  for (unsigned i = 0U; i < 40U; i++)
+  {
+    fake_platform.dht_high_us[i] = 24U;   /* усі біти 0: контрольна сума 0 збігається */
+  }
+  TEST_ASSERT_TRUE(SmartLock_EnvPoll(0U));
+  TEST_ASSERT_TRUE(SmartLock_EnvLastDht(NULL, NULL));
+  fake_platform.dht_status = DEV_ERR_TIMEOUT;
+  TEST_ASSERT_TRUE(SmartLock_EnvPoll(0U));
+  TEST_ASSERT_EQUAL_UINT32(1U, SmartLock_EnvDhtErrors());
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());   /* відмова DHT11 подій не дає */
+}
+
 static void test_uart_task_runs_lr2_commands(void)
 {
   AppTasks_Init();
@@ -434,6 +498,7 @@ int main(void)
   RUN_TEST(test_event_queue_fifo_overflow_and_wait);
   RUN_TEST(test_app_tasks_table_order);
   RUN_TEST(test_posted_event_reaches_fsm_next_pass);
+  RUN_TEST(test_strong_hooks_replace_weak);
   RUN_TEST(test_uart_task_runs_lr2_commands);
   RUN_TEST(test_loop_probe_pulses_every_pass);
   RUN_TEST(test_task_probe_wraps_only_its_task);
