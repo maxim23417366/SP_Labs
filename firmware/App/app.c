@@ -90,6 +90,7 @@ void App_Init(void)
     devices_self_test();
     Bench_Help();
     AppTasks_Init();   /* час, черга подій, таблиця задач (без виводу) */
+    AppTasks_PrintMem();   /* I06: пам'ять після self-test (найглибші виклики старту) */
 }
 
 /* Один прохід Super Loop. Якщо App_Init() не викликали (хостові тести ЛР2),

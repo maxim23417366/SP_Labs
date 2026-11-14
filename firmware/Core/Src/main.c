@@ -28,6 +28,7 @@
 /* USER CODE BEGIN Includes */
 #include "app.h"
 #include "periph_check.h"
+#include "platform.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,7 +71,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  /* ЛР3 (I06): фарбування стека — до будь-яких викликів, щоб виміряти всю глибину */
+  Platform_StackPaint();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/

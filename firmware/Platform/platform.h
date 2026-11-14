@@ -57,6 +57,25 @@ void Platform_ProbeWrite(unsigned ch, unsigned level);
 #define PROBE_OFF(ch)           Platform_ProbeWrite((ch), 0U)
 #endif
 
+/* ---- ЛР3 (I06): пам'ять (методичка §5.4) -------------------------------------------- */
+
+/* Заповнює зарезервований стек (_estack - _Min_Stack_Size .. SP) шаблоном
+ * 0xDEADBEEF. Викликати першим рядком main(). */
+void     Platform_StackPaint(void);
+/* Найглибше використання стека з моменту фарбування, байт. Дорівнює
+ * Platform_StackReservedBytes() — стек вийшов за резерв (див. docs/superloop.md §5). */
+uint32_t Platform_StackUsedBytes(void);
+uint32_t Platform_StackReservedBytes(void);
+
+typedef struct
+{
+  uint32_t arena;   /* скільки heap забрано в системи (sbrk) — фактично пік */
+  uint32_t used;    /* зайнято блоками malloc зараз */
+  uint32_t free;    /* вільно всередині arena */
+} platform_heap_t;
+
+void Platform_HeapInfo(platform_heap_t *heap);
+
 /* Перевірка периферії МК з ЛР1 (periph_check): ініціалізація, тактування,
  * скан I2C, JEDEC ID, ШІМ. Викликати один раз після MX_*_Init(). */
 void Platform_BringUp(void);

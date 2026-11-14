@@ -8,7 +8,9 @@
   *          Час — fake_platform: Platform_Cycles() = now_ms · 1000 + cycles_step на
   *          кожне зчитування, 1 такт = 1 мкс (Platform_CpuHz() = 1 МГц).
   */
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "unity.h"
 
@@ -244,12 +246,12 @@ static void test_event_queue_fifo_overflow_and_wait(void)
 /* ---- таблиця задач SmartLock і слабкі точки підключення --------------------------- */
 static void test_app_tasks_table_order(void)
 {
-  static const char *const names[] = { "fsm", "buttons", "security", "env", "storage", "uart" };
+  static const char *const names[] = { "fsm", "buttons", "security", "env", "storage", "mem", "uart" };
 
   AppTasks_Init();
   TEST_ASSERT_TRUE(Sched_Started());
-  TEST_ASSERT_EQUAL_INT(6, Sched_Count());
-  for (int i = 0; i < 6; i++)
+  TEST_ASSERT_EQUAL_INT(7, Sched_Count());
+  for (int i = 0; i < 7; i++)
   {
     TEST_ASSERT_EQUAL_STRING(names[i], Sched_Task(i)->name);
   }
@@ -363,6 +365,54 @@ static void test_input_edges_reach_fsm_with_react_pulse(void)
   TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_CAMERA] >= 2U);
 }
 
+/* ---- I06: рядки STACK/HEAP лише при зростанні максимуму --------------------------------- */
+static char out[1024];
+
+static const char *capture_pass(void)
+{
+  FILE *tmp = tmpfile();
+  int saved;
+  size_t n;
+
+  out[0] = '\0';
+  if (tmp == NULL) { return out; }
+  fflush(stdout);
+  saved = dup(1);
+  dup2(fileno(tmp), 1);
+  Sched_RunOnce();
+  fflush(stdout);
+  dup2(saved, 1);
+  close(saved);
+  rewind(tmp);
+  n = fread(out, 1U, sizeof(out) - 1U, tmp);
+  out[n] = '\0';
+  fclose(tmp);
+  return out;
+}
+
+static void test_mem_task_prints_stack_heap_only_on_new_maximum(void)
+{
+  AppTasks_Init();
+  fake_platform.stack_used = 600U;
+  fake_platform.heap.arena = 1460U;
+  AppTasks_PrintMem();                                  /* як App_Init() після self-test */
+
+  fake_platform.now_ms = 1000U;                         /* період mem — 1 с */
+  TEST_ASSERT_NULL(strstr(capture_pass(), "STACK "));   /* нічого не зросло */
+
+  fake_platform.stack_used = 712U;                      /* сценарій дійшов глибше */
+  fake_platform.now_ms = 2000U;
+  TEST_ASSERT_NOT_NULL(strstr(capture_pass(),
+                       "STACK reserved=1024 used=712 free=312\r\n"
+                       "HEAP arena=1460 used=0 free=0\r\n"));
+
+  fake_platform.heap.arena = 2000U;                     /* heap теж стежиться */
+  fake_platform.now_ms = 3000U;
+  TEST_ASSERT_NOT_NULL(strstr(capture_pass(), "HEAP arena=2000 "));
+  fake_platform.now_ms = 4000U;
+  TEST_ASSERT_NULL(strstr(capture_pass(), "STACK "));
+}
+
 static void test_uart_task_runs_lr2_commands(void)
 {
   AppTasks_Init();
@@ -370,7 +420,7 @@ static void test_uart_task_runs_lr2_commands(void)
   fake_platform.uart_pos = 0U;
   Sched_RunOnce();
   TEST_ASSERT_EQUAL_UINT(1U, (unsigned)fake_platform.uart_pos);   /* символ забрала uart-задача */
-  TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(5)->exec.count);
+  TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(6)->exec.count);
 }
 
 int main(void)
@@ -391,5 +441,6 @@ int main(void)
   RUN_TEST(test_task_probe_wraps_only_its_task);
   RUN_TEST(test_react_probe_only_when_fsm_has_events);
   RUN_TEST(test_input_edges_reach_fsm_with_react_pulse);
+  RUN_TEST(test_mem_task_prints_stack_heap_only_on_new_maximum);
   return UNITY_END();
 }
