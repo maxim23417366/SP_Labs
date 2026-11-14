@@ -351,7 +351,7 @@ static void test_input_edges_reach_fsm_with_react_pulse(void)
   TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());           /* fsm забрала все */
   TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_REACT] >= 1U);
   TEST_ASSERT_EQUAL(SL_STATE_EXIT_DELAY, SmartLock_FsmState());     /* LOCK_REQUEST дійшов */
-  TEST_ASSERT_TRUE(SmartLock_EventsPosted() >= 1U);   /* LOCK_REQUEST (MOTION, DOOR_* — K05) */
+  TEST_ASSERT_TRUE(SmartLock_EventsPosted() >= 3U);   /* LOCK_REQUEST, MOTION, DOOR_CLOSED */
 
   posted = SmartLock_EventsPosted();        /* рівні не змінюються — нових подій немає */
   for (uint32_t t = 210U; t <= 400U; t += 10U)

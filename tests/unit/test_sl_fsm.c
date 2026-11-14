@@ -508,6 +508,9 @@ static void test_full_cycle_through_super_loop(void)
 {
   AppTasks_Init();
   fake_platform.now_ms = 0U;
+  /* справжній sl_security теж читає геркон: магніт поруч (0) = двері зачинені, інакше
+   * він сам пошле DOOR_OPEN і FSM чекатиме закриття */
+  fake_platform_set_inputs(PLATFORM_IN_DOOR, 0);
   post(SL_EV_DOOR_CLOSED, 0U);
   post(SL_EV_LOCK_REQUEST, SL_LOCK_REQ_T_NOW);
   Sched_RunOnce();
