@@ -55,6 +55,19 @@ uint32_t Platform_CyclesToUs(uint32_t cycles)
   return cycles;
 }
 
+void Platform_ProbeWrite(unsigned ch, unsigned level)
+{
+  if (ch >= PLATFORM_PROBE_COUNT)
+  {
+    return;
+  }
+  if ((level != 0U) && (fake_platform.probe_level[ch] == 0U))
+  {
+    fake_platform.probe_rises[ch]++;
+  }
+  fake_platform.probe_level[ch] = (uint8_t)(level != 0U);
+}
+
 /* 1 такт = 1 мкс, як і в Platform_Cycles() вище */
 uint32_t Platform_CpuHz(void)
 {

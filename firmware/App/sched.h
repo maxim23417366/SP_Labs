@@ -25,7 +25,7 @@
 
 #define SCHED_MAX_TASKS      10
 #define SCHED_MAX_PERIOD_US  20000000U   /* знакове порівняння тактів коректне до ~22 с */
-#define SCHED_NO_PROBE       (-1)   /* службові GPIO підключає I05 */
+#define SCHED_NO_PROBE       (-1)
 
 /* Гістограма |джитера|: <100 мкс, <1 мс, <10 мс, <100 мс, ≥100 мс */
 #define SCHED_JIT_BUCKETS    5U
@@ -37,7 +37,7 @@ typedef struct
     const char  *name;
     sched_fn_t   fn;
     uint32_t     period_us;
-    int          probe;          /* канал службового GPIO (I05) або SCHED_NO_PROBE */
+    int          probe;          /* канал PLATFORM_PROBE_* або SCHED_NO_PROBE */
 
     uint32_t     period_cyc;
     uint32_t     t_next;         /* такт наступного запуску (періодичні) */
