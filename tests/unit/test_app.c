@@ -126,6 +126,10 @@ void tearDown(void)
 static void test_app_init_brings_up_and_runs_selftest(void)
 {
   SelfTest_SetOutput(NULL, NULL);   /* вивід налаштовує сам App_Init() */
+  fake_platform.stack_used = 712U;
+  fake_platform.heap.arena = 1460U;
+  fake_platform.heap.used  = 1300U;
+  fake_platform.heap.free  = 160U;
   const char *o = capture(App_Init);
 
   TEST_ASSERT_EQUAL_UINT(1U, fake_platform.bringup_calls);
@@ -139,7 +143,10 @@ static void test_app_init_brings_up_and_runs_selftest(void)
   o += sizeof(banner) - 1U;
   /* ЛР3: після App_Init() таблиця задач Super Loop запущена */
   TEST_ASSERT_TRUE(Sched_Started());
-  TEST_ASSERT_EQUAL_INT(6, Sched_Count());
+  TEST_ASSERT_EQUAL_INT(7, Sched_Count());
+  /* ЛР3 (I06): останні рядки старту — фактична пам'ять (docs/metrics-spec.md §3.6) */
+  TEST_ASSERT_NOT_NULL(strstr(o, "STACK reserved=1024 used=712 free=312\r\n"
+                                 "HEAP arena=1460 used=1300 free=160\r\n"));
   /* Self-test, підсумок і довідка — в одному потоці, у порядку плати */
   TEST_ASSERT_EQUAL_STRING_LEN("\n# SmartLock selftest v2 (LR2)\nI2C,scan,0x1D,0x21,0x6B\n"
                                "ST,START\nST,UART,OK,baud=115200\n", o, 79);

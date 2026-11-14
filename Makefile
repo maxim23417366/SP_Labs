@@ -10,6 +10,7 @@
 #   make test     — тести на ПК без плати: periph_check (ЛР1) + unit-тести драйверів
 #   make coverage — unit-тести + покриття шару драйверів (gcov), поріг COV_MIN
 #   make check-deps — правила залежностей між шарами (scripts/check_deps.sh)
+#   make mem-report — ЛР3: звіти пам'яті firmware/build/mem/ (size, nm, .su)
 #   make image    — (пере)зібрати Docker-образ з docker/Dockerfile
 #
 # Налаштування під конкретний комп'ютер (шлях до прошивальника, COM-порт)
@@ -44,17 +45,26 @@ else
   MONITOR_CMD  = picocom -b $(BAUD) --imap lfcrlf $(PORT)
 endif
 
+# ЛР3: git-хеш збірки обчислюється на хості і передається в Docker; «-dirty» —
+# у робочій копії є незакомічені зміни відстежуваних файлів
+GIT_REV   := $(shell git rev-parse --short HEAD 2>/dev/null)
+GIT_DIRTY := $(if $(GIT_REV),$(shell git status --porcelain --untracked-files=no 2>/dev/null))
+GIT_HASH  ?= $(if $(GIT_REV),$(GIT_REV)$(if $(GIT_DIRTY),-dirty),nogit)
+
 DOCKER_RUN = docker run --rm $(DOCKER_USER) -v "$(CURDIR):/workspace" -w /workspace $(IMAGE)
 
 .DEFAULT_GOAL := build
-.PHONY: build clean test coverage check-deps flash monitor image help
+.PHONY: build clean test coverage check-deps flash monitor image help mem-report
 
 # Образ збирається з кешу за секунду, тому build завжди спирається на актуальний Dockerfile
 image:
 	docker build -q -t $(IMAGE) docker/
 
 build: image
-	$(DOCKER_RUN) $(FW_MAKE) -j$(JOBS) all
+	$(DOCKER_RUN) $(FW_MAKE) -j$(JOBS) all GIT_HASH=$(GIT_HASH)
+
+mem-report: build
+	$(DOCKER_RUN) $(FW_MAKE) mem-report GIT_HASH=$(GIT_HASH)
 
 clean: image
 	$(DOCKER_RUN) $(FW_MAKE) clean
@@ -84,6 +94,7 @@ help:
 	@echo make test    - run host tests with mocked HAL, no board needed
 	@echo make coverage - host unit tests + driver coverage, COV_MIN=90
 	@echo make check-deps - check include rules between firmware layers
+	@echo make mem-report - LR3 memory reports in firmware/build/mem
 	@echo make flash   - build and flash the board via ST-Link
 	@echo make monitor - open UART terminal, PORT=$(PORT) BAUD=$(BAUD)
 	@echo make image   - rebuild Docker image
