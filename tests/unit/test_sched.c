@@ -24,6 +24,9 @@
 #include "perf.h"
 #include "platform.h"
 #include "sched.h"
+#include "sl_security.h"
+#include "sl_env.h"
+#include "sl_buttons.h"
 #include "sl_camera_link.h"
 #include "sl_fsm.h"
 #include "sl_journal.h"
@@ -319,26 +322,44 @@ static void test_react_probe_only_when_fsm_has_events(void)
   TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_REACT]);
 }
 
-/* Фізичний фронт → buttons/security (опитування) → черга → fsm з імпульсом PB1 */
+/* Фізичний фронт → buttons/security (опитування) → черга → fsm з імпульсом PB1.
+ * ЛР3: хуки сильні (sl_buttons, sl_security): B1 стає подією лише після антидребезгу
+ * (TBD_BTN_DEBOUNCE_MS), PIR — з наступного після базового зразка опитування, геркон
+ * один раз повідомляє початковий стан. Тому проходи йдуть з кроком часу. */
 static void test_input_edges_reach_fsm_with_react_pulse(void)
 {
+  uint32_t posted;
+
+  SmartLock_JournalInit();                  /* модулі sl_* зберігають стан між тестами */
+  SmartLock_FsmInit();
+  SmartLock_ButtonsInit();
+  SmartLock_SecurityInit();
+  SmartLock_EnvInit();
   AppTasks_Init();                          /* B1 відпущена (1), PIR у спокої (0) */
+  fake_platform.inputs &= ~PLATFORM_IN_DOOR;   /* магніт поруч: двері зачинені */
   fake_platform.now_ms = 10U;
-  Sched_RunOnce();                          /* перше опитування — без фронтів */
+  Sched_RunOnce();                          /* перше опитування — база, без фронтів */
   TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
 
   fake_platform.inputs &= ~PLATFORM_IN_LOCK;   /* B1 натиснули */
   fake_platform.inputs |= PLATFORM_IN_PIR;     /* PIR спрацював */
-  fake_platform.now_ms = 20U;
-  Sched_RunOnce();                          /* buttons і security бачать фронти, кладуть події */
-  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_EventsPending());
-  Sched_RunOnce();                          /* наступний прохід: fsm забирає обидві */
-  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
-  TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
+  for (uint32_t t = 20U; t <= 200U; t += 10U)  /* > антидребезг B1 і геркона */
+  {
+    fake_platform.now_ms = t;
+    Sched_RunOnce();
+  }
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());           /* fsm забрала все */
+  TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_REACT] >= 1U);
+  TEST_ASSERT_EQUAL(SL_STATE_EXIT_DELAY, SmartLock_FsmState());     /* LOCK_REQUEST дійшов */
+  TEST_ASSERT_TRUE(SmartLock_EventsPosted() >= 1U);   /* LOCK_REQUEST (MOTION, DOOR_* — K05) */
 
-  fake_platform.now_ms = 40U;               /* рівень не змінився — нових подій немає */
-  Sched_RunOnce();
-  TEST_ASSERT_EQUAL_UINT32(2U, SmartLock_EventsPosted());
+  posted = SmartLock_EventsPosted();        /* рівні не змінюються — нових подій немає */
+  for (uint32_t t = 210U; t <= 400U; t += 10U)
+  {
+    fake_platform.now_ms = t;
+    Sched_RunOnce();
+  }
+  TEST_ASSERT_EQUAL_UINT32(posted, SmartLock_EventsPosted());
   /* security і env мають власні канали PB2 / PB12 */
   TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_CAMERA] >= 2U);
 }
