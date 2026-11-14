@@ -94,8 +94,77 @@ uint32_t Platform_ReadInputs(void)
   return fake_platform.inputs;
 }
 
+/* ---- ЛР3: помічники ------------------------------------------------------------ */
+void fake_platform_advance_ms(uint32_t ms)
+{
+  fake_platform.now_ms += ms;
+}
+
+void fake_platform_set_inputs(uint32_t mask, int high)
+{
+  if (high != 0)
+  {
+    fake_platform.inputs |= mask;
+  }
+  else
+  {
+    fake_platform.inputs &= ~mask;
+  }
+}
+
+static void dht_encode(const uint8_t frame[5], uint16_t high_us[40])
+{
+  for (unsigned i = 0U; i < 40U; i++)
+  {
+    high_us[i] = (frame[i / 8U] & (0x80U >> (i % 8U))) ? 72U : 24U;
+  }
+}
+
+void fake_platform_dht_frame(const uint8_t frame[5])
+{
+  dht_encode(frame, fake_platform.dht_high_us);
+  fake_platform.dht_status = DEV_OK;
+}
+
+void fake_platform_dht_values(uint8_t rh_pct, uint8_t temp_c)
+{
+  uint8_t f[5] = { rh_pct, 0U, temp_c, 0U, 0U };
+
+  f[4] = (uint8_t)(f[0] + f[1] + f[2] + f[3]);
+  fake_platform_dht_frame(f);
+}
+
+void fake_platform_dht_script(const fake_dht_step_t *steps, size_t n)
+{
+  fake_platform.dht_script     = (n > 0U) ? steps : NULL;
+  fake_platform.dht_script_len = n;
+  fake_platform.dht_script_pos = 0U;
+}
+
 dev_status_t Platform_Dht11Capture(uint16_t high_us[40])
 {
+  fake_platform.dht_calls++;
+  if (fake_platform.dht_script != NULL)
+  {
+    size_t i = fake_platform.dht_script_pos;
+    const fake_dht_step_t *s;
+
+    if (i >= fake_platform.dht_script_len)
+    {
+      i = fake_platform.dht_script_len - 1U;
+    }
+    else
+    {
+      fake_platform.dht_script_pos++;
+    }
+    s = &fake_platform.dht_script[i];
+    if (s->status != DEV_OK)
+    {
+      return s->status;
+    }
+    dht_encode(s->frame, high_us);
+    return DEV_OK;
+  }
   if (fake_platform.dht_status != DEV_OK)
   {
     return fake_platform.dht_status;
@@ -106,6 +175,12 @@ dev_status_t Platform_Dht11Capture(uint16_t high_us[40])
 
 void Platform_ServoSetPulseUs(uint32_t us)
 {
+  if (fake_platform.servo_set_calls < FAKE_SERVO_LOG_LEN)
+  {
+    fake_platform.servo_log[fake_platform.servo_set_calls]    = us;
+    fake_platform.servo_log_ms[fake_platform.servo_set_calls] = fake_platform.now_ms;
+  }
+  fake_platform.servo_set_calls++;
   fake_platform.servo_pulse_us = us;
 }
 

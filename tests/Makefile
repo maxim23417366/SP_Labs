@@ -6,6 +6,8 @@
 #                    + тест форматування self-test (selftest)
 #   make coverage  — unit-тести + покриття firmware/Devices/*.c (поріг COV_MIN)
 #                    і firmware/App/*.c (поріг COV_MIN_APP), gcov
+#   make run-<name> — зібрати і запустити один тест, напр. make run-sl_fsm
+#                    (unit/test_<name>.c)
 #   make clean
 # -----------------------------------------------------------------------------
 
@@ -36,9 +38,12 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 
 # Тести App/ (перевірки стенда і команди без обладнання): кожен лінкується з усім App/,
 # усіма драйверами і fake_platform (імітація platform.h)
-APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue
-APP_TESTS := stand_test app sched
-APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(BUILD)/doubles/fake_platform.o
+# ЛР3 (K02–K07): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
+APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue \
+             sl_buttons sl_security sl_env
+APP_TESTS := stand_test app sched fakes_lr3 sl_buttons sl_security sl_env
+APP_DBLS  := fake_platform fake_sensors
+APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
 APP_HDRS  := $(wildcard $(FW_APP)/*.h) $(FW_PLAT)/platform.h
 COV_MIN_APP ?= 90
@@ -69,6 +74,9 @@ periph:
 unit: $(BINS)
 	@set -e; for t in $(BINS); do echo; echo "======== $$t"; ./$$t; done
 
+run-%: $(BUILD)/test_%
+	./$<
+
 $(BUILD)/dev/%.o: $(FW_DEV)/%.c $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_OWN) $(COVFLAGS) -c $< -o $@
@@ -81,7 +89,7 @@ $(BUILD)/app/%.o: $(FW_APP)/%.c $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) $(COVFLAGS) -c $< -o $@
 
-$(BUILD)/doubles/fake_platform.o: doubles/fake_platform.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
+$(APP_DBLS:%=$(BUILD)/doubles/%.o): $(BUILD)/doubles/%.o: doubles/%.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) -c $< -o $@
 
