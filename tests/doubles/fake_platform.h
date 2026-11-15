@@ -41,6 +41,12 @@ typedef struct
   platform_heap_t heap;
   unsigned     stack_paint_calls;
 
+  /* ЛР3 (I04): події з ISR і втрати UART */
+  uint8_t      ev_pending[PLATFORM_EV_COUNT];
+  uint32_t     ev_t[PLATFORM_EV_COUNT];
+  uint32_t     ev_overruns[PLATFORM_EV_COUNT];
+  uint32_t     uart_overruns;
+
   uint32_t     inputs;            /* Platform_ReadInputs(): біти PLATFORM_IN_* */
 
   dev_status_t dht_status;        /* != DEV_OK — Platform_Dht11Capture() повертає цю помилку */
@@ -68,5 +74,9 @@ extern fake_platform_t fake_platform;
  * усі кнопки відпущені (1), DHT11 не відповідає (DEV_ERR_TIMEOUT), VSYNC 0 Гц.
  * fake_i2c і mock_spi тест скидає окремо. */
 void fake_platform_reset(void);
+
+/* ЛР3 (I04): як ISR — фронт у момент t_cycles (шкала Platform_Cycles()). Якщо
+ * попередню подію ще не забрали — лише overrun, як на платі. */
+void fake_platform_raise_event(platform_event_t ev, uint32_t t_cycles);
 
 #endif /* FAKE_PLATFORM_H */

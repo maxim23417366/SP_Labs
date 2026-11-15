@@ -54,6 +54,14 @@ uint64_t Perf_TimeUs64(void)
     return cycles64_to_us(time_cycles64());
 }
 
+uint64_t Perf_CyclesStampToUs64(uint32_t t_cycles)
+{
+    uint64_t now   = time_cycles64();
+    uint32_t delta = s_last_cycles - t_cycles;   /* скільки тактів тому */
+
+    return cycles64_to_us((delta <= now) ? (now - delta) : 0U);
+}
+
 void Perf_StatReset(perf_stat_t *s)
 {
     s->count = 0U;
@@ -123,4 +131,29 @@ size_t Perf_FormatU64(char *buf, size_t size, uint64_t value)
     }
     buf[n] = '\0';
     return n;
+}
+
+void Perf_LatencyInit(perf_latency_t *l, const char *name, platform_event_t ev)
+{
+    l->st.name = name;
+    Perf_StatReset(&l->st);
+    l->ev = ev;
+    l->last_t_cycles = 0U;
+}
+
+bool Perf_LatencyTake(perf_latency_t *l, uint64_t *t_event_us)
+{
+    uint32_t t_ev;
+
+    if (Platform_TakeEvent(l->ev, &t_ev) == 0)
+    {
+        return false;
+    }
+    Perf_StatAdd(&l->st, Platform_Cycles() - t_ev);
+    l->last_t_cycles = t_ev;
+    if (t_event_us != NULL)
+    {
+        *t_event_us = Perf_CyclesStampToUs64(t_ev);
+    }
+    return true;
 }

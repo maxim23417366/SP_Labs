@@ -59,7 +59,8 @@ void SmartLock_EventsInit(void);
 /* false — черга повна, подію відкинуто (dropped++). */
 bool SmartLock_PostEvent(sl_event_type_t type, uint32_t arg);
 
-/* false — черга порожня. Час очікування в черзі додається до статистики evq_wait. */
+/* false — черга порожня. Час очікування в черзі додається до STAT evq_wait,
+ * момент забирання — EVT name=fsm_<подія>, наприклад fsm_motion (I04). */
 bool SmartLock_TakeEvent(sl_event_t *ev);
 
 unsigned           SmartLock_EventsPending(void);

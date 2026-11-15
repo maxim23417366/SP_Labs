@@ -200,3 +200,39 @@ void Platform_HeapInfo(platform_heap_t *heap)
     *heap = fake_platform.heap;
   }
 }
+
+/* ---- ЛР3 (I04): події з ISR і втрати UART ---------------------------------------- */
+void fake_platform_raise_event(platform_event_t ev, uint32_t t_cycles)
+{
+  if (fake_platform.ev_pending[ev] != 0U)
+  {
+    fake_platform.ev_overruns[ev]++;
+    return;
+  }
+  fake_platform.ev_t[ev] = t_cycles;
+  fake_platform.ev_pending[ev] = 1U;
+}
+
+int Platform_TakeEvent(platform_event_t ev, uint32_t *t_cycles)
+{
+  if ((ev >= PLATFORM_EV_COUNT) || (fake_platform.ev_pending[ev] == 0U))
+  {
+    return 0;
+  }
+  if (t_cycles != NULL)
+  {
+    *t_cycles = fake_platform.ev_t[ev];
+  }
+  fake_platform.ev_pending[ev] = 0U;
+  return 1;
+}
+
+uint32_t Platform_EventOverruns(platform_event_t ev)
+{
+  return (ev < PLATFORM_EV_COUNT) ? fake_platform.ev_overruns[ev] : 0U;
+}
+
+uint32_t Platform_UartOverruns(void)
+{
+  return fake_platform.uart_overruns;
+}

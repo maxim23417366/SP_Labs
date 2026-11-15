@@ -19,6 +19,13 @@
 #define SCCB_TIMEOUT_MS  10U
 
 static volatile uint32_t vsync_count;
+/* ЛР3 (I04): такт першого фронту кожної події з EXTI (Platform_TakeEvent) */
+static volatile uint32_t ev_t[PLATFORM_EV_COUNT];
+static volatile uint8_t  ev_pending[PLATFORM_EV_COUNT];
+static volatile uint32_t ev_overruns[PLATFORM_EV_COUNT];
+
+static uint32_t uart_overruns;
+
 
 /* ---- мікросекунди через DWT CYCCNT ------------------------------------------ */
 static uint32_t cycles_per_us;
@@ -234,14 +241,64 @@ uint32_t Platform_VsyncCount(void)
   return vsync_count;
 }
 
+/* Запам'ятати такт фронту. Викликається лише з ISR (одна пріоритетна група EXTI,
+ * тож ISR не перериває одна одну). Порядок «спершу час, потім прапорець» разом із
+ * бар'єром компілятора гарантує, що цикл, побачивши pending = 1, прочитає вже
+ * записаний час: volatile сам по собі не забороняє переставити два записи. */
+static void ev_mark(platform_event_t ev)
+{
+  if (ev_pending[ev] != 0U)
+  {
+    ev_overruns[ev]++;   /* попередню подію цикл ще не забрав — зберігаємо найстарішу */
+    return;
+  }
+  ev_t[ev] = DWT->CYCCNT;
+  __asm volatile ("" ::: "memory");
+  ev_pending[ev] = 1U;
+}
+
 /* Усі EXTI з firmware.ioc приходять сюди (слабка функція HAL). Рахуємо кадри
- * камери; PIR і MPU_INT App/ опитує через Platform_ReadInputs(). */
+ * камери; для B1, PIR і MPU_INT фіксуємо момент фронту (I04: затримка реакції). */
 void HAL_GPIO_EXTI_Callback(uint16_t gpio_pin)
 {
   if (gpio_pin == CAM_VSYNC_Pin)
   {
     vsync_count++;
   }
+  else if (gpio_pin == B1_Pin)
+  {
+    ev_mark(PLATFORM_EV_LOCK_B1);
+  }
+  else if (gpio_pin == PIR_SENSOR_Pin)
+  {
+    ev_mark(PLATFORM_EV_PIR);
+  }
+  else if (gpio_pin == MPU_INT_Pin)
+  {
+    ev_mark(PLATFORM_EV_MPU_INT);
+  }
+}
+
+int Platform_TakeEvent(platform_event_t ev, uint32_t *t_cycles)
+{
+  if ((ev >= PLATFORM_EV_COUNT) || (ev_pending[ev] == 0U))
+  {
+    return 0;
+  }
+  /* Якщо ISR спрацює між читанням часу і зняттям прапорця, вона лише збільшить
+   * overrun і не перезапише ev_t — читання залишиться узгодженим. */
+  if (t_cycles != NULL)
+  {
+    *t_cycles = ev_t[ev];
+  }
+  __asm volatile ("" ::: "memory");
+  ev_pending[ev] = 0U;
+  return 1;
+}
+
+uint32_t Platform_EventOverruns(platform_event_t ev)
+{
+  return (ev < PLATFORM_EV_COUNT) ? ev_overruns[ev] : 0U;
 }
 
 /* ---- UART ---------------------------------------------------------------------- */
@@ -254,10 +311,16 @@ int Platform_UartGetChar(void)
   if (__HAL_UART_GET_FLAG(BOARD_LOG_UART, UART_FLAG_ORE))
   {
     __HAL_UART_CLEAR_OREFLAG(BOARD_LOG_UART);
+    uart_overruns++;   /* ЛР3 (I04): щонайменше один байт загублено (§6.2, потік команд) */
   }
   if (HAL_UART_Receive(BOARD_LOG_UART, &c, 1U, 0U) == HAL_OK)
   {
     return (int)c;
   }
   return -1;
+}
+
+uint32_t Platform_UartOverruns(void)
+{
+  return uart_overruns;
 }

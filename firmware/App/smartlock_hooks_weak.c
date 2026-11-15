@@ -23,7 +23,7 @@
 #define DHT_THRESHOLD_US 48U   /* як у stand_test.c: HIGH > 48 мкс = 1 */
 
 /* Без FSM (K02) події лише вибираються з черги, щоб вона не переповнювалась;
- * момент вибирання видно в EVT name=fsm_event, очікування — STAT evq_wait. */
+ * момент вибирання видно в EVT name=fsm_<подія>, очікування — STAT evq_wait. */
 __attribute__((weak)) bool SmartLock_FsmStep(uint32_t now_ms)
 {
     sl_event_t ev;
