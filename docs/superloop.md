@@ -1,7 +1,69 @@
 # Super Loop SmartLock — вимірювання (ЛР3)
 
-> Автор: Непорожній М.О. Цей файл доповнюють картки I02–I06; розділи 1–3 (каркас,
-> STATS, затримка/джитер/CPU) додаються з картками I02–I04.
+> Автор: Непорожній М.О. Цей файл доповнюють картки I02–I06; розділ 3 (EVT і
+> затримка реакції) додає I04.
+
+## 2. Лічильник тактів і STATS (I03)
+
+`firmware/App/perf.c`: DWT `CYCCNT` (вмикає `Platform_IoInit`), статистика
+count/min/avg/max у тактах, перерахунок у мкс лише при виводі. Кожна задача в
+`Sched_RunOnce()` обгорнута виміром; окремо — тривалість повного проходу (`loop`),
+джитер періодичних задач і CPU Load (`sched.c`, I02).
+
+Команда `STATS` (рядок у UART, `\r` або `\n` наприкінці):
+
+```
+STATS_BEGIN git=<hash> t_us=<64 біти> loops=<проходів>
+STAT name=loop n=.. min_us=.. avg_us=.. max_us=..
+CPU name=cpu_load windows=.. min_pm=.. avg_pm=.. max_pm=..
+STAT name=fsm n=.. min_us=.. avg_us=.. max_us=..
+POLL name=fsm polls=.. runs=..
+STAT name=buttons ...
+JITTER name=buttons period_us=10000 min_us=.. max_us=.. missed=..
+JHIST name=buttons n=.. h_lt100us=.. h_lt1ms=.. h_lt10ms=.. h_lt100ms=.. h_ge100ms=..
+... (security, env, mem — JITTER + JHIST; storage, uart — POLL)
+STAT name=evq_wait ...                       (подія в черзі FSM: Post → Take)
+EVQ len=8 pending=.. max_depth=.. posted=.. dropped=..
+UART cmd_overflow=..
+STACK reserved=.. used=.. free=..
+HEAP arena=.. used=.. free=..
+STATS_END
+```
+
+Окремо, без команди, раз на секунду (коли закривається вікно CPU Load):
+
+```
+LOAD pct=<0..100>
+```
+
+**Контракт з парсером.** Рядки `STAT`, `JITTER`, `LOAD`, `STACK`, `HEAP` і банер `BUILD`
+— точно за `docs/metrics-spec.md` §3 (регулярні вирази M03). `CPU`, `JHIST`, `POLL`, `EVQ`,
+`UART` — додаткові: парсер специфікації їх пропускає, а для звіту вони дають
+гістограму джитера, кількість опитувань і стан черги.
+
+* `STAT n` — лише запуски з корисною роботою; `POLL polls` — скільки разів задачу
+  викликали взагалі.
+* `JITTER` — інтервал між фактичними запусками мінус період: min/max у мкс, `missed` —
+  інтервал понад 2 періоди (методичка §5.1, приклад 3). `JHIST` — гістограма модуля
+  джитера в 5 кошиках (M-04).
+* `LOAD pct` (%, metrics-spec M-05) — останнє вікно 1 с; `CPU` (‰) у STATS — min/avg/max
+  за всі вікна. Частка тактів корисної роботи у вікні 1 с. Задача, що лише перевірила
+  порожню чергу, не рахується — інакше super loop завжди показував би 1000 ‰.
+* `STATS RAW` — ті самі STAT у тактах (`min_cyc=`) для перевірки округлення.
+* `STATS RESET` — обнулити все на початку сценарію.
+* `MEM` — лише рядки `STACK` і `HEAP`; `PING <n>` → `PONG seq=<n> t_us=<час МК>` (потік команд
+  з ПК, методичка §6.2.3); `HELP`.
+* Рядок з великої латинської літери — команда ЛР3; малі літери, цифри і `?` ідуть у
+  команди стенда ЛР2, як і раніше. Задовгий рядок (> 47 символів) не виконується і
+  рахується в `UART cmd_overflow`.
+* Вивід STATS блокує цикл на ~30 рядків × ~4 мс ≈ 0,12 с, тому його викликають між
+  фазами сценарію, а не всередині вимірюваного інтервалу.
+
+I04 додає рядки `LAT` (затримка подія → реакція), `UART rx_overrun`, `EVTLOG` і команду
+`MARK <n>`. Формат збігається з прикладом методички §5.1, тож парсер M03 розбирає
+`STAT` і без знання інших рядків. Хостові тести — `tests/unit/test_sched.c`
+(`test_stats_prints_every_metric_line`, `test_line_commands`, `test_load_line_once_per_cpu_window`,
+`test_uart_routes_lines_and_lr2_letters`, `test_perf_format_helpers`).
 
 ## 4. Службові GPIO для PulseView (I05)
 
@@ -53,7 +115,7 @@ sigrok-cli -d fx2lafw --config samplerate=1m -C D0,D1,D2,D3,D4 \
 | text / data / bss, секції | `make mem-report` | `firmware/build/mem/size.txt`, `size_sections.txt` |
 | Найбільші символи | `arm-none-eabi-nm --size-sort` | `top_symbols.txt`, `top_ram.txt` (після I09 першим буде буфер кадру `s_record`, 38 432 Б) |
 | Статична оцінка стека | `-fstack-usage` → `.su` для кожного файлу | `stack_usage.txt` (20 найбільших кадрів) |
-| Фактична глибина стека | stack painting: `Platform_StackPaint()` першим рядком `main()`, шаблон `0xDEADBEEF` | `STACK reserved= used= free=` у UART: при старті (після self-test) і щоразу, коли максимум зріс — задача `mem` перевіряє раз на 1 с (команди `MEM` і `STATS` додає I03) |
+| Фактична глибина стека | stack painting: `Platform_StackPaint()` першим рядком `main()`, шаблон `0xDEADBEEF` | `STACK reserved= used= free=` у UART: при старті (після self-test), щоразу, коли максимум зріс (задача `mem` перевіряє раз на 1 с), і командами `MEM` / `STATS` |
 | Heap | `mallinfo()` (newlib-nano; `printf` бере буфер stdout з heap) | `HEAP arena= used= free=` (поруч зі `STACK`) |
 
 Межі стека — з лінкер-скрипта CubeMX: `_estack`, `_Min_Stack_Size = 0x400` (1 КБ).

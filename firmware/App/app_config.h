@@ -30,6 +30,8 @@
 /* ---- вимірювання ---------------------------------------------------------------- */
 #define PERF_CPU_WINDOW_MS         1000U     /* вікно CPU Load (методичка §5.1, приклад 4) */
 #define UART_RX_PER_PASS           32U       /* символів за один прохід (решта — наступного разу) */
+#define TBD_LOAD_PRINT             1U        /* I03: рядок LOAD pct= раз на секунду (0 — вимкнено) */
+#define CMD_LINE_MAX               48U       /* I03: довжина рядкової команди (STATS, PING ...) */
 
 /* Черга подій до FSM (event_queue.h). Має бути більшою за EVQ max_depth у S1–S3 */
 #define TBD_EVQ_LEN                8U
