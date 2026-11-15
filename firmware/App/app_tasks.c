@@ -12,10 +12,12 @@
 
 #include "app_config.h"
 #include "bench.h"
+#include "cmd.h"
 #include "event_queue.h"
 #include "platform.h"
 #include "sched.h"
 #include "smartlock_hooks.h"
+#include "stats.h"
 
 #include <stdio.h>
 
@@ -87,7 +89,8 @@ static bool task_storage(void)
     return SmartLock_StoragePoll(Platform_Millis());
 }
 
-/* UART: однолітерні команди стенда ЛР2 і стеження за входами (g) */
+/* UART: рядкові команди ЛР3 (STATS, MEM, PING — cmd.c) і однолітерні команди
+ * стенда ЛР2, стеження за входами (g) */
 static bool task_uart(void)
 {
     bool did = false;
@@ -96,9 +99,16 @@ static bool task_uart(void)
     for (unsigned n = 0U; (n < UART_RX_PER_PASS) && ((c = Platform_UartGetChar()) >= 0); n++)
     {
         did = true;
-        Bench_Command(c);   /* блокувальні діагностичні команди ЛР2 */
+        if (Cmd_Feed(c) == 0)
+        {
+            Bench_Command(c);   /* блокувальні діагностичні команди ЛР2 */
+        }
     }
     Bench_Watch();
+    if (Stats_PollLoad())   /* LOAD pct= раз на секунду (metrics-spec §3.5) */
+    {
+        did = true;
+    }
     return did;
 }
 
@@ -146,6 +156,7 @@ void AppTasks_Init(void)
 {
     Perf_Init();
     SmartLock_EventsInit();
+    Cmd_Reset();
     s_prev_in = Platform_ReadInputs();
     s_mem_stack = 0U;
     s_mem_arena = 0U;

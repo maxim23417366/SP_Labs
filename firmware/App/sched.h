@@ -73,6 +73,7 @@ int                 Sched_Count(void);
 const sched_task_t *Sched_Task(int idx);
 const perf_stat_t  *Sched_LoopStat(void);   /* такти одного проходу */
 const perf_stat_t  *Sched_CpuStat(void);    /* завантаження за вікно, ‰ (проміле) */
+uint32_t            Sched_CpuLastPm(void);  /* останнє закрите вікно, ‰ (для LOAD pct=) */
 uint32_t            Sched_Loops(void);
 
 #endif /* SCHED_H */
