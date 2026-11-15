@@ -39,7 +39,7 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 # Тести App/ (перевірки стенда і команди без обладнання): кожен лінкується з усім App/,
 # усіма драйверами і fake_platform (імітація platform.h)
 # ЛР3 (K02–K07): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
-APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue \
+APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd \
              sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env
 APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env
 APP_DBLS  := fake_platform fake_sensors

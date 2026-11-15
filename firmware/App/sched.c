@@ -17,6 +17,7 @@ static bool         s_started;
 
 static perf_stat_t  s_loop = PERF_STAT_INIT("loop");
 static perf_stat_t  s_cpu  = PERF_STAT_INIT("cpu_load_pm");
+static uint32_t     s_cpu_last_pm;   /* останнє закрите вікно — для LOAD pct= */
 static uint64_t     s_busy_cycles;
 static uint32_t     s_window_start;
 static uint32_t     s_loops;
@@ -188,7 +189,8 @@ void Sched_RunOnce(void)
     {
         uint64_t busy = (s_busy_cycles > window) ? window : s_busy_cycles;
 
-        Perf_StatAdd(&s_cpu, (uint32_t)((busy * 1000U) / window));
+        s_cpu_last_pm = (uint32_t)((busy * 1000U) / window);
+        Perf_StatAdd(&s_cpu, s_cpu_last_pm);
         s_busy_cycles  = 0U;
         s_window_start = Perf_Now();
     }
@@ -217,4 +219,9 @@ const perf_stat_t *Sched_CpuStat(void)
 uint32_t Sched_Loops(void)
 {
     return s_loops;
+}
+
+uint32_t Sched_CpuLastPm(void)
+{
+    return s_cpu_last_pm;
 }

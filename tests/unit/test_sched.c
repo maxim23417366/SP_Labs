@@ -18,6 +18,7 @@
 #include "app.h"
 #include "app_config.h"
 #include "app_tasks.h"
+#include "cmd.h"
 #include "event_queue.h"
 #include "fake_i2c.h"
 #include "fake_platform.h"
@@ -31,6 +32,7 @@
 #include "sl_fsm.h"
 #include "sl_journal.h"
 #include "smartlock_hooks.h"
+#include "stats.h"
 
 /* ---- тестові задачі --------------------------------------------------------------- */
 static unsigned n_periodic;
@@ -365,7 +367,7 @@ static void test_input_edges_reach_fsm_with_react_pulse(void)
 }
 
 /* ---- I06: рядки STACK/HEAP лише при зростанні максимуму --------------------------------- */
-static char out[1024];
+static char out[4096];
 
 static const char *capture_pass(void)
 {
@@ -379,6 +381,37 @@ static const char *capture_pass(void)
   saved = dup(1);
   dup2(fileno(tmp), 1);
   Sched_RunOnce();
+  fflush(stdout);
+  dup2(saved, 1);
+  close(saved);
+  rewind(tmp);
+  n = fread(out, 1U, sizeof(out) - 1U, tmp);
+  out[n] = '\0';
+  fclose(tmp);
+  return out;
+}
+
+/* Вивід довільної дії (Cmd_Execute) — для перевірки формату рядків I03 */
+static const char *s_cmd_line;
+
+static void run_cmd(void)
+{
+  Cmd_Execute(s_cmd_line);
+}
+
+static const char *capture_cmd(const char *line)
+{
+  FILE *tmp = tmpfile();
+  int saved;
+  size_t n;
+
+  out[0] = '\0';
+  if (tmp == NULL) { return out; }
+  s_cmd_line = line;
+  fflush(stdout);
+  saved = dup(1);
+  dup2(fileno(tmp), 1);
+  run_cmd();
   fflush(stdout);
   dup2(saved, 1);
   close(saved);
@@ -412,6 +445,140 @@ static void test_mem_task_prints_stack_heap_only_on_new_maximum(void)
   TEST_ASSERT_NULL(strstr(capture_pass(), "STACK "));
 }
 
+/* ---- I03: STATS і рядкові команди -------------------------------------------------- */
+static void test_perf_format_helpers(void)
+{
+  char b[24];
+  perf_stat_t s = PERF_STAT_INIT("x");
+
+  TEST_ASSERT_EQUAL_UINT(1U, (unsigned)Perf_FormatU64(b, sizeof(b), 0U));
+  TEST_ASSERT_EQUAL_STRING("0", b);
+  TEST_ASSERT_EQUAL_UINT(20U, (unsigned)Perf_FormatU64(b, sizeof(b), 18446744073709551615ULL));
+  TEST_ASSERT_EQUAL_STRING("18446744073709551615", b);
+  TEST_ASSERT_EQUAL_UINT(0U, (unsigned)Perf_FormatU64(b, 3U, 12345U));   /* не вміщається */
+  TEST_ASSERT_EQUAL_STRING("", b);
+  TEST_ASSERT_EQUAL_UINT(0U, (unsigned)Perf_FormatU64(b, 0U, 1U));
+  TEST_ASSERT_EQUAL_INT32(-5, Perf_CyclesToUsSigned(-5));                 /* 1 такт = 1 мкс */
+
+  Perf_StatAdd(&s, 100U);
+  Perf_StatAdd(&s, 300U);
+  (void)Perf_FormatStat(b, sizeof(b), &s, false);
+  TEST_ASSERT_EQUAL_STRING_LEN("STAT name=x n=2 min_us=", b, 22U);
+  {
+    char l[96];
+
+    (void)Perf_FormatStat(l, sizeof(l), &s, false);
+    TEST_ASSERT_EQUAL_STRING("STAT name=x n=2 min_us=100 avg_us=200 max_us=300", l);
+    (void)Perf_FormatStat(l, sizeof(l), &s, true);
+    TEST_ASSERT_EQUAL_STRING("STAT name=x n=2 min_cyc=100 avg_cyc=200 max_cyc=300", l);
+  }
+}
+
+static void test_stats_prints_every_metric_line(void)
+{
+  const char *o;
+
+  AppTasks_Init();
+  for (uint32_t ms = 10U; ms <= 40U; ms += 10U)
+  {
+    fake_platform.now_ms = ms;
+    Sched_RunOnce();
+  }
+  o = capture_cmd("STATS");
+  TEST_ASSERT_NOT_NULL(strstr(o, "STATS_BEGIN git=nogit t_us=40000 loops=4\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=loop n=4 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "CPU name=cpu_load windows="));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=fsm "));
+  /* runs залежить від модулів sl_*: сильна FSM на першому проході ініціалізується (серво UNLOCK) */
+  TEST_ASSERT_NOT_NULL(strstr(o, "POLL name=fsm polls=4 runs="));
+  /* формат JITTER — docs/metrics-spec.md §3.4 */
+  TEST_ASSERT_NOT_NULL(strstr(o, "JITTER name=buttons period_us=10000 min_us=0 max_us=0 missed=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "JHIST name=buttons n=3 h_lt100us=3 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "JITTER name=security period_us=20000 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "JITTER name=env period_us=2000000 min_us=0 max_us=0 missed=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "JHIST name=env n=0 "));   /* 2 с ще не минули */
+  TEST_ASSERT_NOT_NULL(strstr(o, "POLL name=uart "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=evq_wait n=0 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVQ len=8 pending=0 max_depth=0 posted=0 dropped=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "UART cmd_overflow=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STACK reserved=1024 used=0 free=1024\r\nHEAP arena=0 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STATS_END\r\n"));
+
+  o = capture_cmd("STATS RAW");
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=loop n=4 min_cyc="));
+
+  o = capture_cmd("STATS RESET");
+  TEST_ASSERT_EQUAL_STRING("STATS,reset\r\n", o);
+  TEST_ASSERT_EQUAL_UINT32(0U, Sched_Loops());
+  o = capture_cmd("STATS");
+  TEST_ASSERT_NOT_NULL(strstr(o, "loops=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=loop n=0 min_us=0 avg_us=0 max_us=0\r\n"));
+}
+
+static void test_line_commands(void)
+{
+  const char *o;
+
+  AppTasks_Init();
+  fake_platform.now_ms = 1234U;
+  o = capture_cmd("PING 7");
+  TEST_ASSERT_EQUAL_STRING("PONG seq=7 t_us=1234000\r\n", o);
+  o = capture_cmd("MEM");
+  TEST_ASSERT_EQUAL_STRING("STACK reserved=1024 used=0 free=1024\r\nHEAP arena=0 used=0 free=0\r\n", o);
+  o = capture_cmd("HELP");
+  TEST_ASSERT_NOT_NULL(strstr(o, "STATS [RAW|RESET] | MEM | PING <n> | HELP"));
+  o = capture_cmd("FOO");
+  TEST_ASSERT_EQUAL_STRING("# unknown command 'FOO', HELP for list\r\n", o);
+}
+
+/* metrics-spec §3.5: LOAD pct= раз на секунду, з uart-задачі */
+static void test_load_line_once_per_cpu_window(void)
+{
+  const char *o;
+
+  AppTasks_Init();
+  fake_platform.now_ms = 500U;
+  TEST_ASSERT_NULL(strstr(capture_pass(), "LOAD "));         /* вікно ще не закрите */
+  fake_platform.now_ms = 1000U;
+  (void)capture_pass();                                      /* вікно 1 с закривається в кінці проходу */
+  TEST_ASSERT_EQUAL_UINT32(1U, Sched_CpuStat()->count);
+  o = capture_pass();                                        /* uart наступного проходу друкує */
+  TEST_ASSERT_NOT_NULL(strstr(o, "LOAD pct="));
+  fake_platform.now_ms = 1100U;
+  TEST_ASSERT_NULL(strstr(capture_pass(), "LOAD "));         /* лише раз за вікно */
+  fake_platform.now_ms = 2100U;
+  (void)capture_pass();
+  TEST_ASSERT_NOT_NULL(strstr(capture_pass(), "LOAD pct="));
+  (void)capture_cmd("STATS RESET");                          /* лічильник вікон з нуля */
+  fake_platform.now_ms = 3200U;
+  (void)capture_pass();
+  TEST_ASSERT_NOT_NULL(strstr(capture_pass(), "LOAD pct="));
+}
+
+static void test_uart_routes_lines_and_lr2_letters(void)
+{
+  const char *o;
+
+  AppTasks_Init();
+  /* рядок з великої літери — Cmd, усе інше — Bench_Command (ЛР2) */
+  fake_platform.uart_rx = "PING 3\r?";
+  fake_platform.uart_pos = 0U;
+  o = capture_pass();
+  TEST_ASSERT_NOT_NULL(strstr(o, "PONG seq=3 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "# commands:"));   /* довідка ЛР2 на '?' */
+
+  /* задовгий рядок не виконується і рахується */
+  fake_platform.uart_rx = "STATSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n";
+  fake_platform.uart_pos = 0U;
+  o = capture_pass();
+  if (Cmd_LineOverflows() == 0U)
+  {
+    o = capture_pass();   /* решта символів — наступного проходу (UART_RX_PER_PASS) */
+  }
+  TEST_ASSERT_NOT_NULL(strstr(o, "# command too long (>47)"));
+  TEST_ASSERT_EQUAL_UINT32(1U, Cmd_LineOverflows());
+}
+
 static void test_uart_task_runs_lr2_commands(void)
 {
   AppTasks_Init();
@@ -440,5 +607,10 @@ int main(void)
   RUN_TEST(test_react_probe_only_when_fsm_has_events);
   RUN_TEST(test_input_edges_reach_fsm_with_react_pulse);
   RUN_TEST(test_mem_task_prints_stack_heap_only_on_new_maximum);
+  RUN_TEST(test_perf_format_helpers);
+  RUN_TEST(test_stats_prints_every_metric_line);
+  RUN_TEST(test_line_commands);
+  RUN_TEST(test_uart_routes_lines_and_lr2_letters);
+  RUN_TEST(test_load_line_once_per_cpu_window);
   return UNITY_END();
 }
