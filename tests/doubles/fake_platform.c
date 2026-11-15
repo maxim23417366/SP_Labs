@@ -15,6 +15,7 @@ fake_platform_t fake_platform;
 void fake_platform_reset(void)
 {
   memset(&fake_platform, 0, sizeof(fake_platform));
+  fake_platform.stack_reserved = 1024U;
   fake_platform.inputs         = PLATFORM_IN_BTN1 | PLATFORM_IN_BTN2 | PLATFORM_IN_BTN3 |
                                  PLATFORM_IN_BTN4 | PLATFORM_IN_LOCK | PLATFORM_IN_DOOR;
   fake_platform.dht_status     = DEV_ERR_TIMEOUT;
@@ -174,4 +175,28 @@ int Platform_UartGetChar(void)
 void Platform_SetLoopTraffic(int on)
 {
   fake_platform.loop_traffic = on;
+}
+
+/* ---- ЛР3 (I06): пам'ять ---------------------------------------------------------- */
+void Platform_StackPaint(void)
+{
+  fake_platform.stack_paint_calls++;
+}
+
+uint32_t Platform_StackUsedBytes(void)
+{
+  return fake_platform.stack_used;
+}
+
+uint32_t Platform_StackReservedBytes(void)
+{
+  return fake_platform.stack_reserved;
+}
+
+void Platform_HeapInfo(platform_heap_t *heap)
+{
+  if (heap != NULL)
+  {
+    *heap = fake_platform.heap;
+  }
 }

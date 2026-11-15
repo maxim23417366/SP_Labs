@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include "dev_bus.h"
+#include "platform.h"
 
 typedef struct
 {
@@ -31,8 +32,14 @@ typedef struct
   uint32_t     cycles_step;
   uint32_t     cycles_calls;
 
-  uint8_t      probe_level[4];    /* ЛР3 (I05): PROBE_ON/OFF — поточний рівень каналу */
-  uint32_t     probe_rises[4];    /* скільки разів канал піднімався в 1 */
+  uint8_t      probe_level[PLATFORM_PROBE_COUNT];    /* ЛР3 (I05): PROBE_ON/OFF — поточний рівень каналу */
+  uint32_t     probe_rises[PLATFORM_PROBE_COUNT];    /* скільки разів канал піднімався в 1 */
+
+  /* ЛР3 (I06): пам'ять */
+  uint32_t     stack_used;
+  uint32_t     stack_reserved;    /* після reset — 1024, як _Min_Stack_Size у лінкер-скрипті */
+  platform_heap_t heap;
+  unsigned     stack_paint_calls;
 
   uint32_t     inputs;            /* Platform_ReadInputs(): біти PLATFORM_IN_* */
 

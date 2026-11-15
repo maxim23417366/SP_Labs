@@ -24,6 +24,8 @@
 #define TBD_PERIOD_ENV_US          2000000U  /* DHT11 + BMP180; DHT11 не частіше 1 раз/с (datasheet) */
 #define PERIOD_STORAGE_US          0U        /* подієва: черга записів журналу */
 #define PERIOD_UART_US             0U
+/* I06: перевірка максимуму стека / heap; рядок MEM друкується лише при зростанні */
+#define TBD_PERIOD_MEM_US          1000000U
 
 /* ---- вимірювання ---------------------------------------------------------------- */
 #define PERF_CPU_WINDOW_MS         1000U     /* вікно CPU Load (методичка §5.1, приклад 4) */

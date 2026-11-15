@@ -44,3 +44,46 @@ sigrok-cli -d fx2lafw --config samplerate=1m -C D0,D1,D2,D3,D4 \
 ```
 
 1 МГц дає похибку 1 мкс — на порядки менше за вимірювані мілісекунди (§5.3).
+
+## 5. Пам'ять (I06)
+
+| Що | Як отримати | Де результат |
+|---|---|---|
+| Заповнення FLASH / RAM | лінкер `-Wl,--print-memory-usage` (кожна збірка) | вивід `make build`, `firmware/build/mem/memory_usage.txt` |
+| text / data / bss, секції | `make mem-report` | `firmware/build/mem/size.txt`, `size_sections.txt` |
+| Найбільші символи | `arm-none-eabi-nm --size-sort` | `top_symbols.txt`, `top_ram.txt` (після I09 першим буде буфер кадру `s_record`, 38 432 Б) |
+| Статична оцінка стека | `-fstack-usage` → `.su` для кожного файлу | `stack_usage.txt` (20 найбільших кадрів) |
+| Фактична глибина стека | stack painting: `Platform_StackPaint()` першим рядком `main()`, шаблон `0xDEADBEEF` | `STACK reserved= used= free=` у UART: при старті (після self-test) і щоразу, коли максимум зріс — задача `mem` перевіряє раз на 1 с (команди `MEM` і `STATS` додає I03) |
+| Heap | `mallinfo()` (newlib-nano; `printf` бере буфер stdout з heap) | `HEAP arena= used= free=` (поруч зі `STACK`) |
+
+Межі стека — з лінкер-скрипта CubeMX: `_estack`, `_Min_Stack_Size = 0x400` (1 КБ).
+Якщо в рядку `STACK` `used = reserved` (`free=0`), шаблон зіпсовано до самого низу: стек, найімовірніше,
+вийшов за резерв — збільшити `_Min_Stack_Size` і повторити (методичка §5.4).
+Повна глибина = найглибший ланцюжок викликів + кадри ISR, тому статичну оцінку `.su`
+порівнюють із виміряною (M04).
+
+`make mem-report` збирає прошивку і кладе всі звіти в `firmware/build/mem/`. CI робить
+це на кожен PR і вивантажує артефакт `firmware-<sha>`: `firmware.elf`, `firmware.map`
+і `build/mem/` (вкладка Summary запуску CI → Artifacts).
+
+Що брати для M04 (Собкович):
+
+| Для звіту M04 | Звідки |
+|---|---|
+| FLASH / RAM, % | `memory_usage.txt` (або рядки `Memory region` у лозі кроку build) |
+| text / data / bss | `size.txt` |
+| найбільші символи | `top_symbols.txt`, змінні в RAM — `top_ram.txt` |
+| статичний стек | `stack_usage.txt` (20 найбільших кадрів; `dynamic` — кадр залежить від даних) |
+| фактичний стек, heap | рядки `STACK` / `HEAP` в UART-лозі стенда: останні = максимум за сценарій |
+| яка це збірка | перший рядок `BUILD,...,git=<хеш>` = хеш коміту, з якого CI зібрав артефакт |
+
+Ідентифікатор збірки: кореневий `Makefile` обчислює `git rev-parse --short HEAD`
+(з `-dirty`, якщо є незакомічені зміни) і передає в `firmware.mk` як `GIT_HASH`;
+перший рядок UART-логу — `BUILD,...,git=<хеш>,...`. Без git — `git=nogit`.
+
+Формати рядків — `docs/metrics-spec.md` §3.6 (M-07, M-08).
+
+Перевірено без плати: `test_app.c` (рядки `STACK` / `HEAP` при старті), `test_sched.c`
+(`test_mem_task_prints_stack_heap_only_on_new_maximum`); логіка
+`firmware.mk` (`all`, `mem-report`, мітка `.git_hash_*`) — прогоном із заглушками
+тулчейну. Числа FLASH / RAM і `stack_used` — з CI і зі стенда (H11, M04).
