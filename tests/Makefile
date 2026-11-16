@@ -6,6 +6,8 @@
 #                    + тест форматування self-test (selftest)
 #   make coverage  — unit-тести + покриття firmware/Devices/*.c (поріг COV_MIN)
 #                    і firmware/App/*.c (поріг COV_MIN_APP), gcov
+#   make run-<name> — зібрати і запустити один тест, напр. make run-sl_fsm
+#                    (unit/test_<name>.c); run-hooks_weak — слабкі хуки без sl_*
 #   make clean
 # -----------------------------------------------------------------------------
 
@@ -36,14 +38,23 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 
 # Тести App/ (перевірки стенда і команди без обладнання): кожен лінкується з усім App/,
 # усіма драйверами і fake_platform (імітація platform.h)
-APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd
-APP_TESTS := stand_test app sched
-APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(BUILD)/doubles/fake_platform.o
+# ЛР3 (K02–K07): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
+APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd \
+             sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env
+APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env
+APP_DBLS  := fake_platform fake_sensors
+APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
 APP_HDRS  := $(wildcard $(FW_APP)/*.h) $(FW_PLAT)/platform.h
 COV_MIN_APP ?= 90
 
-BINS      := $(DRV_BINS) $(APP_BINS)
+# Слабкі точки підключення (smartlock_hooks_weak.c): окремий бінарник БЕЗ модулів
+# sl_* — інакше лінкер бере сильні реалізації і слабкі ніде не виконуються
+HOOKS_WEAK_SRCS := $(filter-out sl_%,$(APP_SRCS))
+HOOKS_WEAK_OBJS := $(HOOKS_WEAK_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
+HOOKS_WEAK_BIN  := $(BUILD)/test_hooks_weak
+
+BINS      := $(DRV_BINS) $(APP_BINS) $(HOOKS_WEAK_BIN)
 
 DEV_HDRS  := $(wildcard $(FW_DEV)/*.h)
 DBL_HDRS  := $(wildcard doubles/*.h)
@@ -69,6 +80,9 @@ periph:
 unit: $(BINS)
 	@set -e; for t in $(BINS); do echo; echo "======== $$t"; ./$$t; done
 
+run-%: $(BUILD)/test_%
+	./$<
+
 $(BUILD)/dev/%.o: $(FW_DEV)/%.c $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_OWN) $(COVFLAGS) -c $< -o $@
@@ -81,7 +95,7 @@ $(BUILD)/app/%.o: $(FW_APP)/%.c $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) $(COVFLAGS) -c $< -o $@
 
-$(BUILD)/doubles/fake_platform.o: doubles/fake_platform.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
+$(APP_DBLS:%=$(BUILD)/doubles/%.o): $(BUILD)/doubles/%.o: doubles/%.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) -c $< -o $@
 
@@ -91,6 +105,9 @@ $(UNITY_OBJ): $(UNITY)/unity.c $(UNITY)/unity.h $(UNITY)/unity_internals.h
 
 $(APP_BINS): $(BUILD)/test_%: unit/test_%.c $(APP_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) $(wildcard vectors/*.h)
 	$(CC) $(CFLAGS_APP) $(COVFLAGS) $< $(APP_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) -o $@
+
+$(HOOKS_WEAK_BIN): unit/test_hooks_weak.c $(HOOKS_WEAK_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ)
+	$(CC) $(CFLAGS_APP) $(COVFLAGS) $< $(HOOKS_WEAK_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) -o $@
 
 $(DRV_BINS): $(BUILD)/test_%: unit/test_%.c $(BUILD)/dev/%.o $(DBL_OBJS) $(UNITY_OBJ) $(wildcard vectors/*.h)
 	$(CC) $(CFLAGS_OWN) $(COVFLAGS) $< $(BUILD)/dev/$*.o $(DBL_OBJS) $(UNITY_OBJ) -o $@
