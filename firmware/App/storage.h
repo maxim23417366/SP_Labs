@@ -56,6 +56,14 @@ uint8_t Storage_FlashType(sl_log_type_t type);
  * Flash або seq менший за вже записаний. */
 dev_status_t Storage_Append(const sl_log_rec_t *rec);
 
+/* Записати запис прямо у Flash, поза чергою журналу застосунку (стендові
+ * команди: тестова подія і PHOTO_SAVED / PHOTO_FAILED для кадру, команда p).
+ * type — код Flash (flash_log_type_t). seq (може бути NULL) — номер запису,
+ * 0, якщо журнал вимкнений. Друкує LOG,seq=... або LOG,ERR,...; нумерація
+ * sl_journal після запису йде далі. */
+dev_status_t Storage_WriteRecord(uint8_t type, uint32_t arg, uint32_t arg2, uint32_t frame_id,
+                                 uint32_t *seq);
+
 /* Помилок стирання / запису у Flash від старту */
 uint32_t Storage_Errors(void);
 

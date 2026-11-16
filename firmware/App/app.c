@@ -13,6 +13,7 @@
 
 #include "app_config.h"
 #include "app_tasks.h"
+#include "frames.h"
 #include "bench.h"
 #include "platform.h"
 #include "sched.h"
@@ -91,6 +92,7 @@ void App_Init(void)
     devices_self_test();
     Bench_Help();
     Storage_Init();    /* журнал W25Q64: монтування, BOOT, нумерація подій після рестарту */
+    Frames_Init();     /* слоти кадрів W25Q64 */
     AppTasks_Init();   /* час, черга подій, таблиця задач (без виводу) */
     AppTasks_PrintMem();   /* I06: пам'ять після self-test (найглибші виклики старту) */
 }

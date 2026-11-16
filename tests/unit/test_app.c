@@ -179,6 +179,7 @@ static void test_help_and_unknown(void)
     "#           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help\r\n"
     "#           w flash persist write | v flash persist verify | t sensor read timing\r\n"
     "#           d journal dump | e journal +100 test events | z corrupt newest record | LOG ERASE erase journal\r\n"
+    "#           p frame write 38400 B (+journal) | o frame verify last\r\n"
     "# unknown 'q', ? for help\r\n"
     "# unknown '.', ? for help\r\n", o);
 }

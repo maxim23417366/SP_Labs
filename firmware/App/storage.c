@@ -275,6 +275,51 @@ dev_status_t Storage_Append(const sl_log_rec_t *rec)
   return st;
 }
 
+dev_status_t Storage_WriteRecord(uint8_t type, uint32_t arg, uint32_t arg2, uint32_t frame_id,
+                                 uint32_t *seq)
+{
+  flash_log_entry_t e;
+  dev_status_t st;
+
+  if (seq != NULL)
+  {
+    *seq = 0U;
+  }
+  if (!s_ready)
+  {
+    return DEV_ERR_STATE;
+  }
+  st = erase_if_needed();
+  if (st != DEV_OK)
+  {
+    return st;
+  }
+
+  memset(&e, 0, sizeof(e));
+  e.type = type;
+  e.t_ms = Platform_Millis();
+  e.arg = arg;
+  e.arg2 = arg2;
+  e.frame_id = frame_id;
+  st = flash_log_append(&s_log, &e);
+  if (seq != NULL)
+  {
+    *seq = e.seq;   /* номер використано за будь-якого результату */
+  }
+  sync_journal_seq();
+
+  if (st == DEV_OK)
+  {
+    print_entry(&e);
+  }
+  else
+  {
+    s_errors++;
+    printf("LOG,ERR,op=append,seq=%lu,err=%s\r\n", (unsigned long)e.seq, StandTest_ErrStr(st));
+  }
+  return st;
+}
+
 /* ---- читання ------------------------------------------------------------------- */
 
 void Storage_Dump(void)

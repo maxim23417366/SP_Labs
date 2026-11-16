@@ -28,11 +28,12 @@ COVFLAGS      := --coverage
 # решта Platform/ залежить від HAL і на ПК не збирається)
 CFLAGS_APP     = $(CFLAGS_OWN) -I$(FW_APP) -I$(FW_PLAT)
 
-DRIVERS := bmp180 dht11 lsm303d mpu6050 w25q64 crc32 flash_log
+DRIVERS := bmp180 dht11 lsm303d mpu6050 w25q64 crc32 flash_log frame_store
 DOUBLES := fake_i2c mock_spi fake_delay fake_w25q64
 
 # Модулі Devices/, що працюють поверх інших: тест лінкується і з ними
-DRV_DEPS_flash_log := w25q64 crc32
+DRV_DEPS_flash_log   := w25q64 crc32
+DRV_DEPS_frame_store := w25q64 crc32
 
 DRV_OBJS  := $(DRIVERS:%=$(BUILD)/dev/%.o)
 DBL_OBJS  := $(DOUBLES:%=$(BUILD)/doubles/%.o)
@@ -43,8 +44,8 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 # усіма драйверами і fake_platform (імітація platform.h)
 # ЛР3 (K02–K07): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
 APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd \
-             sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env storage storage_ops
-APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env storage
+             sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env storage storage_ops frames
+APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env storage frames
 APP_DBLS  := fake_platform fake_sensors
 APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)

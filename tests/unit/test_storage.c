@@ -379,6 +379,46 @@ static void test_append_error_reported(void)
   TEST_ASSERT_EQUAL_UINT32(1U, Storage_Errors());
 }
 
+static uint32_t s_rec_seq;
+static dev_status_t s_rec_st;
+
+static void write_test_record(void)
+{
+  s_rec_st = Storage_WriteRecord(FLASH_LOG_TEST, 5U, 6U, 7U, &s_rec_seq);
+}
+
+/* Прямий запис поза чергою (стендова команда кадрів p) */
+static void test_write_record_direct(void)
+{
+  const char *o;
+
+  (void)capture(Storage_Init);                    /* без флешки: журнал вимкнений */
+  TEST_ASSERT_EQUAL(DEV_ERR_STATE, Storage_WriteRecord(FLASH_LOG_TEST, 0U, 0U, 0U, &s_rec_seq));
+  TEST_ASSERT_EQUAL_UINT32(0U, s_rec_seq);
+
+  flash_present();
+  (void)capture(Storage_Init);                    /* BOOT = 1 */
+  o = capture(write_test_record);
+  TEST_ASSERT_EQUAL(DEV_OK, s_rec_st);
+  TEST_ASSERT_EQUAL_UINT32(2U, s_rec_seq);
+  TEST_ASSERT_EQUAL_STRING("LOG,seq=2,boot=1,t_ms=0,type=TEST,arg=5,arg2=6,frame=7,crc=ok\r\n", o);
+  TEST_ASSERT_EQUAL_UINT32(2U, SmartLock_JournalLastSeq());   /* події далі — з 3 */
+  (void)capture(write_test_record);               /* seq 3; seq може бути NULL — нижче */
+  TEST_ASSERT_EQUAL_UINT32(3U, s_rec_seq);
+
+  fake_w25q64_fail_transfers(1U, DEV_ERR_BUS);
+  o = capture(write_test_record);
+  TEST_ASSERT_EQUAL(DEV_ERR_BUS, s_rec_st);
+  TEST_ASSERT_EQUAL_UINT32(4U, s_rec_seq);        /* номер використано */
+  TEST_ASSERT_EQUAL_STRING("LOG,ERR,op=append,seq=4,err=bus\r\n", o);
+
+  fill_to_sector_end();
+  fake_w25q64_fail_transfers(1U, DEV_ERR_TIMEOUT);
+  o = capture(write_test_record);
+  TEST_ASSERT_EQUAL(DEV_ERR_TIMEOUT, s_rec_st);
+  TEST_ASSERT_NOT_NULL(strstr(o, "LOG,ERR,op=erase,err=timeout,attempt=1"));
+}
+
 static void test_hash_word(void)
 {
   TEST_ASSERT_EQUAL_HEX32(0x7BAF32E0U, Storage_HashWord("7baf32e0-dirty"));
@@ -527,6 +567,7 @@ int main(void)
   RUN_TEST(test_erase_failures_disable_journal);
   RUN_TEST(test_erase_recovers_after_single_failure);
   RUN_TEST(test_append_error_reported);
+  RUN_TEST(test_write_record_direct);
   RUN_TEST(test_hash_word);
   RUN_TEST(test_bench_100_events_restart_corrupt);
   RUN_TEST(test_bench_events_cross_sector_and_failure);
