@@ -78,6 +78,36 @@ static void test_decode_negative_flag(void)
 
 /* Вектор з логічного аналізатора: 40 тривалостей HIGH з dht11_read.sr
  * -> ті самі байти, що на дроті -> ті самі значення, що виводить прошивка. */
+/* Стенд, лог 17: живлення модулів зникло — датчик дав п'ять нульових
+ * байтів. Контрольна сума 0 «сходиться», але 0 % RH DHT11 не вимірює */
+static void test_decode_rejects_all_zero_frame(void)
+{
+  const uint8_t frame[5] = { 0, 0, 0, 0, 0 };
+  dht11_data_t d = { 7U, 7U, 7, 7U };
+
+  TEST_ASSERT_EQUAL(DEV_ERR_ID, dht11_decode(frame, &d));
+  TEST_ASSERT_EQUAL_UINT8(7U, d.rh_pct);   /* вихід не змінено */
+  TEST_ASSERT_EQUAL_INT8(7, d.temp_c);
+}
+
+static void test_decode_rejects_zero_humidity_with_valid_sum(void)
+{
+  const uint8_t frame[5] = { 0, 0, 23, 4, 27 };
+  dht11_data_t d;
+
+  TEST_ASSERT_EQUAL(DEV_ERR_ID, dht11_decode(frame, &d));
+}
+
+static void test_decode_accepts_low_humidity_above_zero(void)
+{
+  const uint8_t frame[5] = { 1, 0, 0, 0, 1 };   /* 1 % RH, 0 °C — межа, яку ще пропускаємо */
+  dht11_data_t d;
+
+  TEST_ASSERT_EQUAL(DEV_OK, dht11_decode(frame, &d));
+  TEST_ASSERT_EQUAL_UINT8(1U, d.rh_pct);
+  TEST_ASSERT_EQUAL_INT8(0, d.temp_c);
+}
+
 static void test_capture_bits_to_frame(void)
 {
   uint8_t frame[5];
@@ -136,6 +166,9 @@ int main(void)
   RUN_TEST(test_decode_floating_line_is_rejected);
   RUN_TEST(test_decode_out_of_range);
   RUN_TEST(test_decode_negative_flag);
+  RUN_TEST(test_decode_rejects_all_zero_frame);
+  RUN_TEST(test_decode_rejects_zero_humidity_with_valid_sum);
+  RUN_TEST(test_decode_accepts_low_humidity_above_zero);
   RUN_TEST(test_capture_bits_to_frame);
   RUN_TEST(test_capture_frame_decodes_to_35_2_rh_21_4_c);
   RUN_TEST(test_capture_threshold_margin);
