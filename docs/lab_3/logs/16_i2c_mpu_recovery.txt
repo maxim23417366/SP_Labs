@@ -1,0 +1,107 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-16.
+# Прошивка: гілка lab3/i2c-recovery (на базі b73acd9, у банері git=b73acd9-dirty), збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1),
+# firmware.bin sha256 8a684e22cbc475d978e5d8116763e622c768a0afcf42f05f79132019a4cbabb4.
+# Автоматичне відновлення шини I2C і MPU-6050 без скидання МК (docs/lab_3/driver-audit.md, дефекти 1 і 2).
+# Рядки LOAD і більшість повторюваних рядків ENV / ST,LSM303D пропущено.
+#
+# --- 1. Старт і self-test (після st-flash reset) ---
+BUILD,fw=SmartLock,lab=LR3,git=b73acd9-dirty,cpu_hz=96000000,loop=superloop
+=== SmartLock: peripheral check (LR1, step 6) ===
+[INIT ] I2C1 READY, SPI2 READY, TIM3 READY, USART2 READY -> OK
+[CLOCK] SYSCLK=96000000 HCLK=96000000 PCLK1=48000000 PCLK2=96000000 Hz -> OK
+[I2C1 ] scan 0x08..0x77:
+        0x1D  LSM303D accel/mag (GY-89)
+        0x21  OV7670 camera (SCCB)
+        0x68  MPU-6050
+        0x6B  L3GD20 gyro (GY-89)
+        0x77  BMP180 baro (GY-89)
+        5 device(s) found -> OK
+[SPI2 ] W25Q64 JEDEC ID: EF 40 17 (Winbond, 64 Mbit) -> OK
+[TIM3 ] PWM CH1 (PA6): 50 Hz, pulse 1500 us -> OK
+=== RESULT: ALL OK ===
+# SmartLock selftest v2 (LR2)
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,START
+ST,UART,OK,baud=115200
+ST,MPU6050,WARN,who=0x68,a_g=1.104,ax_g=0.128,ay_g=-0.025,az_g=1.097,gyro_max_dps=12.0,t_c=25.6
+ST,BMP180,OK,id=0x55,t_c=23.0,p_hpa=999.49
+ST,L3GD20,OK,addr=0x6B,who=0xD4
+ST,LSM303D,WARN,addr=0x1D,who=0x49,role=FR06_accel,raw=7FF8,7FF8,44F1,a_g=3.023,ax_g=1.998,ay_g=1.998,az_g=1.076
+ST,W25Q64,OK,jedec=EF4017,size_mbit=64
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=420
+ST,DHT11,OK,t_c=24.2,rh=34.7,raw=2207180243,crc=OK
+ST,SERVO_PWM,OK,freq_hz=50,pulse_us=1500,note=no_feedback
+ST,GPIO,OK,btn=1111,lock_b1=1,door=1,pir=0,mpu_int=0
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+# commands: s selftest | i i2c scan | g gpio watch on/off | m accel x10 (LSM303D, FR-06) | b bmp180
+#           h dht11 x5 | j jedec | f flash r/w | 1/2/3 servo 1000/1500/2000us
+#           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help
+#           w flash persist write | v flash persist verify | t sensor read timing
+STACK reserved=1024 used=728 free=296
+HEAP arena=1468 used=1468 free=0
+EVT,id=1,t_ms=1567,name=DOOR_OPEN,arg=0,flash=err
+ENV,dht=ok,t_c=24.1,rh=34,bmp=ok,p_pa=99955
+ENV,dht=ok,t_c=24.2,rh=34,bmp=ok,p_pa=99961
+ENV,dht=ok,t_c=24.2,rh=34,bmp=ok,p_pa=99967
+#
+# --- 2. Тривалість читання датчиків (команда t): збігається з логом 13, охорона шини часу не додає ---
+TIME,name=dht11,n=5,ok=5,min_us=23892,avg_us=24737,max_us=24998,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12122,max_us=12615,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1561,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=111,avg_us=111,max_us=112,last=nack
+#
+# --- 3. GY-521 (MPU-6050) вийнято під напругою; 75 с запису, наприкінці i, m ---
+# MPU,FAULT друкується один раз, далі повторні спроби раз на 1 с без рядків; ENV і решта шини працюють.
+MPU,FAULT,err=nack
+I2C,scan,0x1D,0x21,0x6B,0x77
+ENV,dht=ok,t_c=24.1,rh=34,bmp=ok,p_pa=99955
+ENV,dht=ok,t_c=24.1,rh=34,bmp=ok,p_pa=99952
+ENV,dht=ok,t_c=24.2,rh=34,bmp=ok,p_pa=99952
+#
+# --- 4. GY-521 вставлено назад, МК не скидався: i, m, v ---
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,MPU6050,WARN,who=0x68,a_g=1.101,ax_g=0.100,ay_g=-0.012,az_g=1.097,gyro_max_dps=12.0,t_c=25.8
+FLASH,persist=PASS,addr=0x7FF000,bytes=256,mismatch=0,first=3C434A51,uptime_ms=527969
+# uptime_ms = 527969: МК працює від прошивки без перезапуску; MPU знову дає ~1 g (у логу 15 — нулі до скидання).
+#
+# --- 5. Живлення модулів на бредборді від'єднано на ~5 с і повернуто, МК не скидався; на 50-й с i, m, t ---
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99937
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99940
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99940
+I2C,RECOVER,err=bus,note=lines_low,n=0,fail=3
+MPU,FAULT,err=bus
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=ok,t_c=0.0,rh=0,bmp=err
+ENV,dht=ok,t_c=0.0,rh=0,bmp=err
+ENV,dht=err,bmp=err
+MPU,RECOVER,ok,n=2
+ENV,dht=err,bmp=ok,p_pa=99937
+ENV,dht=ok,t_c=0.0,rh=0,bmp=ok,p_pa=99931
+ENV,dht=ok,t_c=23.8,rh=36,bmp=ok,p_pa=99931
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99940
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99934
+ENV,dht=ok,t_c=24.0,rh=36,bmp=ok,p_pa=99923
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99934
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99931
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99931
+ENV,dht=ok,t_c=23.9,rh=36,bmp=ok,p_pa=99934
+ENV,dht=ok,t_c=23.8,rh=36,bmp=ok,p_pa=99934
+ENV,dht=ok,t_c=23.8,rh=37,bmp=ok,p_pa=99931
+ENV,dht=ok,t_c=23.9,rh=37,bmp=ok,p_pa=99931
+ENV,dht=ok,t_c=23.9,rh=38,bmp=ok,p_pa=99940
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,MPU6050,WARN,who=0x68,a_g=1.105,ax_g=0.110,ay_g=-0.014,az_g=1.100,gyro_max_dps=12.2,t_c=25.6
+TIME,name=dht11,n=5,ok=5,min_us=24852,avg_us=24999,max_us=25094,last=ok
+TIME,name=bmp180,n=5,ok=5,min_us=11999,avg_us=12084,max_us=12424,last=ok
+TIME,name=mpu6050,n=5,ok=5,min_us=1561,avg_us=1565,max_us=1567,last=ok
+TIME,name=i2c_absent,n=5,ok=0,min_us=111,avg_us=111,max_us=112,last=nack
+ENV,dht=ok,t_c=23.9,rh=37,bmp=ok,p_pa=99943
+ENV,dht=ok,t_c=23.9,rh=37,bmp=ok,p_pa=99946
+ENV,dht=ok,t_c=23.9,rh=37,bmp=ok,p_pa=99940
+ENV,dht=ok,t_c=24.0,rh=37,bmp=ok,p_pa=99946
+ENV,dht=ok,t_c=23.9,rh=37,bmp=ok,p_pa=99946
+ENV,dht=ok,t_c=23.9,rh=37,bmp=ok,p_pa=99943
+#
+# Підсумок: після зникнення живлення шина повернулась без скидання МК (у логу 15 — порожній скан і 26 мс на звернення до скидання).
+# Окремий дефект: без живлення DHT11 дає dht=ok,t_c=0.0,rh=0 (нульовий кадр має правильну контрольну суму).

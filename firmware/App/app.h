@@ -45,4 +45,22 @@ void App_Init(void);
  * Super Loop по всіх задачах (docs/tasks.md). */
 void App_Loop(void);
 
+/* ЛР3: нагляд за MPU-6050 і шиною I2C після старту (docs/lab_3/driver-audit.md,
+ * дефекти 1 і 2). Не частіше ніж раз на TBD_MPU_RETRY_MS (sl_security.h):
+ *   - датчик справний (mpu_status == DEV_OK) — mpu6050_check(), одне читання
+ *     PWR_MGMT_1 (~0,3 мс). Датчик перезапустився (спить, віддає нулі) або
+ *     помилка шини — mpu_status стає кодом помилки, рядок MPU,FAULT. Поки
+ *     mpu_status != DEV_OK, sl_security.c не читає датчик і скидає базову
+ *     лінію TAMPER, тож відновлений датчик не дасть хибного удару;
+ *   - датчик несправний — mpu6050_recover() (повторна ініціалізація з виходом
+ *     зі сну), рядок MPU,RECOVER. Відсутній модуль коштує одне звернення з NACK
+ *     (~0,1 мс) на період, а помилка друкується один раз, а не щосекунди;
+ *   - відновлення шини I2C (platform_bus.c) — рядок I2C,RECOVER.
+ * Без затримок і циклів очікування. Зараз викликається з App_Loop(); у таблиці
+ * задач Super Loop (app_tasks.c) її місце — окрема задача з тим самим періодом. */
+void App_SensorService(uint32_t now_ms);
+
+/* Скидання стану App_SensorService() (тести) */
+void App_SensorServiceReset(void);
+
 #endif /* APP_H */

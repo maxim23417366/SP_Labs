@@ -6,11 +6,11 @@ BUILD  := build
 BIN    := $(BUILD)/test_periph_check
 
 CC     := gcc
-CFLAGS := -std=gnu11 -Wall -Wextra -Werror -O0 -g -Imocks -I$(FW_DIR)/Platform
+CFLAGS := -std=gnu11 -Wall -Wextra -Werror -O0 -g -Imocks -I$(FW_DIR)/Platform -I$(FW_DIR)/Devices
 
 SRCS := test_periph_check.c mocks/mock_hal.c \
         $(FW_DIR)/Platform/periph_check.c $(FW_DIR)/Platform/retarget.c
-DEPS := $(SRCS) $(wildcard mocks/*.h) $(FW_DIR)/Platform/periph_check.h $(FW_DIR)/Platform/board.h
+DEPS := $(SRCS) $(wildcard mocks/*.h) $(FW_DIR)/Platform/periph_check.h $(FW_DIR)/Platform/board.h $(FW_DIR)/Devices/dev_bus.h
 
 .PHONY: all run clean
 
