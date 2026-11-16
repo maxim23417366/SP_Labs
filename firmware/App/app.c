@@ -18,6 +18,7 @@
 #include "sched.h"
 #include "self_test.h"
 #include "stand_test.h"
+#include "storage.h"
 
 #include <stdio.h>
 
@@ -89,6 +90,7 @@ void App_Init(void)
     devices_init();
     devices_self_test();
     Bench_Help();
+    Storage_Init();    /* журнал W25Q64: монтування, BOOT, нумерація подій після рестарту */
     AppTasks_Init();   /* час, черга подій, таблиця задач (без виводу) */
     AppTasks_PrintMem();   /* I06: пам'ять після self-test (найглибші виклики старту) */
 }

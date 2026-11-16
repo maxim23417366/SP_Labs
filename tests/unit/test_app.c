@@ -171,14 +171,15 @@ static void test_app_loop_polls_platform_and_uart(void)
 
 static void test_help_and_unknown(void)
 {
-  const char *o = run("?z\x01\r\n ");
+  const char *o = run("?q\x01\r\n ");
 
   TEST_ASSERT_EQUAL_STRING(
     "# commands: s selftest | i i2c scan | g gpio watch on/off | m accel x10 (LSM303D, FR-06) | b bmp180\r\n"
     "#           h dht11 x5 | j jedec | f flash r/w | 1/2/3 servo 1000/1500/2000us\r\n"
     "#           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help\r\n"
     "#           w flash persist write | v flash persist verify | t sensor read timing\r\n"
-    "# unknown 'z', ? for help\r\n"
+    "#           d journal dump | e journal +100 test events | z corrupt newest record | LOG ERASE erase journal\r\n"
+    "# unknown 'q', ? for help\r\n"
     "# unknown '.', ? for help\r\n", o);
 }
 

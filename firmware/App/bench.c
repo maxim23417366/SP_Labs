@@ -17,6 +17,7 @@
 #include "platform.h"
 #include "self_test.h"
 #include "stand_test.h"
+#include "storage.h"
 
 /* ---- адреси й константи команд (docs/pinout.md) -------------------------- */
 #define ADDR_OV7670      0x21U
@@ -426,6 +427,7 @@ void Bench_Help(void)
            "? help\r\n");
     printf("#           w flash persist write | v flash persist verify | "
            "t sensor read timing\r\n");
+    Storage_BenchHelp();   /* ЛР3: журнал подій у W25Q64 */
 }
 
 /* ---- команди ------------------------------------------------------------- */
@@ -580,8 +582,12 @@ void Bench_Command(int c)
             break;
 
         default:
-            printf("# unknown '%c', ? for help\r\n",
-                   (c >= 32 && c < 127) ? c : '.');
+            /* ЛР3: журнал подій у W25Q64 (d, e, z) */
+            if (!Storage_BenchCommand(c))
+            {
+                printf("# unknown '%c', ? for help\r\n",
+                       (c >= 32 && c < 127) ? c : '.');
+            }
             break;
     }
 }

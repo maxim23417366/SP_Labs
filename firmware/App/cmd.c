@@ -15,6 +15,7 @@
 #include "app_tasks.h"
 #include "perf.h"
 #include "stats.h"
+#include "storage.h"
 
 static char     s_line[CMD_LINE_MAX];
 static size_t   s_len;
@@ -38,6 +39,7 @@ uint32_t Cmd_LineOverflows(void)
 static void help(void)
 {
     printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | HELP\r\n");
+    printf("#      LOG ERASE (journal W25Q64)\r\n");
 }
 
 void Cmd_Execute(const char *line)
@@ -70,6 +72,10 @@ void Cmd_Execute(const char *line)
     else if (strcmp(line, "HELP") == 0)
     {
         help();
+    }
+    else if (Storage_LineCommand(line))
+    {
+        /* журнал W25Q64: LOG ERASE (storage.c) */
     }
     else
     {
