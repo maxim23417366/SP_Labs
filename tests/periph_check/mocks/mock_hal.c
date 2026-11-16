@@ -96,6 +96,15 @@ uint32_t HAL_RCC_GetPCLK2Freq(void)    { return mock.pclk2_hz; }
 uint32_t HAL_GetTick(void)             { return mock.tick_ms; }
 
 /* ---- I2C ----------------------------------------------------------------- */
+/* Охорона I2C1 з platform_bus.c: тут шина «відновлюється» завжди, а завислу
+ * шину імітує HAL_I2C_IsDeviceReady() через mock.i2c_bus_busy */
+#include "board.h"
+
+dev_status_t board_i2c_begin(void)
+{
+  return DEV_OK;
+}
+
 HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *hi2c, uint16_t dev_address,
                                         uint32_t trials, uint32_t timeout)
 {

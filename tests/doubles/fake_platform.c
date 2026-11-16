@@ -233,6 +233,17 @@ uint32_t Platform_VsyncCount(void)
   return (uint32_t)(((uint64_t)fake_platform.now_ms * fake_platform.vsync_hz) / 1000U);
 }
 
+dev_status_t Platform_I2cRecover(void)
+{
+  fake_platform.i2c_recover_calls++;
+  return fake_platform.i2c_recover_status;
+}
+
+void Platform_I2cStats(platform_i2c_stats_t *out)
+{
+  *out = fake_platform.i2c_stats;
+}
+
 dev_status_t Platform_I2cProbe(uint8_t addr7)
 {
   return (fake_i2c_device_regs(addr7) != NULL) ? DEV_OK : DEV_ERR_NACK;

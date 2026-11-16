@@ -14,6 +14,7 @@
 
 #include <stdio.h>
 
+#include "board.h"   /* board_i2c_begin(): відновлення I2C1 */
 #include "main.h"
 #include "i2c.h"
 #include "spi.h"
@@ -125,7 +126,10 @@ static void check_i2c(void)
 
   for (uint8_t addr = I2C_ADDR_FIRST; addr <= I2C_ADDR_LAST; addr++)
   {
-    HAL_StatusTypeDef st = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(addr << 1),
+    /* ЛР3: зависла шина спершу відновлюється (platform_bus.c); якщо лінії так і
+     * лишились у нулі — це той самий випадок, що й HAL_BUSY */
+    HAL_StatusTypeDef st = (board_i2c_begin() != DEV_OK) ? HAL_BUSY :
+                           HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(addr << 1),
                                                  I2C_PROBE_TRIALS, I2C_PROBE_TIMEOUT_MS);
     if (st == HAL_BUSY)
     {
@@ -267,7 +271,8 @@ void PeriphCheck_Loop(void)
      *   I2C1: START, 0x68+W, ACK/NACK, STOP (PB8 = SCL, PB9 = SDA)
      *   SPI2: CS вниз, 9F + 3 байти, CS вгору (PB10 = CS, PB13 = SCK)
      * Заодно видно, якщо пристрій від'єднали або підключили на ходу. */
-    HAL_StatusTypeDef st = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(I2C_ADDR_MPU6050 << 1),
+    HAL_StatusTypeDef st = (board_i2c_begin() != DEV_OK) ? HAL_BUSY :
+                           HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(I2C_ADDR_MPU6050 << 1),
                                                  1U, I2C_PROBE_TIMEOUT_MS);
     uint8_t mpu   = (st == HAL_OK);
     uint8_t flash = read_jedec_id(periph_check.jedec_id);

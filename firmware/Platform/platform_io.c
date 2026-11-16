@@ -193,40 +193,84 @@ uint32_t Platform_ServoFreqHz(void)
 }
 
 /* ---- I2C / SCCB ---------------------------------------------------------------- */
-dev_status_t Platform_I2cProbe(uint8_t addr7)
+/* Усі звернення до I2C1 — через board_i2c_begin/end() (platform_bus.c):
+ * при завислій шині відповідь DEV_ERR_BUS без 25-мс очікування BUSY у HAL,
+ * а після помилки шини шина відновлюється для наступного звернення. */
+
+/* HAL_ERROR тут — NACK або збій шини; розрізняємо за кодом помилки хендла */
+static dev_status_t sccb_status(HAL_StatusTypeDef st)
 {
-  HAL_StatusTypeDef st = HAL_I2C_IsDeviceReady(BOARD_SENSOR_I2C, (uint16_t)(addr7 << 1), 1U,
-                                               BOARD_I2C_TIMEOUT_MS);
   if (st == HAL_OK)
   {
     return DEV_OK;
   }
-  return (st == HAL_BUSY) ? DEV_ERR_BUS : DEV_ERR_NACK;
+  if ((st == HAL_ERROR) && ((HAL_I2C_GetError(BOARD_SENSOR_I2C) & HAL_I2C_ERROR_AF) != 0U))
+  {
+    return DEV_ERR_NACK;
+  }
+  return (st == HAL_TIMEOUT) ? DEV_ERR_TIMEOUT : DEV_ERR_BUS;
 }
 
+dev_status_t Platform_I2cProbe(uint8_t addr7)
+{
+  HAL_StatusTypeDef st;
+  dev_status_t r = board_i2c_begin();
+
+  if (r != DEV_OK)
+  {
+    return r;
+  }
+  st = HAL_I2C_IsDeviceReady(BOARD_SENSOR_I2C, (uint16_t)(addr7 << 1), 1U, BOARD_I2C_TIMEOUT_MS);
+  if (st == HAL_OK)
+  {
+    return DEV_OK;
+  }
+  /* IsDeviceReady на відсутній адресі повертає HAL_ERROR (NACK) — шину не чіпаємо */
+  return board_i2c_end((st == HAL_BUSY) ? DEV_ERR_BUS :
+                       (st == HAL_TIMEOUT) ? DEV_ERR_TIMEOUT : DEV_ERR_NACK);
+}
+
+/* Повертає DEV_ERR_NACK для будь-якої помилки — як і раніше (камера відповідає
+ * не завжди), але після збою шини встигає її відновити */
 dev_status_t Platform_SccbRead(uint8_t addr7, uint8_t reg, uint8_t *val)
 {
   uint16_t a = (uint16_t)(addr7 << 1);
+  dev_status_t r = board_i2c_begin();
 
-  if (HAL_I2C_Master_Transmit(BOARD_SENSOR_I2C, a, &reg, 1U, SCCB_TIMEOUT_MS) != HAL_OK)
+  if (r != DEV_OK)
+  {
+    return r;
+  }
+  r = board_i2c_end(sccb_status(HAL_I2C_Master_Transmit(BOARD_SENSOR_I2C, a, &reg, 1U,
+                                                        SCCB_TIMEOUT_MS)));
+  if (r != DEV_OK)
   {
     return DEV_ERR_NACK;
   }
   /* SCCB: на 9-му біті читання ведений не зобов'язаний давати ACK — HAL це
    * переживає, бо для останнього байта сам видає NACK і STOP */
-  if (HAL_I2C_Master_Receive(BOARD_SENSOR_I2C, a, val, 1U, SCCB_TIMEOUT_MS) != HAL_OK)
+  r = board_i2c_begin();
+  if (r != DEV_OK)
   {
-    return DEV_ERR_NACK;
+    return r;
   }
-  return DEV_OK;
+  r = board_i2c_end(sccb_status(HAL_I2C_Master_Receive(BOARD_SENSOR_I2C, a, val, 1U,
+                                                       SCCB_TIMEOUT_MS)));
+  return (r == DEV_OK) ? DEV_OK : DEV_ERR_NACK;
 }
 
 dev_status_t Platform_SccbWrite(uint8_t addr7, uint8_t reg, uint8_t val)
 {
   uint8_t buf[2] = { reg, val };
+  dev_status_t r = board_i2c_begin();
 
-  return (HAL_I2C_Master_Transmit(BOARD_SENSOR_I2C, (uint16_t)(addr7 << 1), buf, 2U,
-                                  SCCB_TIMEOUT_MS) == HAL_OK) ? DEV_OK : DEV_ERR_NACK;
+  if (r != DEV_OK)
+  {
+    return r;
+  }
+  r = board_i2c_end(sccb_status(HAL_I2C_Master_Transmit(BOARD_SENSOR_I2C, (uint16_t)(addr7 << 1),
+                                                        buf, 2U, SCCB_TIMEOUT_MS)));
+  return (r == DEV_OK) ? DEV_OK : DEV_ERR_NACK;
 }
 
 uint32_t Platform_VsyncCount(void)

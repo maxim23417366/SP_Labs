@@ -80,6 +80,12 @@ typedef struct
   const char  *uart_rx;           /* символи для Platform_UartGetChar(); NULL — порожньо */
   size_t       uart_pos;
 
+  /* ЛР3: відновлення I2C1 — Platform_I2cStats() віддає i2c_stats як є,
+   * Platform_I2cRecover() рахує виклики і повертає i2c_recover_status */
+  platform_i2c_stats_t i2c_stats;
+  dev_status_t i2c_recover_status;
+  unsigned     i2c_recover_calls;
+
   int          loop_traffic;      /* останній Platform_SetLoopTraffic() */
   unsigned     bringup_calls;
   unsigned     poll_calls;
