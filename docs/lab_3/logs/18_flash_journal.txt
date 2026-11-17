@@ -1,0 +1,53 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-16.
+# Прошивка: гілка lab3/flash-journal (на базі b73acd9, у банері git=b73acd9-dirty), збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1),
+# firmware.bin sha256 c6391f7dde152fb63e52eeeb13769fa0c9cb3ffa9b95e1b79d7dcc1d3de16ddb.
+# Журнал подій у W25Q64: 100 послідовних подій, рестарт, пошкоджений запис (FR-08).
+# Рестарт — скидання МК (st-flash reset). Рядки LOAD, ENV, ST,LSM303D і повторювані LOG,seq=... для TEST пропущено.
+#
+# --- 1. Перший старт нової прошивки: на флешці стара розмітка — журнал відформатовано ---
+BUILD,fw=SmartLock,lab=LR3,git=b73acd9-dirty,cpu_hz=96000000,loop=superloop
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+LOG,MOUNT,result=format_layout,valid=0,damaged=0,next_seq=1,boot=1,head=0,us=863615
+LOG,seq=1,boot=1,t_ms=2327,type=BOOT,arg=192130265,arg2=0,frame=none,crc=ok
+EVT,id=2,t_ms=2458,name=DOOR_OPEN,arg=0,flash=ok
+#
+# --- 2. Команда e (100 тестових подій і читання назад), потім d ---
+FLOG,test=100,ok=100,first_seq=3,last_seq=102,erases=0,min_us=1998,avg_us=1999,max_us=2099,last=ok
+FLOG,readback=PASS,match=100,of=100
+LOG,seq=1,boot=1,t_ms=2327,type=BOOT,arg=192130265,arg2=0,frame=none,crc=ok
+LOG,seq=2,boot=1,t_ms=2458,type=DOOR_OPEN,arg=0,arg2=0,frame=none,crc=ok
+LOG,seq=3,boot=1,t_ms=17032,type=TEST,arg=1,arg2=4294967294,frame=none,crc=ok
+LOG,seq=4,boot=1,t_ms=17034,type=TEST,arg=2,arg2=4294967293,frame=none,crc=ok
+# ... seq=5..100 пропущено (type=TEST, arg=3..98) ...
+LOG,seq=101,boot=1,t_ms=17228,type=TEST,arg=99,arg2=4294967196,frame=none,crc=ok
+LOG,seq=102,boot=1,t_ms=17230,type=TEST,arg=100,arg2=4294967195,frame=none,crc=ok
+LOG,SUMMARY,valid=102,damaged=0,empty=1818,first_seq=1,last_seq=102,order=ok,boot=1
+#
+# --- 3. Скидання МК, потім d: журнал змонтовано, нумерація продовжується (EVT id=104), 100 тестових записів на місці ---
+LOG,MOUNT,result=mounted,valid=102,damaged=0,next_seq=103,boot=2,head=102,us=250426
+LOG,seq=103,boot=2,t_ms=1714,type=BOOT,arg=192130265,arg2=0,frame=none,crc=ok
+EVT,id=104,t_ms=1845,name=DOOR_OPEN,arg=0,flash=ok
+# --- d ---
+LOG,seq=1,boot=1,t_ms=2327,type=BOOT,arg=192130265,arg2=0,frame=none,crc=ok
+LOG,seq=2,boot=1,t_ms=2458,type=DOOR_OPEN,arg=0,arg2=0,frame=none,crc=ok
+# ... seq=3..101 пропущено (type=TEST, arg=1..99, ті самі, що до скидання) ...
+LOG,seq=102,boot=1,t_ms=17230,type=TEST,arg=100,arg2=4294967195,frame=none,crc=ok
+LOG,seq=103,boot=2,t_ms=1714,type=BOOT,arg=192130265,arg2=0,frame=none,crc=ok
+LOG,seq=104,boot=2,t_ms=1845,type=DOOR_OPEN,arg=0,arg2=0,frame=none,crc=ok
+LOG,SUMMARY,valid=104,damaged=0,empty=1816,first_seq=1,last_seq=104,order=ok,boot=2
+# type=TEST записів після рестарту: 100
+#
+# --- 4. Команда z (зіпсувати найновіший запис), потім d ---
+FLOG,corrupt=DONE,addr=0x001CE0,seq=104
+LOG,addr=0x001CE0,crc=bad
+LOG,SUMMARY,valid=103,damaged=1,empty=1816,first_seq=1,last_seq=103,order=ok,boot=2
+#
+# --- 5. Скидання МК, потім d: пошкоджений запис визначено за CRC, решта журналу ціла ---
+LOG,MOUNT,result=mounted,valid=103,damaged=1,next_seq=104,boot=3,head=104,us=250438
+LOG,seq=104,boot=3,t_ms=1714,type=BOOT,arg=192130265,arg2=0,frame=none,crc=ok
+EVT,id=105,t_ms=1845,name=DOOR_OPEN,arg=0,flash=ok
+LOG,addr=0x001CE0,crc=bad
+LOG,SUMMARY,valid=105,damaged=1,empty=1814,first_seq=1,last_seq=105,order=ok,boot=3
+#
+# Підсумок: 100 подій записано й прочитано (readback=PASS, 100 з 100, запис 2,0–2,1 мс); після рестарту порядок збережено
+# (order=ok, нумерація продовжується); пошкоджений запис визначено за CRC (crc=bad, damaged=1 після рестарту).

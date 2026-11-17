@@ -15,12 +15,14 @@
 
 #include "app_config.h"
 #include "app_tasks.h"
+#include "frames.h"
 #include "bench.h"
 #include "platform.h"
 #include "sched.h"
 #include "self_test.h"
 #include "sl_security.h"   /* TBD_MPU_RETRY_MS — той самий період, що й у задачі security */
 #include "stand_test.h"
+#include "storage.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -94,6 +96,8 @@ void App_Init(void)
     devices_init();
     devices_self_test();
     Bench_Help();
+    Storage_Init();    /* журнал W25Q64: монтування, BOOT, нумерація подій після рестарту */
+    Frames_Init();     /* слоти кадрів W25Q64 */
     AppTasks_Init();   /* час, черга подій, таблиця задач (без виводу) */
     AppTasks_PrintMem();   /* I06: пам'ять після self-test (найглибші виклики старту) */
 }
