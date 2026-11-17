@@ -6,6 +6,8 @@
 #                    + тест форматування self-test (selftest)
 #   make coverage  — unit-тести + покриття firmware/Devices/*.c (поріг COV_MIN)
 #                    і firmware/App/*.c (поріг COV_MIN_APP), gcov
+#   make run-<name> — зібрати і запустити один тест, напр. make run-sl_fsm
+#                    (unit/test_<name>.c); run-hooks_weak — слабкі хуки без sl_*
 #   make clean
 # -----------------------------------------------------------------------------
 
@@ -26,8 +28,12 @@ COVFLAGS      := --coverage
 # решта Platform/ залежить від HAL і на ПК не збирається)
 CFLAGS_APP     = $(CFLAGS_OWN) -I$(FW_APP) -I$(FW_PLAT)
 
-DRIVERS := bmp180 dht11 lsm303d mpu6050 w25q64
-DOUBLES := fake_i2c mock_spi fake_delay
+DRIVERS := bmp180 dht11 lsm303d mpu6050 w25q64 crc32 flash_log frame_store
+DOUBLES := fake_i2c mock_spi fake_delay fake_w25q64
+
+# Модулі Devices/, що працюють поверх інших: тест лінкується і з ними
+DRV_DEPS_flash_log   := w25q64 crc32
+DRV_DEPS_frame_store := w25q64 crc32
 
 DRV_OBJS  := $(DRIVERS:%=$(BUILD)/dev/%.o)
 DBL_OBJS  := $(DOUBLES:%=$(BUILD)/doubles/%.o)
@@ -36,14 +42,24 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 
 # Тести App/ (перевірки стенда і команди без обладнання): кожен лінкується з усім App/,
 # усіма драйверами і fake_platform (імітація platform.h)
-APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd evt
-APP_TESTS := stand_test app sched
-APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(BUILD)/doubles/fake_platform.o
+# ЛР3 (K02–K07): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
+# ЛР3 (I04): evt — подієві мітки EVT
+APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd evt \
+             sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env storage storage_ops frames
+APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env storage frames
+APP_DBLS  := fake_platform fake_sensors
+APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
 APP_HDRS  := $(wildcard $(FW_APP)/*.h) $(FW_PLAT)/platform.h
 COV_MIN_APP ?= 90
 
-BINS      := $(DRV_BINS) $(APP_BINS)
+# Слабкі точки підключення (smartlock_hooks_weak.c): окремий бінарник БЕЗ модулів
+# sl_* — інакше лінкер бере сильні реалізації і слабкі ніде не виконуються
+HOOKS_WEAK_SRCS := $(filter-out sl_%,$(APP_SRCS))
+HOOKS_WEAK_OBJS := $(HOOKS_WEAK_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
+HOOKS_WEAK_BIN  := $(BUILD)/test_hooks_weak
+
+BINS      := $(DRV_BINS) $(APP_BINS) $(HOOKS_WEAK_BIN)
 
 DEV_HDRS  := $(wildcard $(FW_DEV)/*.h)
 DBL_HDRS  := $(wildcard doubles/*.h)
@@ -69,6 +85,9 @@ periph:
 unit: $(BINS)
 	@set -e; for t in $(BINS); do echo; echo "======== $$t"; ./$$t; done
 
+run-%: $(BUILD)/test_%
+	./$<
+
 $(BUILD)/dev/%.o: $(FW_DEV)/%.c $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_OWN) $(COVFLAGS) -c $< -o $@
@@ -81,7 +100,7 @@ $(BUILD)/app/%.o: $(FW_APP)/%.c $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) $(COVFLAGS) -c $< -o $@
 
-$(BUILD)/doubles/fake_platform.o: doubles/fake_platform.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
+$(APP_DBLS:%=$(BUILD)/doubles/%.o): $(BUILD)/doubles/%.o: doubles/%.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) -c $< -o $@
 
@@ -89,11 +108,18 @@ $(UNITY_OBJ): $(UNITY)/unity.c $(UNITY)/unity.h $(UNITY)/unity_internals.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_VENDOR) -c $< -o $@
 
-$(APP_BINS): $(BUILD)/test_%: unit/test_%.c $(APP_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) $(wildcard vectors/*.h)
-	$(CC) $(CFLAGS_APP) $(COVFLAGS) $< $(APP_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) -o $@
+# Тест sl_journal підставляє власний SmartLock_JournalOps() — без storage_ops.o
+APP_OBJS_sl_journal := $(filter-out $(BUILD)/app/storage_ops.o,$(APP_OBJS))
 
-$(DRV_BINS): $(BUILD)/test_%: unit/test_%.c $(BUILD)/dev/%.o $(DBL_OBJS) $(UNITY_OBJ) $(wildcard vectors/*.h)
-	$(CC) $(CFLAGS_OWN) $(COVFLAGS) $< $(BUILD)/dev/$*.o $(DBL_OBJS) $(UNITY_OBJ) -o $@
+.SECONDEXPANSION:
+$(APP_BINS): $(BUILD)/test_%: unit/test_%.c $$(or $$(APP_OBJS_$$*),$(APP_OBJS)) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) $(wildcard vectors/*.h)
+	$(CC) $(CFLAGS_APP) $(COVFLAGS) $< $(or $(APP_OBJS_$*),$(APP_OBJS)) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) -o $@
+
+$(HOOKS_WEAK_BIN): unit/test_hooks_weak.c $(HOOKS_WEAK_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ)
+	$(CC) $(CFLAGS_APP) $(COVFLAGS) $< $(HOOKS_WEAK_OBJS) $(DRV_OBJS) $(DBL_OBJS) $(UNITY_OBJ) -o $@
+
+$(DRV_BINS): $(BUILD)/test_%: unit/test_%.c $(BUILD)/dev/%.o $$(addprefix $(BUILD)/dev/,$$(addsuffix .o,$$(DRV_DEPS_$$*))) $(DBL_OBJS) $(UNITY_OBJ) $(wildcard vectors/*.h)
+	$(CC) $(CFLAGS_OWN) $(COVFLAGS) $< $(BUILD)/dev/$*.o $(addprefix $(BUILD)/dev/,$(addsuffix .o,$(DRV_DEPS_$*))) $(DBL_OBJS) $(UNITY_OBJ) -o $@
 
 # Покриття рахується для шару драйверів і App/: тести і test doubles не входять.
 # Підсумок по рядках порівнюється з COV_MIN / COV_MIN_APP; гілки виводяться для звіту.

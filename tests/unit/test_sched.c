@@ -2,8 +2,9 @@
   * @file    test_sched.c
   * @brief   ЛР3 (I02): каркас Super Loop без плати — планувальник (sched.c),
   *          час (perf.c), черга подій FSM (event_queue.c), таблиця задач
-  *          (app_tasks.c), слабкі точки підключення (smartlock_hooks_weak.c)
-  *          і службові GPIO для аналізатора (I05).
+  *          (app_tasks.c) і службові GPIO для аналізатора (I05). Слабкі точки
+  *          підключення (smartlock_hooks_weak.c) у бінарнику з модулями sl_*.c
+  *          заміщені — їх перевіряє test_hooks_weak.c.
   *
   *          Час — fake_platform: Platform_Cycles() = now_ms · 1000 + cycles_step на
   *          кожне зчитування, 1 такт = 1 мкс (Platform_CpuHz() = 1 МГц).
@@ -25,6 +26,12 @@
 #include "perf.h"
 #include "platform.h"
 #include "sched.h"
+#include "sl_security.h"
+#include "sl_env.h"
+#include "sl_buttons.h"
+#include "sl_camera_link.h"
+#include "sl_fsm.h"
+#include "sl_journal.h"
 #include "smartlock_hooks.h"
 #include "stats.h"
 
@@ -275,32 +282,6 @@ static void test_posted_event_reaches_fsm_next_pass(void)
   TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(0)->exec.count);   /* fsm мала роботу */
 }
 
-static void test_weak_hooks(void)
-{
-  SmartLock_EventsInit();
-  TEST_ASSERT_TRUE(SmartLock_ButtonsPoll(0U, true));
-  TEST_ASSERT_TRUE(SmartLock_SecurityPoll(0U, true, false));
-  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_EventsPending());   /* LOCK_REQUEST, MOTION */
-  TEST_ASSERT_TRUE(SmartLock_FsmStep(0U));
-  TEST_ASSERT_FALSE(SmartLock_FsmStep(0U));
-  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
-  TEST_ASSERT_FALSE(SmartLock_StoragePoll(0U));
-
-  /* MPU-6050 є — security читає 14 байт; DHT11 відповідає — ENV,dht=ok */
-  app_devices.mpu_status = DEV_OK;
-  app_devices.mpu.bus = Platform_SensorI2c();
-  app_devices.mpu.addr7 = MPU6050_I2C_ADDR;
-  TEST_ASSERT_TRUE(SmartLock_SecurityPoll(0U, false, false));
-  fake_platform.dht_status = DEV_OK;
-  for (unsigned i = 0U; i < 40U; i++)
-  {
-    fake_platform.dht_high_us[i] = 24U;   /* усі біти 0: контрольна сума 0 збігається */
-  }
-  TEST_ASSERT_TRUE(SmartLock_EnvPoll(0U));
-  fake_platform.dht_status = DEV_ERR_TIMEOUT;
-  TEST_ASSERT_TRUE(SmartLock_EnvPoll(0U));
-}
-
 /* ---- I05: службові GPIO ---------------------------------------------------------- */
 static void test_loop_probe_pulses_every_pass(void)
 {
@@ -331,6 +312,52 @@ static void test_task_probe_wraps_only_its_task(void)
   TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_CAMERA]);
   TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.probe_rises[PLATFORM_PROBE_CAMERA]);
   Platform_ProbeWrite(PLATFORM_PROBE_COUNT, 1U);                   /* неіснуючий канал ігнорується */
+}
+
+/* Фізичний фронт → buttons/security (опитування) → черга → fsm з імпульсом PB1.
+ * I04: на платі той самий фронт дає і переривання EXTI — тест подає його через
+ * fake_platform_raise_event(), PB1 (REACT) — у момент, коли задача забирає подію.
+ * ЛР3: хуки сильні (sl_buttons, sl_security): B1 стає подією лише після антидребезгу
+ * (TBD_BTN_DEBOUNCE_MS), PIR — з наступного після базового зразка опитування, геркон
+ * один раз повідомляє початковий стан. Тому проходи йдуть з кроком часу. */
+static void test_input_edges_reach_fsm_with_react_pulse(void)
+{
+  uint32_t posted;
+
+  SmartLock_JournalInit();                  /* модулі sl_* зберігають стан між тестами */
+  SmartLock_FsmInit();
+  SmartLock_ButtonsInit();
+  SmartLock_SecurityInit();
+  SmartLock_EnvInit();
+  AppTasks_Init();                          /* B1 відпущена (1), PIR у спокої (0) */
+  fake_platform.inputs &= ~PLATFORM_IN_DOOR;   /* магніт поруч: двері зачинені */
+  fake_platform.now_ms = 10U;
+  Sched_RunOnce();                          /* перше опитування — база, без фронтів */
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
+
+  fake_platform.inputs &= ~PLATFORM_IN_LOCK;   /* B1 натиснули */
+  fake_platform.inputs |= PLATFORM_IN_PIR;     /* PIR спрацював */
+  fake_platform_raise_event(PLATFORM_EV_LOCK_B1, 15000U);   /* EXTI цих фронтів (I04) */
+  fake_platform_raise_event(PLATFORM_EV_PIR, 15000U);
+  for (uint32_t t = 20U; t <= 200U; t += 10U)  /* > антидребезг B1 і геркона */
+  {
+    fake_platform.now_ms = t;
+    Sched_RunOnce();
+  }
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());           /* fsm забрала все */
+  TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_REACT] >= 1U);
+  TEST_ASSERT_EQUAL(SL_STATE_EXIT_DELAY, SmartLock_FsmState());     /* LOCK_REQUEST дійшов */
+  TEST_ASSERT_TRUE(SmartLock_EventsPosted() >= 3U);   /* LOCK_REQUEST, MOTION, DOOR_CLOSED */
+
+  posted = SmartLock_EventsPosted();        /* рівні не змінюються — нових подій немає */
+  for (uint32_t t = 210U; t <= 400U; t += 10U)
+  {
+    fake_platform.now_ms = t;
+    Sched_RunOnce();
+  }
+  TEST_ASSERT_EQUAL_UINT32(posted, SmartLock_EventsPosted());
+  /* security і env мають власні канали PB2 / PB12 */
+  TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_CAMERA] >= 2U);
 }
 
 /* ---- I06: рядки STACK/HEAP лише при зростанні максимуму --------------------------------- */
@@ -460,7 +487,8 @@ static void test_stats_prints_every_metric_line(void)
   TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=loop n=4 "));
   TEST_ASSERT_NOT_NULL(strstr(o, "CPU name=cpu_load windows="));
   TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=fsm "));
-  TEST_ASSERT_NOT_NULL(strstr(o, "POLL name=fsm polls=4 runs=0\r\n"));
+  /* runs залежить від модулів sl_*: сильна FSM на першому проході ініціалізується (серво UNLOCK) */
+  TEST_ASSERT_NOT_NULL(strstr(o, "POLL name=fsm polls=4 runs="));
   /* формат JITTER — docs/metrics-spec.md §3.4 */
   TEST_ASSERT_NOT_NULL(strstr(o, "JITTER name=buttons period_us=10000 min_us=0 max_us=0 missed=0\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "JHIST name=buttons n=3 h_lt100us=3 "));
@@ -563,7 +591,21 @@ static void test_react_probe_on_event_take(void)
   TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_REACT]);
 }
 
-/* Фронт B1 і PIR в ISR → buttons/security забирають (LAT, EVT) → черга → fsm */
+/* Черга FSM і кільце EVT порожні: у наступних проходах друкується лише те, що
+ * породив сам тест, а не модулі sl_* (K/H-картки) з попередніх проходів. */
+static void quiesce(void)
+{
+  sl_event_t ev;
+
+  while (SmartLock_TakeEvent(&ev))
+  {
+  }
+  Evt_Init();
+}
+
+/* Фронт B1 і PIR в ISR → buttons/security забирають (LAT, EVT, PB1) → хуки.
+ * Що хук робить з фронтом (антидребезг K03, рішення FSM K05), тут не перевіряється —
+ * це тести sl_buttons / sl_security / sl_fsm і test_input_edges_reach_fsm_with_react_pulse. */
 static void test_isr_events_give_latency_evt_and_reach_fsm(void)
 {
   const char *o;
@@ -572,16 +614,16 @@ static void test_isr_events_give_latency_evt_and_reach_fsm(void)
   AppTasks_Init();
   fake_platform.now_ms = 10U;
   Sched_RunOnce();
-  (void)capture_pass();                                /* вивести EVT-и старту, якщо є */
 
   fake_platform_raise_event(PLATFORM_EV_LOCK_B1, 13000U);   /* фронт у 13 мс */
   fake_platform_raise_event(PLATFORM_EV_LOCK_B1, 13500U);   /* дребезг до обробки */
   fake_platform_raise_event(PLATFORM_EV_PIR, 15000U);
   fake_platform.now_ms = 20U;                          /* buttons (10 мс) і security (20 мс) */
+  quiesce();
   o = capture_pass();                                  /* у цьому ж проході uart друкує 2 EVT */
-  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_EventsPending());   /* LOCK_REQUEST, MOTION */
   TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=13000 name=btn_b1_press\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=20000 name=btn_b1_handled\r\n"));
+  TEST_ASSERT_EQUAL_UINT32(2U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);   /* B1 і PIR */
 
   b1 = AppTasks_Latency(0);
   TEST_ASSERT_EQUAL_STRING("btn_b1_lat", b1->st.name);
@@ -592,10 +634,22 @@ static void test_isr_events_give_latency_evt_and_reach_fsm(void)
   TEST_ASSERT_NULL(AppTasks_Latency(3));
   TEST_ASSERT_NULL(AppTasks_Latency(-1));
 
-  o = capture_pass();                                  /* наступний прохід: fsm забирає обидві */
-  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
+  o = capture_pass();                                  /* наступний прохід: решта EVT */
   TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=15000 name=pir_trig\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=20000 name=pir_handled\r\n"));
+
+  /* момент, коли FSM забирає подію з черги, — EVT fsm_<подія> (event_queue.c);
+   * забирає тест, бо скільки подій за прохід бере FSM — справа K02 */
+  quiesce();
+  (void)SmartLock_PostEvent(SL_EV_LOCK_REQUEST, 0U);
+  (void)SmartLock_PostEvent(SL_EV_MOTION, 0U);
+  {
+    sl_event_t ev;
+
+    while (SmartLock_TakeEvent(&ev))
+    {
+    }
+  }
   o = capture_pass();
   TEST_ASSERT_NOT_NULL(strstr(o, "name=fsm_lock_request\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "name=fsm_motion\r\n"));
@@ -696,11 +750,11 @@ int main(void)
   RUN_TEST(test_event_queue_fifo_overflow_and_wait);
   RUN_TEST(test_app_tasks_table_order);
   RUN_TEST(test_posted_event_reaches_fsm_next_pass);
-  RUN_TEST(test_weak_hooks);
   RUN_TEST(test_uart_task_runs_lr2_commands);
   RUN_TEST(test_loop_probe_pulses_every_pass);
   RUN_TEST(test_task_probe_wraps_only_its_task);
   RUN_TEST(test_react_probe_on_event_take);
+  RUN_TEST(test_input_edges_reach_fsm_with_react_pulse);
   RUN_TEST(test_isr_events_give_latency_evt_and_reach_fsm);
   RUN_TEST(test_evt_format_ring_and_drop);
   RUN_TEST(test_mark_uart_cmd_evt_and_uart_overrun);

@@ -1,7 +1,8 @@
 /**
   ******************************************************************************
   * @file    mpu6050.c
-  * @brief   Драйвер MPU-6050: ідентифікація, ініціалізація, читання, одиниці.
+  * @brief   Драйвер MPU-6050: ідентифікація, ініціалізація, перевірка стану і
+  *          повторна ініціалізація після перезапуску датчика, читання, одиниці.
   ******************************************************************************
   */
 #include "mpu6050.h"
@@ -11,6 +12,34 @@ static dev_status_t write_reg(mpu6050_t *dev, uint8_t reg, uint8_t value)
   const uint8_t buf[2] = { reg, value };
 
   return dev->bus->write(dev->bus->ctx, dev->addr7, buf, sizeof(buf));
+}
+
+dev_status_t mpu6050_check(mpu6050_t *dev)
+{
+  uint8_t pwr = 0U;
+  dev_status_t st;
+
+  if ((dev == NULL) || (dev->bus == NULL))
+  {
+    return DEV_ERR_PARAM;
+  }
+  st = dev->bus->read_reg(dev->bus->ctx, dev->addr7, MPU6050_REG_PWR_MGMT_1, &pwr, 1U);
+  if (st != DEV_OK)
+  {
+    return st;
+  }
+  /* Після скидання PWR_MGMT_1 = 0x40 (Register Map, розд. 3 і 4.28): будь-яке
+   * значення, крім записаного в init, означає, що датчик перезапускався */
+  return (pwr == MPU6050_PWR_CLK_PLL_XGYRO) ? DEV_OK : DEV_ERR_STATE;
+}
+
+dev_status_t mpu6050_recover(mpu6050_t *dev)
+{
+  if ((dev == NULL) || (dev->bus == NULL))
+  {
+    return DEV_ERR_PARAM;
+  }
+  return mpu6050_init(dev, dev->bus, dev->addr7);
 }
 
 dev_status_t mpu6050_init(mpu6050_t *dev, const dev_i2c_bus_t *bus, uint8_t addr7)
@@ -50,7 +79,9 @@ dev_status_t mpu6050_init(mpu6050_t *dev, const dev_i2c_bus_t *bus, uint8_t addr
       return st;
     }
   }
-  return DEV_OK;
+  /* Запис підтверджено ACK, але це ще не доказ, що датчик прокинувся
+   * (наприклад, якщо живлення зникло між записами) — читаємо назад */
+  return mpu6050_check(dev);
 }
 
 void mpu6050_parse(const uint8_t buf[MPU6050_SAMPLE_LEN], mpu6050_raw_t *raw)
@@ -73,8 +104,13 @@ void mpu6050_parse(const uint8_t buf[MPU6050_SAMPLE_LEN], mpu6050_raw_t *raw)
 dev_status_t mpu6050_read_raw(mpu6050_t *dev, mpu6050_raw_t *raw)
 {
   uint8_t buf[MPU6050_SAMPLE_LEN];
-  dev_status_t st = dev->bus->read_reg(dev->bus->ctx, dev->addr7, MPU6050_REG_ACCEL_XOUT_H,
-                                       buf, sizeof(buf));
+  dev_status_t st;
+
+  if ((dev == NULL) || (dev->bus == NULL) || (raw == NULL))
+  {
+    return DEV_ERR_PARAM;
+  }
+  st = dev->bus->read_reg(dev->bus->ctx, dev->addr7, MPU6050_REG_ACCEL_XOUT_H, buf, sizeof(buf));
 
   if (st == DEV_OK)
   {

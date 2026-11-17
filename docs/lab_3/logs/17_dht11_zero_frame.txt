@@ -1,0 +1,42 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-16.
+# Прошивка: гілка lab3/dht11-zero-frame (на базі b73acd9, без відновлення шини I2C), збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1),
+# firmware.bin sha256 58f990e9cdeab3d96cd5e1ea08b17d8214bab42a36a75c39d919f14e09c15969.
+# DHT11 без живлення: нульовий кадр більше не приймається як дійсний вимір.
+#
+# --- До виправлення (лог 16, розділ 5): живлення модулів від'єднано, DHT11 дає нульовий кадр з правильною сумою ---
+ENV,dht=ok,t_c=0.0,rh=0,bmp=err
+#
+# --- Після виправлення: живлення модулів від'єднано на ~20 с і повернуто, МК не скидався; рядки LOAD пропущено ---
+ENV,dht=ok,t_c=24.1,rh=38,bmp=ok,p_pa=99929
+ENV,dht=ok,t_c=24.1,rh=38,bmp=ok,p_pa=99920
+ENV,dht=ok,t_c=24.1,rh=38,bmp=ok,p_pa=99920
+ENV,dht=ok,t_c=24.1,rh=38,bmp=ok,p_pa=99914
+ENV,dht=ok,t_c=24.1,rh=39,bmp=ok,p_pa=99923
+ENV,dht=ok,t_c=24.0,rh=39,bmp=ok,p_pa=99929
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=err,bmp=err
+ENV,dht=ok,t_c=24.1,rh=38,bmp=err
+ENV,dht=ok,t_c=24.1,rh=38,bmp=err
+ENV,dht=ok,t_c=24.3,rh=38,bmp=err
+ENV,dht=ok,t_c=24.2,rh=38,bmp=err
+ENV,dht=ok,t_c=24.2,rh=38,bmp=err
+ENV,dht=ok,t_c=24.1,rh=38,bmp=err
+ENV,dht=ok,t_c=24.2,rh=38,bmp=err
+ENV,dht=ok,t_c=24.1,rh=38,bmp=err
+ENV,dht=ok,t_c=24.2,rh=38,bmp=err
+ENV,dht=ok,t_c=24.2,rh=39,bmp=err
+ENV,dht=ok,t_c=24.2,rh=39,bmp=err
+ENV,dht=ok,t_c=24.2,rh=39,bmp=err
+ENV,dht=ok,t_c=24.2,rh=39,bmp=err
+ENV,dht=ok,t_c=24.3,rh=39,bmp=err
+#
+# Підсумок: без живлення кожен вимір DHT11 — dht=err (нульових t_c=0.0,rh=0 немає), після повернення живлення — одразу звичайні значення.
+# bmp=err після повернення живлення очікуваний для цієї гілки: відновлення шини I2C тут немає (окремий PR, лог 16).

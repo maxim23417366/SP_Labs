@@ -1,0 +1,49 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-16.
+# Прошивка: гілка lab3/flash-frames (на базі 7ee1e7f — журнал подій у W25Q64), у банері git=7ee1e7f-dirty,
+# збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), firmware.bin sha256 43960ae1c51db467debc86b57e25b6a36c6bbf48958de05d7bcc0a6a5c4d6d0a.
+# Збереження кадру у W25Q64 (FR-07, FR-08): тестовий кадр QQVGA RGB565, 38 400 Б, команди p (записати) і o (звірити останній).
+# Рядки LOAD, ENV, ST,LSM303D і решту журналу пропущено.
+#
+# --- 1. Старт: журнал і слоти кадрів змонтовано, кадрів ще немає ---
+LOG,MOUNT,result=mounted,valid=105,damaged=1,next_seq=106,boot=4,head=106,us=250443
+LOG,seq=106,boot=4,t_ms=1720,type=BOOT,arg=133045887,arg2=0,frame=none,crc=ok
+FRM,MOUNT,frames=0,next_id=1,us=18279
+EVT,id=107,t_ms=1873,name=DOOR_OPEN,arg=0,flash=ok
+#
+# --- 2. p (кадр 1), потім o ---
+# Команди p, p, p надіслано з інтервалом 0,3 с: виконано лише першу — символи, що прийшли, поки цикл
+# блокував запис кадру (~0,85 с), втрачено (прийом UART без буфера). Кадри 2 і 3 записано окремими командами.
+LOG,seq=108,boot=4,t_ms=13243,type=TEST,arg=1,arg2=0,frame=none,crc=ok
+LOG,seq=109,boot=4,t_ms=14090,type=PHOTO_SAVED,arg=108,arg2=0,frame=1,crc=ok
+FRM,write=PASS,id=1,event_seq=108,bytes=38400,erase_us=535903,write_us=311674,total_us=847577,crc=373CD526
+FRM,verify=PASS,id=1,event_seq=108,bytes=38400,mismatch=0,crc=ok,us=323440,uptime_ms=21390
+#
+# --- 3. p (кадр 2), p (кадр 3), o ---
+LOG,seq=110,boot=4,t_ms=31442,type=TEST,arg=2,arg2=0,frame=none,crc=ok
+LOG,seq=111,boot=4,t_ms=32286,type=PHOTO_SAVED,arg=110,arg2=0,frame=2,crc=ok
+FRM,write=PASS,id=2,event_seq=110,bytes=38400,erase_us=531906,write_us=311674,total_us=843581,crc=FEF7CC3C
+LOG,seq=112,boot=4,t_ms=35547,type=TEST,arg=3,arg2=0,frame=none,crc=ok
+LOG,seq=113,boot=4,t_ms=36404,type=PHOTO_SAVED,arg=112,arg2=0,frame=3,crc=ok
+FRM,write=PASS,id=3,event_seq=112,bytes=38400,erase_us=545901,write_us=311676,total_us=857577,crc=0F61C6F5
+FRM,verify=PASS,id=3,event_seq=112,bytes=38400,mismatch=0,crc=ok,us=323442,uptime_ms=39907
+#
+# --- 4. USB-кабель плати вийнято на ~5 с і вставлено (повне вимкнення живлення), потім o і d ---
+FRM,verify=PASS,id=3,event_seq=112,bytes=38400,mismatch=0,crc=ok,us=323440,uptime_ms=16208
+LOG,seq=108,boot=4,t_ms=13243,type=TEST,arg=1,arg2=0,frame=none,crc=ok
+LOG,seq=109,boot=4,t_ms=14090,type=PHOTO_SAVED,arg=108,arg2=0,frame=1,crc=ok
+LOG,seq=110,boot=4,t_ms=31442,type=TEST,arg=2,arg2=0,frame=none,crc=ok
+LOG,seq=111,boot=4,t_ms=32286,type=PHOTO_SAVED,arg=110,arg2=0,frame=2,crc=ok
+LOG,seq=112,boot=4,t_ms=35547,type=TEST,arg=3,arg2=0,frame=none,crc=ok
+LOG,seq=113,boot=4,t_ms=36404,type=PHOTO_SAVED,arg=112,arg2=0,frame=3,crc=ok
+LOG,SUMMARY,valid=115,damaged=1,empty=1804,first_seq=1,last_seq=115,order=ok,boot=5
+# uptime_ms = 16208: плата стартувала заново; кадр 3 збігся побайтно і за CRC; записи журналу на місці (boot=5).
+#
+# --- 5. Скидання МК: на старті знайдено всі 3 кадри, журнал не пошкоджено ---
+LOG,MOUNT,result=mounted,valid=115,damaged=1,next_seq=116,boot=6,head=116,us=250496
+FRM,MOUNT,frames=3,next_id=4,us=18306
+EVT,id=117,t_ms=1873,name=DOOR_OPEN,arg=0,flash=ok
+#
+# Підсумок: тестовий кадр 38 400 Б записано і прочитано побайтно без помилок (mismatch=0, crc=ok), у тому числі після
+# вимкнення живлення; запис кадру 0,84–0,86 с (стирання 10 секторів 0,53–0,55 с + 150 сторінок 0,31 с);
+# зв'язок з подією: заголовок кадру event_seq = seq події TEST, запис PHOTO_SAVED arg = той самий seq, frame = id кадру;
+# журнал (0x001000–0x00FFFF) після запису кадрів цілий: valid=115, damaged=1 (зіпсований навмисно в лозі 18).

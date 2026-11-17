@@ -16,6 +16,7 @@
 #include "evt.h"
 #include "perf.h"
 #include "stats.h"
+#include "storage.h"
 
 static char     s_line[CMD_LINE_MAX];
 static size_t   s_len;
@@ -39,6 +40,7 @@ uint32_t Cmd_LineOverflows(void)
 static void help(void)
 {
     printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | HELP\r\n");
+    printf("#      LOG ERASE (journal W25Q64)\r\n");
 }
 
 void Cmd_Execute(const char *line)
@@ -77,6 +79,10 @@ void Cmd_Execute(const char *line)
     {
         help();
     }
+    else if (Storage_LineCommand(line))
+    {
+        /* журнал W25Q64: LOG ERASE (storage.c) */
+    }
     else
     {
         printf("# unknown command '%s', HELP for list\r\n", line);
@@ -106,8 +112,6 @@ int Cmd_Feed(int c)
         }
         else
         {
-            /* M-03: затримка обробки команди UART = uart_cmd_tx − uart_cmd_rx
-             * (metrics-spec §3.3) */
             Evt_Log("uart_cmd_rx");
             Cmd_Execute(s_line);
             Evt_Log("uart_cmd_tx");

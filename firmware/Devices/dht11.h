@@ -31,7 +31,8 @@ void dht11_bits_to_bytes(const uint16_t high_us[40], uint16_t threshold_us,
                          uint8_t frame[DHT11_FRAME_LEN]);
 
 /* Перевіряє контрольну суму (байт 4 = сума байтів 0..3 mod 256) і діапазони.
- * DEV_ERR_STATE — сума не збіглась, DEV_ERR_ID — значення поза паспортними. */
+ * DEV_ERR_STATE — сума не збіглась, DEV_ERR_ID — значення поза паспортними,
+ * зокрема вологість 0 % (нульовий кадр від датчика без живлення). */
 dev_status_t dht11_decode(const uint8_t frame[DHT11_FRAME_LEN], dht11_data_t *out);
 
 #endif /* DHT11_H */

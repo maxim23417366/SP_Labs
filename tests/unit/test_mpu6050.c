@@ -41,7 +41,13 @@ static void test_init_checks_who_am_i_and_configures(void)
   static const uint8_t who_am_i_wire[] = { 0xD0, 0x75, 0xD1, 0x68 };
   TEST_ASSERT_EQUAL_size_t(sizeof(who_am_i_wire), x->wire_len);
   TEST_ASSERT_EQUAL_HEX8_ARRAY(who_am_i_wire, x->wire, sizeof(who_am_i_wire));
-  TEST_ASSERT_EQUAL_size_t(4U, fake_i2c_log_count());
+
+  /* Три записи і контрольне читання PWR_MGMT_1: D0 6B D1 01 */
+  static const uint8_t pwr_check_wire[] = { 0xD0, 0x6B, 0xD1, 0x01 };
+  TEST_ASSERT_EQUAL_size_t(5U, fake_i2c_log_count());
+  x = fake_i2c_log(4);
+  TEST_ASSERT_EQUAL_size_t(sizeof(pwr_check_wire), x->wire_len);
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(pwr_check_wire, x->wire, sizeof(pwr_check_wire));
 }
 
 static void test_init_wrong_who_am_i(void)
@@ -88,6 +94,86 @@ static void test_capture_lr1_probe_without_module(void)
   TEST_ASSERT_EQUAL(CAP_LR1_MPU6050_PROBE_ACKED, x->result == DEV_OK);
 }
 
+/* ---- Перезапуск датчика: перевірка стану і повторна ініціалізація ---------- */
+
+/* Чип, що ігнорує запис PWR_MGMT_1 (живлення зникло між записами, або
+ * датчик ще не готовий): лишається у сні */
+static void stay_asleep_hook(uint8_t *r, uint8_t reg, uint8_t value)
+{
+  (void)value;
+  if (reg == MPU6050_REG_PWR_MGMT_1)
+  {
+    r[MPU6050_REG_PWR_MGMT_1] = 0x40U;
+  }
+}
+
+static void test_init_fails_if_sensor_stays_asleep(void)
+{
+  fake_i2c_set_write_hook(MPU6050_I2C_ADDR, stay_asleep_hook);
+
+  TEST_ASSERT_EQUAL(DEV_ERR_STATE, mpu6050_init(&dev, fake_i2c_bus(), MPU6050_I2C_ADDR));
+  TEST_ASSERT_EQUAL_size_t(5U, fake_i2c_log_count());
+}
+
+static void test_check_ok_after_init(void)
+{
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_init(&dev, fake_i2c_bus(), MPU6050_I2C_ADDR));
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_check(&dev));
+
+  /* Одна транзакція: читання одного байта PWR_MGMT_1 */
+  TEST_ASSERT_EQUAL_size_t(6U, fake_i2c_log_count());
+  TEST_ASSERT_EQUAL_HEX8(MPU6050_REG_PWR_MGMT_1, fake_i2c_log(5)->wire[1]);
+}
+
+/* Лог 15, розділ 3: модуль вставлено під напругою — WHO_AM_I відповідає,
+ * читання успішне, але регістри після скидання і датчик спить */
+static void test_check_detects_power_loss_and_recover_wakes(void)
+{
+  mpu6050_raw_t raw;
+
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_init(&dev, fake_i2c_bus(), MPU6050_I2C_ADDR));
+  regs[MPU6050_REG_PWR_MGMT_1]   = 0x40U;   /* власне скидання чипа */
+  regs[MPU6050_REG_ACCEL_CONFIG] = 0x00U;
+  memset(&regs[MPU6050_REG_ACCEL_XOUT_H], 0, MPU6050_SAMPLE_LEN);
+
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_read_raw(&dev, &raw));     /* нулі без помилки */
+  TEST_ASSERT_EQUAL(DEV_ERR_STATE, mpu6050_check(&dev));
+
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_recover(&dev));
+  TEST_ASSERT_EQUAL_HEX8(MPU6050_PWR_CLK_PLL_XGYRO, regs[MPU6050_REG_PWR_MGMT_1]);
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_check(&dev));
+}
+
+static void test_check_and_recover_report_bus_errors(void)
+{
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_init(&dev, fake_i2c_bus(), MPU6050_I2C_ADDR));
+
+  fake_i2c_fail_at(5U, DEV_ERR_BUS);
+  TEST_ASSERT_EQUAL(DEV_ERR_BUS, mpu6050_check(&dev));
+
+  fake_i2c_fail_at(6U, DEV_ERR_NACK);     /* WHO_AM_I повторної ініціалізації */
+  TEST_ASSERT_EQUAL(DEV_ERR_NACK, mpu6050_recover(&dev));
+  TEST_ASSERT_EQUAL_size_t(7U, fake_i2c_log_count());
+
+  /* Шина ожила — наступна спроба успішна */
+  TEST_ASSERT_EQUAL(DEV_OK, mpu6050_recover(&dev));
+}
+
+static void test_check_recover_read_need_init(void)
+{
+  mpu6050_t      blank = { 0 };
+  mpu6050_raw_t  raw;
+
+  TEST_ASSERT_EQUAL(DEV_ERR_PARAM, mpu6050_check(&blank));
+  TEST_ASSERT_EQUAL(DEV_ERR_PARAM, mpu6050_recover(&blank));
+  TEST_ASSERT_EQUAL(DEV_ERR_PARAM, mpu6050_read_raw(&blank, &raw));
+  TEST_ASSERT_EQUAL(DEV_ERR_PARAM, mpu6050_check(NULL));
+  TEST_ASSERT_EQUAL(DEV_ERR_PARAM, mpu6050_recover(NULL));
+  TEST_ASSERT_EQUAL(DEV_ERR_PARAM, mpu6050_read_raw(NULL, &raw));
+  TEST_ASSERT_EQUAL(DEV_ERR_PARAM, mpu6050_read_raw(&dev, NULL));
+  TEST_ASSERT_EQUAL_size_t(0U, fake_i2c_log_count());
+}
+
 /* ---- Читання і перетворення -------------------------------------------- */
 
 static void test_read_raw_is_single_14_byte_burst(void)
@@ -113,7 +199,7 @@ static void test_read_raw_is_single_14_byte_burst(void)
   TEST_ASSERT_EQUAL_INT16(0, raw.gz);
 
   /* Одна транзакція: D0 3B D1 + 14 байт */
-  const fake_i2c_xfer_t *x = fake_i2c_log(4);
+  const fake_i2c_xfer_t *x = fake_i2c_log(5);
   TEST_ASSERT_EQUAL_HEX8(MPU6050_REG_ACCEL_XOUT_H, x->wire[1]);
   TEST_ASSERT_EQUAL_size_t(3U + MPU6050_SAMPLE_LEN, x->wire_len);
 }
@@ -124,7 +210,7 @@ static void test_read_raw_timeout_leaves_output_untouched(void)
 
   memset(&raw, 0x5A, sizeof(raw));
   TEST_ASSERT_EQUAL(DEV_OK, mpu6050_init(&dev, fake_i2c_bus(), MPU6050_I2C_ADDR));
-  fake_i2c_fail_at(4U, DEV_ERR_TIMEOUT);
+  fake_i2c_fail_at(5U, DEV_ERR_TIMEOUT);
 
   TEST_ASSERT_EQUAL(DEV_ERR_TIMEOUT, mpu6050_read_raw(&dev, &raw));
   TEST_ASSERT_EQUAL_HEX16(0x5A5A, (uint16_t)raw.ax);
@@ -203,6 +289,11 @@ int main(void)
   RUN_TEST(test_init_config_write_timeout);
   RUN_TEST(test_init_null_params);
   RUN_TEST(test_capture_lr1_probe_without_module);
+  RUN_TEST(test_init_fails_if_sensor_stays_asleep);
+  RUN_TEST(test_check_ok_after_init);
+  RUN_TEST(test_check_detects_power_loss_and_recover_wakes);
+  RUN_TEST(test_check_and_recover_report_bus_errors);
+  RUN_TEST(test_check_recover_read_need_init);
   RUN_TEST(test_read_raw_is_single_14_byte_burst);
   RUN_TEST(test_read_raw_timeout_leaves_output_untouched);
   RUN_TEST(test_convert_accel_full_scale_2g);

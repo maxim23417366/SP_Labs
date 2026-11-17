@@ -20,10 +20,14 @@
 #include "capture_vectors.h"
 #include "fake_i2c.h"
 #include "fake_platform.h"
+#include "fake_sensors.h"
+#include "event_queue.h"
 #include "mock_spi.h"
 #include "platform.h"
 #include "sched.h"
 #include "self_test.h"
+#include "sl_security.h"
+#include "smartlock_hooks.h"
 
 /* ---- перехоплення stdout ------------------------------------------------------- */
 static char out[16384];
@@ -114,6 +118,7 @@ void setUp(void)
   app_devices.flash_status = DEV_ERR_STATE;
   app_devices.accel_status = DEV_ERR_STATE;
   SelfTest_SetOutput(stdout_line, NULL);
+  App_SensorServiceReset();
   bench();
 }
 
@@ -171,14 +176,16 @@ static void test_app_loop_polls_platform_and_uart(void)
 
 static void test_help_and_unknown(void)
 {
-  const char *o = run("?z\x01\r\n ");
+  const char *o = run("?q\x01\r\n ");
 
   TEST_ASSERT_EQUAL_STRING(
     "# commands: s selftest | i i2c scan | g gpio watch on/off | m accel x10 (LSM303D, FR-06) | b bmp180\r\n"
     "#           h dht11 x5 | j jedec | f flash r/w | 1/2/3 servo 1000/1500/2000us\r\n"
     "#           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help\r\n"
     "#           w flash persist write | v flash persist verify | t sensor read timing\r\n"
-    "# unknown 'z', ? for help\r\n"
+    "#           d journal dump | e journal +100 test events | z corrupt newest record | LOG ERASE erase journal\r\n"
+    "#           p frame write 38400 B (+journal) | o frame verify last\r\n"
+    "# unknown 'q', ? for help\r\n"
     "# unknown '.', ? for help\r\n", o);
 }
 
@@ -511,6 +518,191 @@ static void test_selftest_command(void)
   TEST_ASSERT_NOT_NULL(strstr(o, "| ? help\r\n"));
 }
 
+/* ---- нагляд за MPU-6050 і I2C після старту (App_SensorService) ---------------- */
+
+static uint32_t svc_now;
+
+static void svc_call(void)
+{
+  App_SensorService(svc_now);
+}
+
+static const char *svc(uint32_t now_ms)
+{
+  svc_now = now_ms;
+  return capture(svc_call);
+}
+
+/* Лог 15, розділ 3: модуль вийняли і вставили під напругою — WHO_AM_I є,
+ * читання без помилки, але датчик спить і віддає нулі */
+static void mpu_power_cycle(void)
+{
+  uint8_t *r = fake_i2c_device_regs(MPU6050_I2C_ADDR);
+
+  r[MPU6050_REG_PWR_MGMT_1] = 0x40U;
+  memset(&r[MPU6050_REG_ACCEL_XOUT_H], 0, MPU6050_SAMPLE_LEN);
+}
+
+static void test_sensor_service_healthy_mpu_is_one_read_per_period(void)
+{
+  size_t n0;
+
+  TEST_ASSERT_EQUAL(DEV_OK, fake_sensors_mpu_attach());
+  n0 = fake_i2c_log_count();
+
+  TEST_ASSERT_EQUAL_STRING("", svc(0U));
+  TEST_ASSERT_EQUAL_size_t(n0 + 1U, fake_i2c_log_count());
+  TEST_ASSERT_EQUAL_HEX8(MPU6050_REG_PWR_MGMT_1, fake_i2c_log(n0)->wire[1]);
+
+  /* У межах періоду — жодного звернення до шини */
+  TEST_ASSERT_EQUAL_STRING("", svc(TBD_MPU_RETRY_MS - 1U));
+  TEST_ASSERT_EQUAL_size_t(n0 + 1U, fake_i2c_log_count());
+
+  TEST_ASSERT_EQUAL_STRING("", svc(TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL_size_t(n0 + 2U, fake_i2c_log_count());
+  TEST_ASSERT_EQUAL(DEV_OK, app_devices.mpu_status);
+}
+
+static void test_sensor_service_recovers_mpu_after_power_loss(void)
+{
+  TEST_ASSERT_EQUAL(DEV_OK, fake_sensors_mpu_attach());
+  TEST_ASSERT_EQUAL_STRING("", svc(0U));
+
+  mpu_power_cycle();
+  TEST_ASSERT_EQUAL_STRING("MPU,FAULT,err=state,note=sensor_reset\r\n", svc(TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL(DEV_ERR_STATE, app_devices.mpu_status);
+
+  /* Повторна ініціалізація — лише наступного періоду */
+  TEST_ASSERT_EQUAL_STRING("MPU,RECOVER,ok,n=1\r\n", svc(2U * TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL(DEV_OK, app_devices.mpu_status);
+  TEST_ASSERT_EQUAL_HEX8(MPU6050_PWR_CLK_PLL_XGYRO,
+                         fake_i2c_device_regs(MPU6050_I2C_ADDR)[MPU6050_REG_PWR_MGMT_1]);
+
+  /* Удруге — лічильник росте */
+  mpu_power_cycle();
+  TEST_ASSERT_EQUAL_STRING("MPU,FAULT,err=state,note=sensor_reset\r\n", svc(3U * TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL_STRING("MPU,RECOVER,ok,n=2\r\n", svc(4U * TBD_MPU_RETRY_MS));
+}
+
+static void test_sensor_service_absent_mpu_reports_once(void)
+{
+  size_t n0;
+
+  /* GY-521 відсутній від старту: init дав NACK, шина й адреса відомі */
+  app_devices.mpu_status = mpu6050_init(&app_devices.mpu, Platform_SensorI2c(), MPU6050_I2C_ADDR);
+  TEST_ASSERT_EQUAL(DEV_ERR_NACK, app_devices.mpu_status);
+
+  n0 = fake_i2c_log_count();
+  TEST_ASSERT_EQUAL_STRING("MPU,RECOVER,err=nack\r\n", svc(0U));
+  TEST_ASSERT_EQUAL_size_t(n0 + 1U, fake_i2c_log_count());   /* одна спроба WHO_AM_I */
+  TEST_ASSERT_EQUAL_STRING("", svc(TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL_STRING("", svc(2U * TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL_size_t(n0 + 3U, fake_i2c_log_count());
+
+  /* Модуль вставили — підхоплюється без скидання МК */
+  TEST_ASSERT_EQUAL(DEV_ERR_NACK, app_devices.mpu_status);
+  fake_i2c_add_device(MPU6050_I2C_ADDR)[MPU6050_REG_WHO_AM_I] = MPU6050_WHO_AM_I_VALUE;
+  fake_i2c_device_regs(MPU6050_I2C_ADDR)[MPU6050_REG_PWR_MGMT_1] = 0x40U;
+  TEST_ASSERT_EQUAL_STRING("MPU,RECOVER,ok,n=1\r\n", svc(3U * TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL(DEV_OK, app_devices.mpu_status);
+}
+
+static void test_sensor_service_bus_error_then_recovery(void)
+{
+  TEST_ASSERT_EQUAL(DEV_OK, fake_sensors_mpu_attach());
+
+  fake_i2c_fail_at(fake_i2c_log_count(), DEV_ERR_BUS);
+  TEST_ASSERT_EQUAL_STRING("MPU,FAULT,err=bus\r\n", svc(0U));
+  TEST_ASSERT_EQUAL(DEV_ERR_BUS, app_devices.mpu_status);
+
+  /* Перша спроба знову падає — та сама помилка не друкується вдруге */
+  fake_i2c_fail_at(fake_i2c_log_count(), DEV_ERR_BUS);
+  TEST_ASSERT_EQUAL_STRING("", svc(TBD_MPU_RETRY_MS));
+  fake_i2c_fail_at(fake_i2c_log_count(), DEV_ERR_TIMEOUT);
+  TEST_ASSERT_EQUAL_STRING("MPU,RECOVER,err=timeout\r\n", svc(2U * TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL_STRING("MPU,RECOVER,ok,n=1\r\n", svc(3U * TBD_MPU_RETRY_MS));
+}
+
+static void test_sensor_service_without_init_does_nothing(void)
+{
+  TEST_ASSERT_EQUAL_STRING("", svc(0U));   /* app_devices.mpu.bus == NULL */
+  TEST_ASSERT_EQUAL_size_t(0U, fake_i2c_log_count());
+}
+
+static void test_sensor_service_reports_i2c_recovery(void)
+{
+  TEST_ASSERT_EQUAL_STRING("", svc(0U));
+
+  /* Лінії не піднялись (немає живлення модулів) — один рядок на весь простій */
+  fake_platform.i2c_stats.attempts = 1U;
+  fake_platform.i2c_stats.failed   = 1U;
+  TEST_ASSERT_EQUAL_STRING("I2C,RECOVER,err=bus,note=lines_low,n=0,fail=1\r\n",
+                           svc(TBD_MPU_RETRY_MS));
+  fake_platform.i2c_stats.failed = 5U;
+  TEST_ASSERT_EQUAL_STRING("", svc(2U * TBD_MPU_RETRY_MS));
+
+  /* Живлення повернулось */
+  fake_platform.i2c_stats.recovered = 1U;
+  fake_platform.i2c_stats.failed    = 6U;
+  TEST_ASSERT_EQUAL_STRING("I2C,RECOVER,ok,n=1,fail=6\r\n", svc(3U * TBD_MPU_RETRY_MS));
+  TEST_ASSERT_EQUAL_STRING("", svc(4U * TBD_MPU_RETRY_MS));
+
+  /* Нова відмова після відновлення — знову один рядок */
+  fake_platform.i2c_stats.failed = 7U;
+  TEST_ASSERT_EQUAL_STRING("I2C,RECOVER,err=bus,note=lines_low,n=1,fail=7\r\n",
+                           svc(5U * TBD_MPU_RETRY_MS));
+}
+
+/* Разом із задачею security (sl_security.c): датчик перезапустився і став в іншому
+ * положенні — після відновлення TAMPER не формується (базова лінія заново) */
+static void test_sensor_service_no_false_tamper_after_recovery(void)
+{
+  sl_event_t ev;
+  uint32_t   t = 0U;
+  unsigned   tamper = 0U;
+  bool       faulted = false;
+
+  SmartLock_EventsInit();
+  SmartLock_SecurityInit();
+  TEST_ASSERT_EQUAL(DEV_OK, fake_sensors_mpu_attach());
+
+  /* Спокій: базова лінія */
+  for (unsigned i = 0U; i < 10U; i++, t += 20U)
+  {
+    (void)SmartLock_SecurityPoll(t, false, false);
+  }
+  (void)svc(t);
+
+  /* Втрата живлення: поки датчик спить, він віддає нулі. Після повторної
+   * ініціалізації модуль лежить набік (1 g по X замість Z) */
+  mpu_power_cycle();
+  for (; t < 6U * TBD_MPU_RETRY_MS; t += 20U)
+  {
+    (void)SmartLock_SecurityPoll(t, false, false);
+    (void)svc(t);
+    faulted = faulted || (app_devices.mpu_status != DEV_OK);
+    if (faulted && (app_devices.mpu_status == DEV_OK))
+    {
+      fake_sensors_mpu_set_accel(MPU6050_ACCEL_LSB_PER_G, 0, 0);
+    }
+  }
+  TEST_ASSERT_TRUE(faulted);
+  TEST_ASSERT_EQUAL(DEV_OK, app_devices.mpu_status);
+  TEST_ASSERT_TRUE(SlSecurity_MpuHealthy());
+
+  while (SmartLock_TakeEvent(&ev))
+  {
+    tamper += (ev.type == SL_EV_TAMPER) ? 1U : 0U;
+  }
+  TEST_ASSERT_EQUAL_UINT(0U, tamper);
+
+  /* А справжній удар після відновлення — виявляється */
+  fake_sensors_mpu_set_accel(MPU6050_ACCEL_LSB_PER_G, MPU6050_ACCEL_LSB_PER_G / 2, 0);
+  (void)SmartLock_SecurityPoll(t, false, false);
+  TEST_ASSERT_TRUE(SmartLock_TakeEvent(&ev));
+  TEST_ASSERT_EQUAL(SL_EV_TAMPER, ev.type);
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -534,5 +726,12 @@ int main(void)
   RUN_TEST(test_sensor_timing_all_present);
   RUN_TEST(test_sensor_timing_reports_failures);
   RUN_TEST(test_selftest_command);
+  RUN_TEST(test_sensor_service_healthy_mpu_is_one_read_per_period);
+  RUN_TEST(test_sensor_service_recovers_mpu_after_power_loss);
+  RUN_TEST(test_sensor_service_absent_mpu_reports_once);
+  RUN_TEST(test_sensor_service_bus_error_then_recovery);
+  RUN_TEST(test_sensor_service_without_init_does_nothing);
+  RUN_TEST(test_sensor_service_reports_i2c_recovery);
+  RUN_TEST(test_sensor_service_no_false_tamper_after_recovery);
   return UNITY_END();
 }
