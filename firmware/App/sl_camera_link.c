@@ -173,6 +173,13 @@ void SmartLock_OnCameraResult(uint32_t event_id, uint32_t frame_id, sl_cam_statu
     (void)flush(s);
 }
 
+bool SmartLock_CameraLinkAwaiting(uint32_t event_id)
+{
+    const camlink_slot_t *s = find_slot(event_id);
+
+    return (s != NULL) && !s->resolved;
+}
+
 bool SmartLock_CameraLinkPoll(uint32_t now_ms)
 {
     bool changed = false;

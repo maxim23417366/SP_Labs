@@ -26,12 +26,16 @@
   *            - подія не потрапила в журнал (ID = 0, FIFO повна) — кадр НЕ
   *              запитується: прив'язати його ні до чого (skipped_no_id).
   *
-  *          Модуль камери (I07–I09, Непорожній) ще не існує. У docs/tasks.md
+  *          Модуль камери (I07–I09, Непорожній) ще не в main. У docs/tasks.md
   *          запит названо Camera_Request(id), результат — SmartLock_OnCameraResult.
   *          При інтеграції (I10) камера визначає СИЛЬНУ SmartLock_CameraRequest()
   *          (обгортка над Camera_Request); слабка заглушка нижче відкидається
   *          лінкером — без правок FSM. SmartLock_OnCameraResult() і решта цього
   *          модуля НЕ слабкі: їх викликає камера, замінювати їх не треба.
+  *
+  *          Кадр у W25Q64 (H10, frames.c) пише SmartLock_CameraStoreFrame()
+  *          (sl_camera_frames.h): заголовок кадру отримує event_seq = event_id, а
+  *          результат закриває запит тут — камера лише захоплює кадр у буфер.
   *
   *          Усе — лише з головного циклу, без очікувань. Документ для власників
   *          блокерів: docs/lab_3/journal-camera-integration.md.
@@ -95,6 +99,11 @@ bool SmartLock_CameraRequest(uint32_t event_id);
  * Невідомий status трактується як SL_CAM_ERR_CAPTURE. Допустимо викликати і
  * синхронно з SmartLock_CameraRequest(). */
 void SmartLock_OnCameraResult(uint32_t event_id, uint32_t frame_id, sl_cam_status_t status);
+
+/* true — запит event_id прийнято і результату ще немає (не тайм-аут, не дубль).
+ * Камера може перевірити це перед довгим записом кадру; SmartLock_CameraStoreFrame()
+ * (sl_camera_frames.h) робить це сама. */
+bool SmartLock_CameraLinkAwaiting(uint32_t event_id);
 
 /* ---- для FSM ---------------------------------------------------------------- */
 
