@@ -125,6 +125,7 @@ uint8_t Storage_FlashType(sl_log_type_t type)
     case SL_LOG_DOOR_OPEN:      return FLASH_LOG_DOOR_OPEN;
     case SL_LOG_DOOR_CLOSED:    return FLASH_LOG_DOOR_CLOSED;
     case SL_LOG_PHOTO:          return FLASH_LOG_PHOTO_SAVED;
+    case SL_LOG_PHOTO_ERR:      return FLASH_LOG_PHOTO_FAILED;
     default:                    return 0U;
   }
 }
@@ -259,6 +260,13 @@ dev_status_t Storage_Append(const sl_log_rec_t *rec)
      * arg = seq події MOTION / TAMPER, frame_id = номер кадру */
     e.arg = rec->ref;
     e.frame_id = rec->arg;
+  }
+  else if (rec->type == (uint8_t)SL_LOG_PHOTO_ERR)
+  {
+    /* sl_journal (K08): arg = причина (sl_cam_status_t), ref = seq події;
+     * flash-layout.md, розділ 3.2: arg = seq події, arg2 = код причини */
+    e.arg = rec->ref;
+    e.arg2 = rec->arg;
   }
   else
   {

@@ -254,6 +254,7 @@ static void test_flash_type_mapping(void)
   TEST_ASSERT_EQUAL_HEX8(FLASH_LOG_DOOR_OPEN, Storage_FlashType(SL_LOG_DOOR_OPEN));
   TEST_ASSERT_EQUAL_HEX8(FLASH_LOG_DOOR_CLOSED, Storage_FlashType(SL_LOG_DOOR_CLOSED));
   TEST_ASSERT_EQUAL_HEX8(FLASH_LOG_PHOTO_SAVED, Storage_FlashType(SL_LOG_PHOTO));
+  TEST_ASSERT_EQUAL_HEX8(FLASH_LOG_PHOTO_FAILED, Storage_FlashType(SL_LOG_PHOTO_ERR));   /* K08 */
   TEST_ASSERT_EQUAL_HEX8(0U, Storage_FlashType(SL_LOG_NONE));
   TEST_ASSERT_EQUAL_HEX8(0U, Storage_FlashType(SL_LOG_COUNT));
 }
@@ -268,11 +269,13 @@ static void test_photo_and_ref_fields(void)
   ev = SmartLock_LogEvent(SL_LOG_MOTION, 0U);
   (void)SmartLock_LogEventRef(SL_LOG_PHOTO, 7U, ev);          /* кадр 7 до події ev */
   (void)SmartLock_LogEventRef(SL_LOG_WRONG_CODE, 4U, 99U);    /* ref іде в arg2 */
+  (void)SmartLock_LogEventRef(SL_LOG_PHOTO_ERR, 4U, ev);      /* K08: причина 4 до події ev */
   (void)poll_all();
 
   o = cmd("d");
   TEST_ASSERT_NOT_NULL(strstr(o, "type=PHOTO_SAVED,arg=2,arg2=0,frame=7,crc=ok\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "type=WRONG_CODE,arg=4,arg2=99,frame=none,crc=ok\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "type=PHOTO_FAILED,arg=2,arg2=4,frame=none,crc=ok\r\n"));
 }
 
 static void test_seq_gap_allowed_and_stale_seq_rejected(void)

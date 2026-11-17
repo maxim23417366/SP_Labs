@@ -11,8 +11,9 @@
   *          черги (event_queue.h) у порядку надходження, потім перевіряє час
   *          відліку. Логіка не торкається GPIO: виходи — лише через вузькі
   *          функції Platform_ServoSetPulseUs() (засувка), SmartLock_LogEvent()
-  *          (журнал, sl_journal.h) і SmartLock_CameraRequest() (фото,
-  *          sl_camera_link.h).
+  *          (журнал, sl_journal.h) і SmartLock_CameraLinkStart() (фото,
+  *          sl_camera_link.h). Кожен прохід також викликає SmartLock_CameraLinkPoll()
+  *          (тайм-аут результату камери, повтор запису в журнал).
   *
   *          Реакція на події:
   *            UNLOCKED   LOCK_REQUEST → EXIT_DELAY, журнал LOCK_ACTIVATED, старт 15 с
@@ -20,7 +21,10 @@
   *                       після 15 с: двері ЗАЧИНЕНІ → серво LOCK, LOCKED, журнал LOCKED;
   *                       інакше — лишаємось в EXIT_DELAY (серво UNLOCK) і чекаємо
   *                       DOOR_CLOSED без нового відліку (FR-13)
-  *            LOCKED     MOTION / TAMPER → журнал + запит фото (FR-05..07);
+  *            LOCKED     MOTION / TAMPER → журнал + запит РІВНО ОДНОГО кадру з ID цього
+  *                       запису (FR-05..07); результат — PHOTO або PHOTO_ERR у журналі
+  *                       (sl_camera_link.h). FORCED_OPEN, WRONG_CODE, ENV_WARNING —
+  *                       без фото;
   *                       DOOR_OPEN → журнал FORCED_OPEN, стан LOCKED, без фото (FR-13);
   *                       CODE_OK → серво UNLOCK, UNLOCKED, журнал ACCESS_GRANTED, UNLOCKED;
   *                       CODE_WRONG → журнал WRONG_CODE, стан LOCKED (FR-10)
@@ -93,6 +97,6 @@ uint32_t    SmartLock_FsmExitDelayRemainingMs(uint32_t now_ms);
 bool        SmartLock_FsmWaitingDoor(void);
 
 uint32_t    SmartLock_FsmIgnored(void);          /* події, що в поточному стані не мають сенсу */
-uint32_t    SmartLock_FsmCameraRejected(void);   /* SmartLock_CameraRequest() повернула false */
+uint32_t    SmartLock_FsmCameraRejected(void);   /* камера не прийняла запит (подія в журналі була) */
 
 #endif /* SL_FSM_H */
