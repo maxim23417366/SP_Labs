@@ -13,6 +13,7 @@
 
 #include "app_config.h"
 #include "app_tasks.h"
+#include "cam_test.h"
 #include "evt.h"
 #include "perf.h"
 #include "stats.h"
@@ -41,6 +42,7 @@ static void help(void)
 {
     printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | HELP\r\n");
     printf("#      LOG ERASE (journal W25Q64)\r\n");
+    printf("#      CAM TEST (OV7670: init + 1 frame QQVGA RGB565)\r\n");
 }
 
 void Cmd_Execute(const char *line)
@@ -78,6 +80,10 @@ void Cmd_Execute(const char *line)
     else if (strcmp(line, "HELP") == 0)
     {
         help();
+    }
+    else if (CamTest_LineCommand(line))
+    {
+        /* I07: камера OV7670 — init і один кадр (cam_test.c) */
     }
     else if (Storage_LineCommand(line))
     {

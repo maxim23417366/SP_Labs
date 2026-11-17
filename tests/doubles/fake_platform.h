@@ -44,6 +44,8 @@ typedef struct
    * кожен виклик. Так тест задає «тривалість» операції між двома зчитуваннями. */
   uint32_t     cycles_step;
   uint32_t     cycles_calls;
+  uint32_t     cycles;            /* ЛР3 (I07): такти, які додає модель пристрою (fake_dvp) */
+  uint32_t     cpu_hz;            /* ЛР3 (I07): Platform_CpuHz(); 0 — 1 МГц (1 такт = 1 мкс) */
 
   uint8_t      probe_level[PLATFORM_PROBE_COUNT];    /* ЛР3 (I05): PROBE_ON/OFF — поточний рівень каналу */
   uint32_t     probe_rises[PLATFORM_PROBE_COUNT];    /* скільки разів канал піднімався в 1 */

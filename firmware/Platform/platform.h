@@ -10,6 +10,7 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "dev_bus.h"
@@ -166,5 +167,44 @@ int Platform_UartGetChar(void);
 
 /* Вмикає/вимикає періодичний трафік ЛР1 (I2C + JEDEC кожні 500 мс). */
 void Platform_SetLoopTraffic(int on);
+
+/* ---- камера OV7670: програмне захоплення кадру через DVP GPIO ------------------------
+ * STM32F411 не має DCMI: байти читаються з GPIOC (D0..D7 = PC0..PC7, VSYNC = PC8,
+ * HREF = PC10) за фронтом PCLK (PA10). Виклик БЛОКУЄ процесор на весь кадр —
+ * це свідомий предмет вимірювань ЛР3 (docs/camera.md). */
+typedef enum
+{
+  PLATFORM_CAM_OK = 0,
+  PLATFORM_CAM_ERR_ARG,
+  PLATFORM_CAM_ERR_OVERFLOW,        /* буфер менший за кадр */
+  PLATFORM_CAM_ERR_VSYNC_TIMEOUT,   /* немає кадрової синхронізації */
+  PLATFORM_CAM_ERR_HREF_TIMEOUT,    /* лінія не почалась вчасно */
+  PLATFORM_CAM_ERR_PCLK_TIMEOUT,    /* PCLK не тактує */
+  PLATFORM_CAM_ERR_SHORT_FRAME      /* хоча б одна лінія коротша за очікувану */
+} platform_cam_status_t;
+
+typedef struct
+{
+  uint16_t width;
+  uint16_t height;
+  uint8_t  bytes_per_pixel;
+  uint8_t  irq_lock_per_line;   /* 1 — переривання маскуються на час однієї лінії */
+  uint32_t vsync_timeout_us;    /* очікування кожного фронту VSYNC */
+  uint32_t vsync_min_us;        /* коротший імпульс VSYNC — завада, а не початок кадру (0 — без фільтра) */
+  uint32_t href_timeout_us;     /* очікування початку кожної лінії */
+  uint32_t pclk_spin_max;       /* ітерацій очікування фронту PCLK */
+} platform_cam_cfg_t;
+
+typedef struct
+{
+  uint32_t bytes;          /* скільки байт пікселів прийнято */
+  uint16_t lines;
+  uint16_t short_lines;
+  uint16_t vsync_glitches; /* відкинуто коротких імпульсів VSYNC (завади, лог 15 ЛР3) */
+  uint32_t cycles;         /* тривалість захоплення, такти DWT */
+} platform_cam_result_t;
+
+platform_cam_status_t Platform_CameraCapture(const platform_cam_cfg_t *cfg, uint8_t *buf,
+                                             size_t cap, platform_cam_result_t *res);
 
 #endif /* PLATFORM_H */

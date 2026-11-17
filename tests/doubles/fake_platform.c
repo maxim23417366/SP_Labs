@@ -48,7 +48,8 @@ uint32_t Platform_Millis(void)
 uint32_t Platform_Cycles(void)
 {
   fake_platform.cycles_calls++;
-  return (fake_platform.now_ms * 1000U) + (fake_platform.cycles_calls * fake_platform.cycles_step);
+  return (fake_platform.now_ms * 1000U) + (fake_platform.cycles_calls * fake_platform.cycles_step) +
+         fake_platform.cycles;
 }
 
 uint32_t Platform_CyclesToUs(uint32_t cycles)
@@ -69,10 +70,10 @@ void Platform_ProbeWrite(unsigned ch, unsigned level)
   fake_platform.probe_level[ch] = (uint8_t)(level != 0U);
 }
 
-/* 1 такт = 1 мкс, як і в Platform_Cycles() вище */
+/* 1 такт = 1 мкс, як і в Platform_Cycles() вище; тест камери (I07) задає 96 МГц */
 uint32_t Platform_CpuHz(void)
 {
-  return 1000000U;
+  return (fake_platform.cpu_hz != 0U) ? fake_platform.cpu_hz : 1000000U;
 }
 
 void Platform_BringUp(void)
