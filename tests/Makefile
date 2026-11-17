@@ -43,13 +43,13 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 
 # Тести App/ (перевірки стенда і команди без обладнання): кожен лінкується з усім App/,
 # усіма драйверами і fake_platform (імітація platform.h)
-# ЛР3 (K02–K07): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
+# ЛР3 (K02–K09): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
 # ЛР3 (I04): evt — подієві мітки EVT; (I07): cam_test — CAM TEST, fake_camera
 APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd evt cam_test \
              sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env storage storage_ops frames \
              sl_camera_frames
 APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env storage frames cam_test \
-             sl_camera_frames
+             sl_camera_frames sl_integration
 APP_DBLS  := fake_platform fake_sensors fake_camera
 APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
