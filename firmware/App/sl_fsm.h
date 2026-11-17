@@ -24,7 +24,8 @@
   *            LOCKED     MOTION / TAMPER → журнал + запит РІВНО ОДНОГО кадру з ID цього
   *                       запису (FR-05..07); результат — PHOTO або PHOTO_ERR у журналі
   *                       (sl_camera_link.h). FORCED_OPEN, WRONG_CODE, ENV_WARNING —
-  *                       без фото;
+  *                       без фото; MOTION ще й дає EVT alarm_triggered (I04, пара
+  *                       pir_trig → alarm_triggered, docs/metrics/metrics-spec.md §3.3);
   *                       DOOR_OPEN → журнал FORCED_OPEN, стан LOCKED, без фото (FR-13);
   *                       CODE_OK → серво UNLOCK, UNLOCKED, журнал ACCESS_GRANTED, UNLOCKED;
   *                       CODE_WRONG → журнал WRONG_CODE, стан LOCKED (FR-10)

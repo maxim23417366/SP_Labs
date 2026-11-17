@@ -13,6 +13,7 @@
 
 #include "app_config.h"
 #include "event_queue.h"
+#include "evt.h"
 #include "platform.h"
 #include "sl_camera_link.h"
 #include "sl_journal.h"
@@ -119,13 +120,20 @@ static void on_door(sl_door_t door, uint32_t arg)
     }
 }
 
-/* Охоронна подія: лише в LOCKED — запис журналу і кадр з посиланням на нього */
+/* Охоронна подія: лише в LOCKED — запис журналу і кадр з посиланням на нього.
+ * MOTION у LOCKED — рішення про тривогу: EVT alarm_triggered (I04, пара
+ * pir_trig → alarm_triggered, docs/metrics/metrics-spec.md §3.3). Для TAMPER
+ * специфікація пари не задає — лише mpu_int → mpu_handled з app_tasks.c. */
 static void on_security(sl_log_type_t type, uint32_t arg, uint32_t now_ms)
 {
     if (s_fsm.state != SL_STATE_LOCKED)
     {
         s_fsm.ignored++;
         return;
+    }
+    if (type == SL_LOG_MOTION)
+    {
+        Evt_Log("alarm_triggered");
     }
     out_photo(out_log(type, arg), now_ms);
 }

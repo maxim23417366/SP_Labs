@@ -23,6 +23,9 @@
 #include "app.h"
 #include "app_config.h"
 #include "event_queue.h"
+#include "evt.h"
+#include <stdio.h>
+#include <unistd.h>
 #include "fake_i2c.h"
 #include "fake_platform.h"
 #include "fake_sensors.h"
@@ -633,6 +636,83 @@ static void test_b1_edge_on_release_gives_no_extra_event(void)
   expect_no_events();
 }
 
+/* ---- I04: EVT code_key_press → code_key_handled ----------------------------------- */
+static char evt_out[4096];
+
+static const char *evt_drain(void)
+{
+  FILE *tmp = tmpfile();
+  int saved;
+  size_t n;
+
+  evt_out[0] = '\0';
+  if (tmp == NULL) { return evt_out; }
+  fflush(stdout);
+  saved = dup(1);
+  dup2(fileno(tmp), 1);
+  (void)Evt_Flush(1000U);
+  fflush(stdout);
+  dup2(saved, 1);
+  close(saved);
+  rewind(tmp);
+  n = fread(evt_out, 1U, sizeof(evt_out) - 1U, tmp);
+  evt_out[n] = '\0';
+  fclose(tmp);
+  return evt_out;
+}
+
+static unsigned long long evt_time(const char *o, const char *name)
+{
+  char key[64];
+  const char *p;
+  unsigned long long t = 0U;
+
+  (void)snprintf(key, sizeof(key), "name=%s\r\n", name);
+  p = strstr(o, key);
+  if (p == NULL) { return 0U; }
+  while ((p > o) && (p[-1] != '\n')) { p--; }
+  (void)sscanf(p, "EVT t_us=%llu", &t);
+  return t;
+}
+
+static void test_code_key_evt_pair_measures_first_edge_to_accept(void)
+{
+  const char *o;
+  unsigned long long t_press;
+  unsigned long long t_handled;
+
+  Evt_Init();
+  start_idle();
+  (void)evt_drain();
+  /* дребезг: короткий імпульс, що не став натисканням — пари немає */
+  press(k_btn[0]);
+  (void)poll_at(g_now + STEP, false);
+  release(k_btn[0]);
+  (void)run(ACCEPT_MS);
+  o = evt_drain();
+  TEST_ASSERT_NULL(strstr(o, "code_key"));
+
+  tap(k_btn[0]);
+  o = evt_drain();
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=code_key_press\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=code_key_handled\r\n"));
+  TEST_ASSERT_TRUE(strstr(o, "name=code_key_press") < strstr(o, "name=code_key_handled"));
+  t_press = evt_time(o, "code_key_press");
+  t_handled = evt_time(o, "code_key_handled");
+  /* перший сирий фронт → прийняття: не менше антидребезгу, не більше за нього + період */
+  TEST_ASSERT_TRUE(t_handled >= t_press + (unsigned long long)TBD_BTN_DEBOUNCE_MS * 1000U);
+  TEST_ASSERT_TRUE(t_handled <= t_press + (unsigned long long)(TBD_BTN_DEBOUNCE_MS + STEP) * 1000U + 1000U);
+
+  /* акорд відкидається — без пари; B1 пару не пише (її веде I04 через EXTI) */
+  press(k_btn[1] | k_btn[2]);
+  (void)run(ACCEPT_MS);
+  release(k_btn[1] | k_btn[2]);
+  (void)run(ACCEPT_MS);
+  tap(PLATFORM_IN_LOCK);
+  o = evt_drain();
+  TEST_ASSERT_NULL(strstr(o, "code_key"));
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -671,5 +751,6 @@ int main(void)
   RUN_TEST(test_b1_edge_while_released_gives_nothing);
   RUN_TEST(test_b1_edge_restarts_debounce);
   RUN_TEST(test_b1_edge_on_release_gives_no_extra_event);
+  RUN_TEST(test_code_key_evt_pair_measures_first_edge_to_accept);
   return UNITY_END();
 }

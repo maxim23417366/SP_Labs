@@ -18,14 +18,20 @@
   *          K08: кожна MOTION / TAMPER у LOCKED завершується рівно одним записом
   *          PHOTO або PHOTO_ERR (ref = ID події): камера зайнята, тайм-аут,
   *          невідомий результат, переповнення журналу.
+  *
+  *          I04: MOTION, прийнята в LOCKED, дає EVT alarm_triggered (пара
+  *          pir_trig → alarm_triggered, docs/metrics/metrics-spec.md §3.3).
   */
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "unity.h"
 
 #include "app.h"
 #include "app_tasks.h"
 #include "event_queue.h"
+#include "evt.h"
 #include "fake_i2c.h"
 #include "fake_platform.h"
 #include "fake_sensors.h"
@@ -853,6 +859,68 @@ static void test_bmp180_measurements_create_no_journal_records(void)
   TEST_ASSERT_EQUAL(SL_STATE_LOCKED, SmartLock_FsmState());
 }
 
+/* ---- I04: alarm_triggered ------------------------------------------------------------ */
+static char evt_out[8192];
+
+/* Надрукувати буфер EVT (Evt_Flush) і повернути вивід */
+static const char *evt_drain(void)
+{
+  FILE *tmp = tmpfile();
+  int saved;
+  size_t n;
+
+  evt_out[0] = '\0';
+  if (tmp == NULL) { return evt_out; }
+  fflush(stdout);
+  saved = dup(1);
+  dup2(fileno(tmp), 1);
+  (void)Evt_Flush(1000U);
+  fflush(stdout);
+  dup2(saved, 1);
+  close(saved);
+  rewind(tmp);
+  n = fread(evt_out, 1U, sizeof(evt_out) - 1U, tmp);
+  evt_out[n] = '\0';
+  fclose(tmp);
+  return evt_out;
+}
+
+static unsigned count_str(const char *hay, const char *needle)
+{
+  unsigned n = 0U;
+
+  for (const char *p = strstr(hay, needle); p != NULL; p = strstr(p + 1, needle)) { n++; }
+  return n;
+}
+
+static void test_alarm_triggered_only_for_motion_accepted_in_locked(void)
+{
+  const char *o;
+
+  Evt_Init();
+  post(SL_EV_MOTION, 0U);            /* UNLOCKED: тривоги немає */
+  (void)step(100U);
+  post(SL_EV_LOCK_REQUEST, SL_LOCK_REQ_T_NOW);
+  (void)step(200U);
+  post(SL_EV_MOTION, 0U);            /* EXIT_DELAY: теж немає */
+  (void)step(300U);
+  o = evt_drain();
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=fsm_motion\r\n"));   /* подію FSM забрала (I04) */
+  TEST_ASSERT_NULL(strstr(o, "alarm_triggered"));
+
+  go_locked(1000U);
+  (void)evt_drain();
+  post(SL_EV_MOTION, 0U);
+  post(SL_EV_TAMPER, 5U);            /* для TAMPER пари в metrics-spec немає */
+  (void)step(30000U);
+  o = evt_drain();
+  TEST_ASSERT_EQUAL_UINT(1U, count_str(o, "name=alarm_triggered\r\n"));
+  /* порядок: FSM забрала MOTION → рішення про тривогу → забрала TAMPER */
+  TEST_ASSERT_TRUE(strstr(o, "name=fsm_motion") < strstr(o, "name=alarm_triggered"));
+  TEST_ASSERT_TRUE(strstr(o, "name=alarm_triggered") < strstr(o, "name=fsm_tamper"));
+  expect_log(0U, SL_LOG_MOTION, 0U);
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -893,5 +961,6 @@ int main(void)
   RUN_TEST(test_fsm_init_clears_pending_camera_requests);
   RUN_TEST(test_every_security_event_in_a_series_ends_with_one_record);
   RUN_TEST(test_bmp180_measurements_create_no_journal_records);
+  RUN_TEST(test_alarm_triggered_only_for_motion_accepted_in_locked);
   return UNITY_END();
 }

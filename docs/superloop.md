@@ -96,7 +96,8 @@ EVT t_us=12000100 name=mark_1
 
 Формат і імена — `docs/metrics-spec.md` §3.3: регулярний вираз `^EVT t_us=(\d+) name=(\S+)$`,
 тому число, де воно потрібне, — суфікс імені (`mark_42`), а не окреме поле.
-`alarm_triggered` (рішення про тривогу після `pir_handled`) логує FSM — це K-модулі.
+`alarm_triggered` (рішення про тривогу після `pir_handled`) логує FSM (`sl_fsm.c`, K07): лише для MOTION,
+прийнятої в стані LOCKED (`docs/lab_3/journal-camera-integration.md`).
 
 **Затримка подія → реакція** (`STAT name=btn_b1_lat|pir_lat|mpu_lat`, M-03): ISR
 записує такт DWT першого фронту (повторні до обробки — рядок `OVR name=... count=`, це
