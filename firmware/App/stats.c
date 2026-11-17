@@ -11,6 +11,7 @@
 
 #include "app_config.h"
 #include "app_tasks.h"
+#include "cam_test.h"
 #include "cmd.h"
 #include "event_queue.h"
 #include "evt.h"
@@ -81,6 +82,7 @@ void Stats_Print(bool raw)
                (unsigned long)Platform_EventOverruns(l->ev));
     }
 
+    print_stat(CamTest_Stat(), raw);   /* I07: тривалість захоплення кадру (CAM TEST) */
     print_stat(SmartLock_EventsWaitStat(), raw);
     printf("EVQ len=%u pending=%u max_depth=%u posted=%lu dropped=%lu\r\n", (unsigned)TBD_EVQ_LEN,
            SmartLock_EventsPending(), SmartLock_EventsMaxDepth(),
@@ -96,6 +98,7 @@ void Stats_Reset(void)
 {
     Sched_ResetStats();
     AppTasks_ResetLatency();
+    CamTest_ResetStats();
     SmartLock_EventsResetStats();
 }
 

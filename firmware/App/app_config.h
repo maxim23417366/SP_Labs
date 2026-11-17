@@ -35,6 +35,24 @@
 #define TBD_LOAD_PRINT             1U        /* I03: рядок LOAD pct= раз на секунду (0 — вимкнено) */
 #define CMD_LINE_MAX               48U       /* I03: довжина рядкової команди (STATS, PING ...) */
 
+/* ---- камера OV7670 (I07, docs/camera.md) ---------------------------------------- */
+#define CAMERA_WIDTH               160U      /* QQVGA */
+#define CAMERA_HEIGHT              120U
+#define CAMERA_BPP                 2U        /* RGB565 */
+#define CAMERA_FRAME_BYTES         (CAMERA_WIDTH * CAMERA_HEIGHT * CAMERA_BPP)   /* 38 400 */
+
+/* CLKRC[5:0]: f_int = 24 МГц / (CLKRC + 1). 0x0F → 1,5 МГц, кадр VGA-таймінгу
+ * 784·510·2 / 1,5 МГц ≈ 0,53 с. Виміряти в H14; швидше — ризик не встигнути за PCLK. */
+#define TBD_CAMERA_CLKRC           0x0FU
+#define TBD_CAMERA_VSYNC_TIMEOUT_US 1500000U /* ≈ 3 кадри при CLKRC = 0x0F */
+#define TBD_CAMERA_HREF_TIMEOUT_US  100000U
+/* Мінімальна ширина імпульсу VSYNC. За datasheet імпульс = 3 лінії (3 × 784 t_P);
+ * при CLKRC = 0x0F і RGB565 це ≈ 3,1 мс. 1 мс — третина очікуваного, з запасом
+ * проти завад (лог 15 ЛР3). Перевіряється в H14 записом PulseView. */
+#define TBD_CAMERA_VSYNC_MIN_US     1000U
+#define TBD_CAMERA_PCLK_SPIN_MAX    20000U
+#define CAMERA_IRQ_LOCK_PER_LINE   1U
+
 /* Черга подій до FSM (event_queue.h). Має бути більшою за EVQ max_depth у S1–S3 */
 #define TBD_EVQ_LEN                8U
 
