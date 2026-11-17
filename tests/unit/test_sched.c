@@ -20,6 +20,7 @@
 #include "app_tasks.h"
 #include "cmd.h"
 #include "event_queue.h"
+#include "evt.h"
 #include "fake_i2c.h"
 #include "fake_platform.h"
 #include "perf.h"
@@ -313,18 +314,9 @@ static void test_task_probe_wraps_only_its_task(void)
   Platform_ProbeWrite(PLATFORM_PROBE_COUNT, 1U);                   /* неіснуючий канал ігнорується */
 }
 
-static void test_react_probe_only_when_fsm_has_events(void)
-{
-  AppTasks_Init();
-  Sched_RunOnce();
-  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);   /* черга порожня */
-  (void)SmartLock_PostEvent(SL_EV_MOTION, 0U);
-  Sched_RunOnce();
-  TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
-  TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_REACT]);
-}
-
 /* Фізичний фронт → buttons/security (опитування) → черга → fsm з імпульсом PB1.
+ * I04: на платі той самий фронт дає і переривання EXTI — тест подає його через
+ * fake_platform_raise_event(), PB1 (REACT) — у момент, коли задача забирає подію.
  * ЛР3: хуки сильні (sl_buttons, sl_security): B1 стає подією лише після антидребезгу
  * (TBD_BTN_DEBOUNCE_MS), PIR — з наступного після базового зразка опитування, геркон
  * один раз повідомляє початковий стан. Тому проходи йдуть з кроком часу. */
@@ -345,6 +337,8 @@ static void test_input_edges_reach_fsm_with_react_pulse(void)
 
   fake_platform.inputs &= ~PLATFORM_IN_LOCK;   /* B1 натиснули */
   fake_platform.inputs |= PLATFORM_IN_PIR;     /* PIR спрацював */
+  fake_platform_raise_event(PLATFORM_EV_LOCK_B1, 15000U);   /* EXTI цих фронтів (I04) */
+  fake_platform_raise_event(PLATFORM_EV_PIR, 15000U);
   for (uint32_t t = 20U; t <= 200U; t += 10U)  /* > антидребезг B1 і геркона */
   {
     fake_platform.now_ms = t;
@@ -434,9 +428,13 @@ static void test_mem_task_prints_stack_heap_only_on_new_maximum(void)
 
   fake_platform.stack_used = 712U;                      /* сценарій дійшов глибше */
   fake_platform.now_ms = 2000U;
-  TEST_ASSERT_NOT_NULL(strstr(capture_pass(),
-                       "STACK reserved=1024 used=712 free=312\r\n"
-                       "HEAP arena=1460 used=0 free=0\r\n"));
+  {
+    const char *o = capture_pass();
+
+    TEST_ASSERT_NOT_NULL(strstr(o, "STACK reserved=1024 used=712 free=312\r\n"
+                                   "HEAP arena=1460 used=0 free=0\r\n"));
+    TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=2000000 name=mem_peak\r\n"));   /* I04: момент максимуму */
+  }
 
   fake_platform.heap.arena = 2000U;                     /* heap теж стежиться */
   fake_platform.now_ms = 3000U;
@@ -500,7 +498,7 @@ static void test_stats_prints_every_metric_line(void)
   TEST_ASSERT_NOT_NULL(strstr(o, "POLL name=uart "));
   TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=evq_wait n=0 "));
   TEST_ASSERT_NOT_NULL(strstr(o, "EVQ len=8 pending=0 max_depth=0 posted=0 dropped=0\r\n"));
-  TEST_ASSERT_NOT_NULL(strstr(o, "UART cmd_overflow=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "UART rx_overrun=0 cmd_overflow=0\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "STACK reserved=1024 used=0 free=1024\r\nHEAP arena=0 "));
   TEST_ASSERT_NOT_NULL(strstr(o, "STATS_END\r\n"));
 
@@ -526,7 +524,7 @@ static void test_line_commands(void)
   o = capture_cmd("MEM");
   TEST_ASSERT_EQUAL_STRING("STACK reserved=1024 used=0 free=1024\r\nHEAP arena=0 used=0 free=0\r\n", o);
   o = capture_cmd("HELP");
-  TEST_ASSERT_NOT_NULL(strstr(o, "STATS [RAW|RESET] | MEM | PING <n> | HELP"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | HELP"));
   o = capture_cmd("FOO");
   TEST_ASSERT_EQUAL_STRING("# unknown command 'FOO', HELP for list\r\n", o);
 }
@@ -579,6 +577,157 @@ static void test_uart_routes_lines_and_lr2_letters(void)
   TEST_ASSERT_EQUAL_UINT32(1U, Cmd_LineOverflows());
 }
 
+/* ---- I04: події з ISR → LAT, EVT, імпульс PB1, черга FSM --------------------------- */
+static void test_react_probe_on_event_take(void)
+{
+  AppTasks_Init();
+  fake_platform.now_ms = 10U;
+  Sched_RunOnce();
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);   /* подій немає */
+  fake_platform_raise_event(PLATFORM_EV_LOCK_B1, 10000U);
+  fake_platform.now_ms = 20U;
+  Sched_RunOnce();                                     /* buttons забирає подію */
+  TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);
+  TEST_ASSERT_EQUAL_UINT8(0U, fake_platform.probe_level[PLATFORM_PROBE_REACT]);
+}
+
+/* Черга FSM і кільце EVT порожні: у наступних проходах друкується лише те, що
+ * породив сам тест, а не модулі sl_* (K/H-картки) з попередніх проходів. */
+static void quiesce(void)
+{
+  sl_event_t ev;
+
+  while (SmartLock_TakeEvent(&ev))
+  {
+  }
+  Evt_Init();
+}
+
+/* Фронт B1 і PIR в ISR → buttons/security забирають (LAT, EVT, PB1) → хуки.
+ * Що хук робить з фронтом (антидребезг K03, рішення FSM K05), тут не перевіряється —
+ * це тести sl_buttons / sl_security / sl_fsm і test_input_edges_reach_fsm_with_react_pulse. */
+static void test_isr_events_give_latency_evt_and_reach_fsm(void)
+{
+  const char *o;
+  const perf_latency_t *b1;
+
+  AppTasks_Init();
+  fake_platform.now_ms = 10U;
+  Sched_RunOnce();
+
+  fake_platform_raise_event(PLATFORM_EV_LOCK_B1, 13000U);   /* фронт у 13 мс */
+  fake_platform_raise_event(PLATFORM_EV_LOCK_B1, 13500U);   /* дребезг до обробки */
+  fake_platform_raise_event(PLATFORM_EV_PIR, 15000U);
+  fake_platform.now_ms = 20U;                          /* buttons (10 мс) і security (20 мс) */
+  quiesce();
+  o = capture_pass();                                  /* у цьому ж проході uart друкує 2 EVT */
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=13000 name=btn_b1_press\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=20000 name=btn_b1_handled\r\n"));
+  TEST_ASSERT_EQUAL_UINT32(2U, fake_platform.probe_rises[PLATFORM_PROBE_REACT]);   /* B1 і PIR */
+
+  b1 = AppTasks_Latency(0);
+  TEST_ASSERT_EQUAL_STRING("btn_b1_lat", b1->st.name);
+  TEST_ASSERT_EQUAL_UINT32(1U, b1->st.count);
+  TEST_ASSERT_EQUAL_UINT32(7000U, b1->st.max);         /* 20 мс − 13 мс, 1 такт = 1 мкс */
+  TEST_ASSERT_EQUAL_UINT32(5000U, AppTasks_Latency(1)->st.max);
+  TEST_ASSERT_EQUAL_UINT32(1U, Platform_EventOverruns(PLATFORM_EV_LOCK_B1));
+  TEST_ASSERT_NULL(AppTasks_Latency(3));
+  TEST_ASSERT_NULL(AppTasks_Latency(-1));
+
+  o = capture_pass();                                  /* наступний прохід: решта EVT */
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=15000 name=pir_trig\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=20000 name=pir_handled\r\n"));
+
+  /* момент, коли FSM забирає подію з черги, — EVT fsm_<подія> (event_queue.c);
+   * забирає тест, бо скільки подій за прохід бере FSM — справа K02 */
+  quiesce();
+  (void)SmartLock_PostEvent(SL_EV_LOCK_REQUEST, 0U);
+  (void)SmartLock_PostEvent(SL_EV_MOTION, 0U);
+  {
+    sl_event_t ev;
+
+    while (SmartLock_TakeEvent(&ev))
+    {
+    }
+  }
+  o = capture_pass();
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=fsm_lock_request\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=fsm_motion\r\n"));
+
+  o = capture_cmd("STATS");
+  /* metrics-spec §3.2: затримка — звичайний STAT; повторні фронти — OVR */
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=btn_b1_lat n=1 min_us=7000 avg_us=7000 max_us=7000\r\n"
+                                 "OVR name=btn_b1 count=1\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=pir_lat n=1 min_us=5000 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=mpu_lat n=0 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "OVR name=mpu count=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVTLOG pending="));
+  (void)capture_cmd("STATS RESET");
+  TEST_ASSERT_EQUAL_UINT32(0U, AppTasks_Latency(0)->st.count);
+}
+
+/* ---- I04: EVT — формат, 64-бітний час, кільцевий буфер ---------------------------- */
+static void test_evt_format_ring_and_drop(void)
+{
+  char line[96];
+  const char *o;
+
+  Evt_Init();
+  (void)Evt_Format(line, sizeof(line), 4294967296000ULL, "x", EVT_NOARG);
+  TEST_ASSERT_EQUAL_STRING("EVT t_us=4294967296000 name=x", line);   /* > 32 біт */
+  (void)Evt_Format(line, sizeof(line), 5U, "mark", 3U);
+  TEST_ASSERT_EQUAL_STRING("EVT t_us=5 name=mark_3", line);   /* без пробілу: \\S+ */
+
+  for (unsigned i = 0U; i < EVT_RING_LEN + 3U; i++)
+  {
+    Evt_LogArg("e", i);
+  }
+  TEST_ASSERT_EQUAL_UINT(EVT_RING_LEN, Evt_Pending());
+  TEST_ASSERT_EQUAL_UINT32(3U, Evt_Dropped());          /* старі записи цінніші */
+  {
+    FILE *tmp = tmpfile();
+    int saved;
+    size_t n;
+
+    TEST_ASSERT_NOT_NULL(tmp);
+    fflush(stdout);
+    saved = dup(1);
+    dup2(fileno(tmp), 1);
+    TEST_ASSERT_EQUAL_UINT(2U, Evt_Flush(2U));
+    fflush(stdout);
+    dup2(saved, 1);
+    close(saved);
+    rewind(tmp);
+    n = fread(out, 1U, sizeof(out) - 1U, tmp);
+    out[n] = '\0';
+    fclose(tmp);
+  }
+  o = out;
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=e_0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=e_1\r\n"));
+  TEST_ASSERT_EQUAL_UINT(EVT_RING_LEN - 2U, Evt_Pending());
+}
+
+static void test_mark_uart_cmd_evt_and_uart_overrun(void)
+{
+  const char *o;
+
+  AppTasks_Init();
+  fake_platform.now_ms = 5U;
+  /* рядок з UART: uart_cmd_rx → mark_42 → uart_cmd_tx (metrics-spec §3.3, M-03) */
+  fake_platform.uart_rx = "MARK 42\r";
+  fake_platform.uart_pos = 0U;
+  o = capture_pass();                          /* друк — 2 EVT за прохід */
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=5000 name=uart_cmd_rx\r\nEVT t_us=5000 name=mark_42\r\n"));
+  o = capture_pass();
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=5000 name=uart_cmd_tx\r\n"));
+
+  fake_platform.uart_overruns = 3U;
+  o = capture_cmd("STATS");
+  TEST_ASSERT_NOT_NULL(strstr(o, "UART rx_overrun=3 cmd_overflow=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "EVTLOG pending=0 dropped=0\r\n"));
+}
+
 static void test_uart_task_runs_lr2_commands(void)
 {
   AppTasks_Init();
@@ -604,8 +753,11 @@ int main(void)
   RUN_TEST(test_uart_task_runs_lr2_commands);
   RUN_TEST(test_loop_probe_pulses_every_pass);
   RUN_TEST(test_task_probe_wraps_only_its_task);
-  RUN_TEST(test_react_probe_only_when_fsm_has_events);
+  RUN_TEST(test_react_probe_on_event_take);
   RUN_TEST(test_input_edges_reach_fsm_with_react_pulse);
+  RUN_TEST(test_isr_events_give_latency_evt_and_reach_fsm);
+  RUN_TEST(test_evt_format_ring_and_drop);
+  RUN_TEST(test_mark_uart_cmd_evt_and_uart_overrun);
   RUN_TEST(test_mem_task_prints_stack_heap_only_on_new_maximum);
   RUN_TEST(test_perf_format_helpers);
   RUN_TEST(test_stats_prints_every_metric_line);

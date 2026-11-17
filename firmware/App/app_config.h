@@ -29,6 +29,8 @@
 
 /* ---- вимірювання ---------------------------------------------------------------- */
 #define PERF_CPU_WINDOW_MS         1000U     /* вікно CPU Load (методичка §5.1, приклад 4) */
+#define EVT_RING_LEN               64U       /* I04: EVT-записи в RAM до виводу */
+#define EVT_FLUSH_PER_PASS         2U        /* I04: рядків EVT за один прохід uart-задачі */
 #define UART_RX_PER_PASS           32U       /* символів за один прохід (решта — наступного разу) */
 #define TBD_LOAD_PRINT             1U        /* I03: рядок LOAD pct= раз на секунду (0 — вимкнено) */
 #define CMD_LINE_MAX               48U       /* I03: довжина рядкової команди (STATS, PING ...) */

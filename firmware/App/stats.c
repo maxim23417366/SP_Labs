@@ -7,11 +7,13 @@
 #include "stats.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "app_config.h"
 #include "app_tasks.h"
 #include "cmd.h"
 #include "event_queue.h"
+#include "evt.h"
 #include "perf.h"
 #include "platform.h"
 #include "sched.h"
@@ -68,11 +70,24 @@ void Stats_Print(bool raw)
         print_task(Sched_Task(i), raw);
     }
 
+    for (int i = 0; i < AppTasks_LatencyCount(); i++)
+    {
+        const perf_latency_t *l = AppTasks_Latency(i);
+
+        /* затримка — звичайний STAT (metrics-spec §3.2, M-03); повторні фронти до
+         * обробки — окремим рядком OVR, щоб рядок STAT лишився за регулярним виразом */
+        print_stat(&l->st, raw);
+        printf("OVR name=%.*s count=%lu\r\n", (int)(strlen(l->st.name) - 4U), l->st.name,
+               (unsigned long)Platform_EventOverruns(l->ev));
+    }
+
     print_stat(SmartLock_EventsWaitStat(), raw);
     printf("EVQ len=%u pending=%u max_depth=%u posted=%lu dropped=%lu\r\n", (unsigned)TBD_EVQ_LEN,
            SmartLock_EventsPending(), SmartLock_EventsMaxDepth(),
            (unsigned long)SmartLock_EventsPosted(), (unsigned long)SmartLock_EventsDropped());
-    printf("UART cmd_overflow=%lu\r\n", (unsigned long)Cmd_LineOverflows());
+    printf("UART rx_overrun=%lu cmd_overflow=%lu\r\n",
+           (unsigned long)Platform_UartOverruns(), (unsigned long)Cmd_LineOverflows());
+    printf("EVTLOG pending=%u dropped=%lu\r\n", Evt_Pending(), (unsigned long)Evt_Dropped());
     AppTasks_PrintMem();
     printf("STATS_END\r\n");
 }
@@ -80,6 +95,7 @@ void Stats_Print(bool raw)
 void Stats_Reset(void)
 {
     Sched_ResetStats();
+    AppTasks_ResetLatency();
     SmartLock_EventsResetStats();
 }
 

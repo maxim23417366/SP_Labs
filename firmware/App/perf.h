@@ -9,7 +9,7 @@
   *          Perf_TimeUs64() — 64-бітне розширення; його оновлює кожен прохід
   *          Sched_RunOnce(). ЛИШЕ з головного циклу (не з ISR).
   *
-  *          I03 додає формат STAT; I04 — затримку подія→реакція і мітки часу ISR.
+  *          I03 — формат STAT; I04 — затримка подія→реакція і мітки часу ISR.
   ******************************************************************************
   */
 #ifndef PERF_H
@@ -46,6 +46,9 @@ uint32_t Perf_UsToCycles(uint32_t us);
 /* Мікросекунди від Perf_Init(), 64 біти. Лише з головного циклу. */
 uint64_t Perf_TimeUs64(void);
 
+/* I04: перерахувати недавню мітку тактів (наприклад, з ISR) на шкалу Perf_TimeUs64(). */
+uint64_t Perf_CyclesStampToUs64(uint32_t t_cycles);
+
 void     Perf_StatReset(perf_stat_t *s);
 void     Perf_StatAdd(perf_stat_t *s, uint32_t value);
 uint32_t Perf_StatAvg(const perf_stat_t *s);
@@ -57,5 +60,19 @@ int Perf_FormatStat(char *buf, size_t size, const perf_stat_t *s, bool raw_cycle
 /* I03: uint64_t у десятковий рядок без %llu (newlib-nano його не підтримує, див.
  * проблему №11 ЛР2 з %zu). Повертає довжину або 0, якщо не вмістилось. */
 size_t Perf_FormatU64(char *buf, size_t size, uint64_t value);
+
+/* ---- I04: затримка «подія → реакція» (методичка §5.1, приклад 2) ---------------------- */
+typedef struct
+{
+    perf_stat_t      st;          /* такти від фронту в ISR до цього виклику */
+    platform_event_t ev;
+    uint32_t         last_t_cycles;
+} perf_latency_t;
+
+void Perf_LatencyInit(perf_latency_t *l, const char *name, platform_event_t ev);
+
+/* Забирає подію з Platform_TakeEvent(). true — подія була: затримку додано до st,
+ * *t_event_us (якщо не NULL) = момент фронту на шкалі Perf_TimeUs64(). */
+bool Perf_LatencyTake(perf_latency_t *l, uint64_t *t_event_us);
 
 #endif /* PERF_H */

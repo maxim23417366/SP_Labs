@@ -58,7 +58,7 @@ uint32_t Platform_CpuHz(void);
  * Піни вільні за docs/pinout.md (PB0 звільнено в ЛР2, PB1/PB2/PB12 не
  * використовуються); налаштовує їх виходами Platform_IoInit(). */
 #define PLATFORM_PROBE_LOOP     0U   /* PB0  (A3)      — прохід Super Loop        */
-#define PLATFORM_PROBE_REACT    1U   /* PB1  (CN10-24) — FSM обробляє подію        */
+#define PLATFORM_PROBE_REACT    1U   /* PB1  (CN10-24) — цикл забрав подію з ISR (реакція) */
 #define PLATFORM_PROBE_CAMERA   2U   /* PB2  (CN10-22) — захоплення кадру (I09); до того задача security */
 #define PLATFORM_PROBE_STORAGE  3U   /* PB12 (CN10-16) — запис кадру у Flash (I09); до того задача env  */
 #define PLATFORM_PROBE_COUNT    4U
@@ -77,6 +77,25 @@ void Platform_ProbeWrite(unsigned ch, unsigned level);
 #define PROBE_ON(ch)            Platform_ProbeWrite((ch), 1U)
 #define PROBE_OFF(ch)           Platform_ProbeWrite((ch), 0U)
 #endif
+
+/* ---- ЛР3 (I04): мітки часу подій із переривань EXTI ------------------------------------------
+ * ISR лише запам'ятовує такт ПЕРШОГО фронту і ставить прапорець. Наступні фронти,
+ * поки цикл не забрав подію, рахуються як overrun (дребезг або повільний цикл). */
+typedef enum
+{
+  PLATFORM_EV_LOCK_B1 = 0,   /* USER B1, PC13, спадний фронт  (EXTI15_10) */
+  PLATFORM_EV_PIR,           /* HC-SR501, PA0, наростаючий     (EXTI0)     */
+  PLATFORM_EV_MPU_INT,       /* MPU-6050 INT, PB5, наростаючий (EXTI9_5)   */
+  PLATFORM_EV_COUNT
+} platform_event_t;
+
+/* 1 — подія була: *t_cycles = такт DWT з ISR, прапорець знято. 0 — події немає. */
+int      Platform_TakeEvent(platform_event_t ev, uint32_t *t_cycles);
+uint32_t Platform_EventOverruns(platform_event_t ev);
+
+/* Скільки разів приймач USART2 переповнився (ORE) — байти загублено, бо цикл
+ * не встиг забрати попередній. Лічильник веде Platform_UartGetChar(). */
+uint32_t Platform_UartOverruns(void);
 
 /* ---- ЛР3 (I06): пам'ять (методичка §5.4) -------------------------------------------- */
 

@@ -6,6 +6,8 @@
   */
 #include "event_queue.h"
 
+#include "evt.h"
+
 #include "app_config.h"
 
 static sl_event_t  s_q[TBD_EVQ_LEN];
@@ -57,6 +59,13 @@ bool SmartLock_PostEvent(sl_event_type_t type, uint32_t arg)
     return true;
 }
 
+/* EVT у момент, коли FSM забрала подію (metrics-spec §3.3: ім'я без аргументу) */
+static const char *const s_fsm_evt[SL_EV_COUNT] =
+{
+    "fsm_none", "fsm_lock_request", "fsm_motion", "fsm_tamper", "fsm_door_open",
+    "fsm_door_closed", "fsm_code_ok", "fsm_code_wrong", "fsm_env_warning",
+};
+
 bool SmartLock_TakeEvent(sl_event_t *ev)
 {
     if ((s_count == 0U) || (ev == NULL))
@@ -67,6 +76,7 @@ bool SmartLock_TakeEvent(sl_event_t *ev)
     s_tail = (s_tail + 1U) % TBD_EVQ_LEN;
     s_count--;
     Perf_StatAdd(&s_wait, Perf_Now() - ev->t_cycles);
+    Evt_Log(s_fsm_evt[(ev->type < SL_EV_COUNT) ? ev->type : SL_EV_NONE]);
     return true;
 }
 

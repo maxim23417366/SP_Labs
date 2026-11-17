@@ -1,7 +1,6 @@
 # Super Loop SmartLock — вимірювання (ЛР3)
 
-> Автор: Непорожній М.О. Цей файл доповнюють картки I02–I06; розділ 3 (EVT і
-> затримка реакції) додає I04.
+> Автор: Непорожній М.О. Цей файл доповнюють картки I02–I06.
 
 ## 2. Лічильник тактів і STATS (I03)
 
@@ -22,9 +21,12 @@ STAT name=buttons ...
 JITTER name=buttons period_us=10000 min_us=.. max_us=.. missed=..
 JHIST name=buttons n=.. h_lt100us=.. h_lt1ms=.. h_lt10ms=.. h_lt100ms=.. h_ge100ms=..
 ... (security, env, mem — JITTER + JHIST; storage, uart — POLL)
+STAT name=btn_b1_lat|pir_lat|mpu_lat n=.. min_us=.. avg_us=.. max_us=..   (I04)
+OVR name=btn_b1|pir|mpu count=..             (I04: повторні фронти до обробки)
 STAT name=evq_wait ...                       (подія в черзі FSM: Post → Take)
 EVQ len=8 pending=.. max_depth=.. posted=.. dropped=..
-UART cmd_overflow=..
+UART rx_overrun=.. cmd_overflow=..          (rx_overrun — I04)
+EVTLOG pending=.. dropped=..                 (I04)
 STACK reserved=.. used=.. free=..
 HEAP arena=.. used=.. free=..
 STATS_END
@@ -51,6 +53,7 @@ LOAD pct=<0..100>
   порожню чергу, не рахується — інакше super loop завжди показував би 1000 ‰.
 * `STATS RAW` — ті самі STAT у тактах (`min_cyc=`) для перевірки округлення.
 * `STATS RESET` — обнулити все на початку сценарію.
+* `MARK <n>` — мітка сценарію в EVT-лозі (`name=mark_<n>`, I04).
 * `MEM` — лише рядки `STACK` і `HEAP`; `PING <n>` → `PONG seq=<n> t_us=<час МК>` (потік команд
   з ПК, методичка §6.2.3); `HELP`.
 * Рядок з великої латинської літери — команда ЛР3; малі літери, цифри і `?` ідуть у
@@ -59,18 +62,71 @@ LOAD pct=<0..100>
 * Вивід STATS блокує цикл на ~30 рядків × ~4 мс ≈ 0,12 с, тому його викликають між
   фазами сценарію, а не всередині вимірюваного інтервалу.
 
-I04 додає рядки `LAT` (затримка подія → реакція), `UART rx_overrun`, `EVTLOG` і команду
-`MARK <n>`. Формат збігається з прикладом методички §5.1, тож парсер M03 розбирає
+Формат збігається з прикладом методички §5.1, тож парсер M03 розбирає
 `STAT` і без знання інших рядків. Хостові тести — `tests/unit/test_sched.c`
 (`test_stats_prints_every_metric_line`, `test_line_commands`, `test_load_line_once_per_cpu_window`,
 `test_uart_routes_lines_and_lr2_letters`, `test_perf_format_helpers`).
+
+## 3. Часові події і затримка реакції (I04)
+
+**EVT** (`firmware/App/evt.c`, методичка §5.2):
+
+```
+EVT t_us=10234567 name=btn_b1_press
+EVT t_us=10244567 name=btn_b1_handled
+EVT t_us=10254590 name=fsm_lock_request
+EVT t_us=12000100 name=mark_1
+```
+
+* `t_us` — мікросекунди **МК** від старту, 64 біти: 32-бітний DWT переповнюється
+  кожні 44,7 с, розширення оновлюється в кожному проході. Тест: перехід лічильника
+  через 0 — час без збою (`test_perf_time64_survives_counter_wrap`).
+  Обмеження: прохід циклу має бути коротшим за 44,7 с.
+* `Evt_Log` лише пише в RAM-буфер (64 записи); друк — `uart`-задачею по 2 рядки за
+  прохід, тож вивід (~3,5 мс на рядок) не спотворює вимірюваних інтервалів.
+  Переповнення — `EVTLOG dropped`.
+
+| Подія | Звідки | Пара для затримки |
+|---|---|---|
+| `btn_b1_press`, `pir_trig`, `mpu_int` | момент фронту з EXTI (перераховано на шкалу `t_us`) | → `btn_b1_handled`, `pir_handled`, `mpu_handled` |
+| `btn_b1_handled`, `pir_handled`, `mpu_handled` | задача забрала подію (імпульс PB1) | |
+| `fsm_lock_request`, `fsm_motion`, `fsm_tamper`, … | FSM забрала подію з черги | від `*_handled` того ж фронту |
+| `uart_cmd_rx` → `uart_cmd_tx` | рядкова команда UART отримана → виконана | обробка команди (M-03) |
+| `mark_<n>`, `stats_reset`, `mem_peak` | `MARK <n>`, `STATS RESET`, новий максимум стека/heap | |
+
+Формат і імена — `docs/metrics-spec.md` §3.3: регулярний вираз `^EVT t_us=(\d+) name=(\S+)$`,
+тому число, де воно потрібне, — суфікс імені (`mark_42`), а не окреме поле.
+`alarm_triggered` (рішення про тривогу після `pir_handled`) логує FSM — це K-модулі.
+
+**Затримка подія → реакція** (`STAT name=btn_b1_lat|pir_lat|mpu_lat`, M-03): ISR
+записує такт DWT першого фронту (повторні до обробки — рядок `OVR name=... count=`, це
+дребезг або повільний цикл), задача обчислює `now − t_irq`. p99 (M-03) рахує парсер з
+пар `btn_b1_press` → `btn_b1_handled` в EVT-лозі. Ширина вимірює лише те, що бачить прошивка; затримку від фізичного
+фронту дає аналізатор (§4).
+
+Обмеження `*_lat`, підтверджене стендом: читання DHT11 вимикає переривання на ~4 мс
+(з 24–25 мс читання, `docs/lab_3/logs/13_sensor_read_timing.txt`). Фронт B1/PIR у цей
+час чекає в EXTI pending, і ISR ставить мітку вже після ввімкнення переривань — `*_lat`
+занижує затримку до ~4 мс. Тому `*_lat` порівнюється з PulseView (M06), а в звіті S3
+вказується, чи була подія під час ENV.
+
+Події камери (`capture_*`, `flash_write_*`, `cam_*`, `export_*`) додають I07–I09.
+
+**PB1 (REACT)** тепер імпульс у момент, коли задача забирає подію з ISR (`take()` в
+`app_tasks.c`), а не на час роботи fsm, як у I05: фронт PC13 / PA0 → фронт PB1 на
+аналізаторі = та сама затримка, що `STAT name=*_lat`, але виміряна незалежно від прошивки.
+
+Хостові тести (`tests/unit/test_sched.c`): `test_isr_events_give_latency_evt_and_reach_fsm`
+(фронт B1 і PIR → `btn_b1_lat` 7 мс / `pir_lat` 5 мс, `OVR` від дребезгу, EVT
+`btn_b1_press` / `btn_b1_handled`, `fsm_*`), `test_react_probe_on_event_take`, `test_evt_format_ring_and_drop`
+(64-бітний час, переповнення буфера), `test_mark_ping_and_uart_overrun_in_stats`.
 
 ## 4. Службові GPIO для PulseView (I05)
 
 | Канал | Пін | Роз'єм Nucleo | Що показує |
 |---|---|---|---|
 | `PLATFORM_PROBE_LOOP` | PB0 | CN8-4 (A3) | 1 на час кожного проходу `Sched_RunOnce()`: ширина = тривалість проходу, проміжки — період циклу |
-| `PLATFORM_PROBE_REACT` | PB1 | CN10-24 | 1, поки задача fsm обробляє події з черги (реакція на B1 / PIR). У I04 імпульс переноситься в момент, коли цикл забирає подію з ISR |
+| `PLATFORM_PROBE_REACT` | PB1 | CN10-24 | короткий імпульс, коли задача забрала подію B1 / PIR / MPU_INT з ISR (I04; в I05 — на час роботи fsm з подіями) |
 | `PLATFORM_PROBE_CAMERA` | PB2 | CN10-22 | до I09 — 1 на час задачі security (раз на 20 мс); з I09 — захоплення кадру |
 | `PLATFORM_PROBE_STORAGE` | PB12 | CN10-16 | до I09 — 1 на час задачі env (раз на 2 с, DHT11 + BMP180); з I09 — `write_frame` у W25Q64 |
 
@@ -78,18 +134,17 @@ I04 додає рядки `LAT` (затримка подія → реакція)
 * Піни вільні за `docs/pinout.md`: PB0 звільнено в ЛР2 (тумблер LOCK), PB1/PB2/PB12 не
   використовуються. Налаштовує `Platform_IoInit()` (у `firmware.ioc` поки не внесено —
   при наступній перегенерації CubeMX додати їх як GPIO_Output, H02).
-* **Шлях події до I04:** buttons (раз на 10 мс) / security (раз на 20 мс) порівнюють
-  рівень входу з попереднім опитуванням → кладуть подію в чергу → fsm у наступному
-  проході забирає її з імпульсом PB1. Тому затримка на аналізаторі = до одного періоду
-  опитування + до одного проходу циклу. I04 замінює опитування мітками часу з EXTI.
+* **Шлях події:** фронт → ISR ставить мітку DWT → buttons (раз на 10 мс) / security
+  (раз на 20 мс) забирає подію з імпульсом PB1 → кладе подію в чергу → fsm у
+  наступному проході. На аналізаторі PC13/PA0 → PB1 = до одного періоду опитування.
+  До I04 фронт виявлявся порівнянням рівня з попереднім опитуванням.
 * **Повна затримка реакції**: канал аналізатора на фізичний сигнал (PC13 для B1 або
   OUT PIR на PA0) + канал на PB1. Відстань між фронтами = дребезг + вхід у переривання +
-  очікування задачі в циклі. Порівняння з `LAT` (I04) — M06.
+  очікування задачі в циклі. Порівняння зі `STAT name=*_lat` (I04) — M06.
 * Будь-якій задачі можна дати власний канал: останній аргумент `Sched_Add()` —
   `PLATFORM_PROBE_*` замість `SCHED_NO_PROBE`; планувальник сам обгорне виклик задачі.
 * Хостові тести: `test_sched.c` (`test_loop_probe_pulses_every_pass`,
-  `test_task_probe_wraps_only_its_task`, `test_react_probe_only_when_fsm_has_events`,
-  `test_input_edges_reach_fsm_with_react_pulse`).
+  `test_task_probe_wraps_only_its_task`, `test_react_probe_on_event_take`).
 * **Конфлікти пінів:** у `docs/pinout.md` PB0 — «Вільний» (`SPARE_PB0`, вхід у
   `firmware.ioc`; `Platform_IoInit()` переводить його у вихід уже після `MX_GPIO_Init()`),
   PB1 / PB2 / PB12 не використовуються ні в таблиці, ні в `firmware.ioc`. SPI2 Flash —

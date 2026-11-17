@@ -11,18 +11,20 @@
   *   JITTER name=<задача> period_us=.. min_us=.. max_us=.. missed=..   — періодичні
   *   JHIST name=<задача> n=.. h_lt100us=.. h_lt1ms=.. h_lt10ms=.. h_lt100ms=.. h_ge100ms=..
   *   POLL name=<задача> polls=.. runs=..                         — подієві задачі
+  *   STAT name=btn_b1_lat|pir_lat|mpu_lat n=.. min_us=.. avg_us=.. max_us=..   (I04)
+  *   OVR name=btn_b1|pir|mpu count=..   — повторні фронти до обробки (I04)
   *   STAT name=evq_wait ...                                      — подія в черзі FSM
   *   EVQ len=.. pending=.. max_depth=.. posted=.. dropped=..
-  *   UART cmd_overflow=..
+  *   UART rx_overrun=.. cmd_overflow=..
+  *   EVTLOG pending=.. dropped=..                                (I04)
   *   STACK reserved=.. used=.. free=..
   *   HEAP arena=.. used=.. free=..
   *   STATS_END
   *
   *   Формати STAT / JITTER / LOAD / STACK / HEAP — docs/metrics-spec.md §3 (контракт
-  *   парсера M03). Рядки CPU, JHIST, POLL, EVQ, UART — додаткові, парсер їх пропускає.
+  *   парсера M03). Рядки CPU, JHIST, POLL, OVR, EVQ, UART, EVTLOG — додаткові, парсер їх пропускає.
   *
   *   raw_cycles = true: STAT-рядки в тактах (min_cyc=..), для перевірки округлень.
-  *   I04 додає рядки LAT (затримка подія → реакція), UART rx_overrun і EVTLOG.
   ******************************************************************************
   */
 #ifndef STATS_H

@@ -13,6 +13,7 @@
 
 #include "app_config.h"
 #include "app_tasks.h"
+#include "evt.h"
 #include "perf.h"
 #include "stats.h"
 #include "storage.h"
@@ -38,7 +39,7 @@ uint32_t Cmd_LineOverflows(void)
 
 static void help(void)
 {
-    printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | HELP\r\n");
+    printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | HELP\r\n");
     printf("#      LOG ERASE (journal W25Q64)\r\n");
 }
 
@@ -55,6 +56,7 @@ void Cmd_Execute(const char *line)
     else if (strcmp(line, "STATS RESET") == 0)
     {
         Stats_Reset();
+        Evt_Log("stats_reset");
         printf("STATS,reset\r\n");
     }
     else if (strcmp(line, "MEM") == 0)
@@ -68,6 +70,10 @@ void Cmd_Execute(const char *line)
 
         (void)Perf_FormatU64(t_us, sizeof(t_us), Perf_TimeUs64());
         printf("PONG seq=%lu t_us=%s\r\n", n, t_us);
+    }
+    else if (strncmp(line, "MARK ", 5U) == 0)
+    {
+        Evt_LogArg("mark", (uint32_t)strtoul(&line[5], NULL, 10));
     }
     else if (strcmp(line, "HELP") == 0)
     {
@@ -106,7 +112,9 @@ int Cmd_Feed(int c)
         }
         else
         {
+            Evt_Log("uart_cmd_rx");
             Cmd_Execute(s_line);
+            Evt_Log("uart_cmd_tx");
         }
         return 1;
     }

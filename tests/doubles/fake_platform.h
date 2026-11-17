@@ -54,6 +54,12 @@ typedef struct
   platform_heap_t heap;
   unsigned     stack_paint_calls;
 
+  /* ЛР3 (I04): події з ISR і втрати UART */
+  uint8_t      ev_pending[PLATFORM_EV_COUNT];
+  uint32_t     ev_t[PLATFORM_EV_COUNT];
+  uint32_t     ev_overruns[PLATFORM_EV_COUNT];
+  uint32_t     uart_overruns;
+
   uint32_t     inputs;            /* Platform_ReadInputs(): біти PLATFORM_IN_* */
 
   dev_status_t dht_status;        /* != DEV_OK — Platform_Dht11Capture() повертає цю помилку */
@@ -116,5 +122,9 @@ void fake_platform_dht_values(uint8_t rh_pct, uint8_t temp_c);
 
 /* Сценарій відповідей DHT11 (див. dht_script); NULL — вимкнути. */
 void fake_platform_dht_script(const fake_dht_step_t *steps, size_t n);
+
+/* ЛР3 (I04): як ISR — фронт у момент t_cycles (шкала Platform_Cycles()). Якщо
+ * попередню подію ще не забрали — лише overrun, як на платі. */
+void fake_platform_raise_event(platform_event_t ev, uint32_t t_cycles);
 
 #endif /* FAKE_PLATFORM_H */

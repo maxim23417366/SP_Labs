@@ -14,6 +14,7 @@
 #include "bench.h"
 #include "cmd.h"
 #include "event_queue.h"
+#include "evt.h"
 #include "platform.h"
 #include "sched.h"
 #include "smartlock_hooks.h"
@@ -21,62 +22,61 @@
 
 #include <stdio.h>
 
-/* ---- фронти входів опитуванням -------------------------------------------------------
- * До I04 (мітки часу з EXTI) фронт B1 і PIR задача бачить, порівнюючи рівень зі
- * своїм попереднім опитуванням. Затримка «фізичний фронт → реакція» тоді містить
- * до одного періоду опитування — саме її видно на аналізаторі (PC13/PA0 → PB1). */
-static uint32_t s_prev_in;
-
-static bool fell(uint32_t now, uint32_t bit)   /* 1 → 0: B1 натиснута (активний 0) */
+/* ---- I04: події з ISR і затримка реакції --------------------------------------------
+ * ISR (platform_io.c) запам'ятовує такт DWT першого фронту B1 / PIR / MPU_INT. Задача,
+ * що відповідає за вхід, забирає подію: затримка «фронт → реакція» йде в LAT, на PB1
+ * (REACT) — імпульс, у EVT — два записи: момент фронту і момент реакції. */
+enum
 {
-    bool e = ((s_prev_in & bit) != 0U) && ((now & bit) == 0U);
+    LAT_B1 = 0,
+    LAT_PIR,
+    LAT_MPU,
+    LAT_COUNT
+};
 
-    s_prev_in = (s_prev_in & ~bit) | (now & bit);
-    return e;
-}
+static perf_latency_t s_lat[LAT_COUNT];
 
-static bool rose(uint32_t now, uint32_t bit)   /* 0 → 1: PIR побачив рух */
+/* Імена — docs/metrics-spec.md §3.3: <подія> → <обробка>. alarm_triggered після
+ * pir_handled логує FSM (K-модулі), бо рішення про тривогу приймає вона. */
+static const char *const s_lat_evt_irq[LAT_COUNT]   = { "btn_b1_press", "pir_trig", "mpu_int" };
+static const char *const s_lat_evt_react[LAT_COUNT] = { "btn_b1_handled", "pir_handled", "mpu_handled" };
+
+static bool take(int i)
 {
-    bool e = ((s_prev_in & bit) == 0U) && ((now & bit) != 0U);
+    uint64_t t_irq = 0U;
 
-    s_prev_in = (s_prev_in & ~bit) | (now & bit);
-    return e;
+    if (!Perf_LatencyTake(&s_lat[i], &t_irq))
+    {
+        return false;
+    }
+    PROBE_ON(PLATFORM_PROBE_REACT);
+    Evt_LogAt(t_irq, s_lat_evt_irq[i], EVT_NOARG);
+    Evt_Log(s_lat_evt_react[i]);
+    PROBE_OFF(PLATFORM_PROBE_REACT);
+    return true;
 }
 
 /* ---- задачі ------------------------------------------------------------------------
  * Модулі не викликають FSM напряму: buttons / security / env кладуть подію в чергу
  * (SmartLock_PostEvent), fsm забирає її в наступному проході (event_queue.h). */
-/* PB1 (REACT) — FSM обробляє події з черги: фронт на аналізаторі відносно фронту
- * PIR / B1 показує затримку реакції незалежно від прошивки (M06). */
 static bool task_fsm(void)
 {
-    bool react = (SmartLock_EventsPending() != 0U);
-    bool did;
-
-    if (react)
-    {
-        PROBE_ON(PLATFORM_PROBE_REACT);
-    }
-    did = SmartLock_FsmStep(Platform_Millis());
-    if (react)
-    {
-        PROBE_OFF(PLATFORM_PROBE_REACT);
-    }
-    return did;
+    return SmartLock_FsmStep(Platform_Millis());
 }
 
 static bool task_buttons(void)
 {
-    return SmartLock_ButtonsPoll(Platform_Millis(), fell(Platform_ReadInputs(), PLATFORM_IN_LOCK));
+    bool b1 = take(LAT_B1);
+
+    return SmartLock_ButtonsPoll(Platform_Millis(), b1) || b1;
 }
 
 static bool task_security(void)
 {
-    uint32_t in = Platform_ReadInputs();
-    bool pir = rose(in, PLATFORM_IN_PIR);
-    bool mpu = rose(in, PLATFORM_IN_MPUINT);
+    bool pir = take(LAT_PIR);
+    bool mpu = take(LAT_MPU);
 
-    return SmartLock_SecurityPoll(Platform_Millis(), pir, mpu);
+    return SmartLock_SecurityPoll(Platform_Millis(), pir, mpu) || pir || mpu;
 }
 
 static bool task_env(void)
@@ -106,6 +106,10 @@ static bool task_uart(void)
     }
     Bench_Watch();
     if (Stats_PollLoad())   /* LOAD pct= раз на секунду (metrics-spec §3.5) */
+    {
+        did = true;
+    }
+    if (Evt_Flush(EVT_FLUSH_PER_PASS) != 0U)   /* I04: EVT друкуються порціями */
     {
         did = true;
     }
@@ -145,6 +149,7 @@ static bool task_mem(void)
     Platform_HeapInfo(&h);
     if ((Platform_StackUsedBytes() > s_mem_stack) || (h.arena > s_mem_arena))
     {
+        Evt_Log("mem_peak");   /* I04: момент нового максимуму — у шкалі t_us */
         AppTasks_PrintMem();
         return true;
     }
@@ -155,9 +160,10 @@ static bool task_mem(void)
 void AppTasks_Init(void)
 {
     Perf_Init();
+    Evt_Init();
     SmartLock_EventsInit();
     Cmd_Reset();
-    s_prev_in = Platform_ReadInputs();
+    AppTasks_ResetLatency();
     s_mem_stack = 0U;
     s_mem_arena = 0U;
 
@@ -172,4 +178,22 @@ void AppTasks_Init(void)
     (void)Sched_Add("mem",      task_mem,      TBD_PERIOD_MEM_US,      SCHED_NO_PROBE);
     (void)Sched_Add("uart",     task_uart,     PERIOD_UART_US,         SCHED_NO_PROBE);
     Sched_Start();
+}
+
+void AppTasks_ResetLatency(void)
+{
+    /* STAT name=<...>_lat — затримки M-03 (metrics-spec §3.2) */
+    Perf_LatencyInit(&s_lat[LAT_B1],  "btn_b1_lat", PLATFORM_EV_LOCK_B1);
+    Perf_LatencyInit(&s_lat[LAT_PIR], "pir_lat",    PLATFORM_EV_PIR);
+    Perf_LatencyInit(&s_lat[LAT_MPU], "mpu_lat",    PLATFORM_EV_MPU_INT);
+}
+
+int AppTasks_LatencyCount(void)
+{
+    return LAT_COUNT;
+}
+
+const perf_latency_t *AppTasks_Latency(int idx)
+{
+    return ((idx >= 0) && (idx < LAT_COUNT)) ? &s_lat[idx] : NULL;
 }
