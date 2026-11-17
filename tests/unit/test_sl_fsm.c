@@ -11,18 +11,30 @@
   *          Входи — події в черзі (event_queue.h), як їх кладуть buttons /
   *          security / env. Виходи: серво — fake_platform.servo_log, журнал —
   *          справжній sl_journal.c (SmartLock_JournalPeek), камера — сильна
-  *          SmartLock_CameraRequest() цього тесту. Бекенд журналу — слабкий
+  *          SmartLock_CameraRequest() цього тесту (її можна змусити відхиляти
+  *          запити, чи відповідати синхронно). Бекенд журналу — слабкий
   *          («Flash недоступний»).
+  *
+  *          K08: кожна MOTION / TAMPER у LOCKED завершується рівно одним записом
+  *          PHOTO або PHOTO_ERR (ref = ID події): камера зайнята, тайм-аут,
+  *          невідомий результат, переповнення журналу.
+  *
+  *          I04: MOTION, прийнята в LOCKED, дає EVT alarm_triggered (пара
+  *          pir_trig → alarm_triggered, docs/metrics/metrics-spec.md §3.3).
   */
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "unity.h"
 
 #include "app.h"
 #include "app_tasks.h"
 #include "event_queue.h"
+#include "evt.h"
 #include "fake_i2c.h"
 #include "fake_platform.h"
+#include "fake_sensors.h"
 #include "platform.h"
 #include "sched.h"
 #include "sl_camera_link.h"
@@ -35,15 +47,28 @@
 static uint32_t cam_ids[CAM_LOG_LEN];
 static unsigned cam_calls;
 static bool     cam_accept;
+static int      cam_budget;        /* >= 0: приймає лише n запитів (камера зайнята одним кадром), далі відмова */
+static bool     cam_sync_result;   /* відповідає (PHOTO, кадр 9) ще всередині SmartLock_CameraRequest() */
 
 bool SmartLock_CameraRequest(uint32_t event_id)
 {
+  bool accept = cam_accept;
+
   if (cam_calls < CAM_LOG_LEN)
   {
     cam_ids[cam_calls] = event_id;
   }
   cam_calls++;
-  return cam_accept;
+  if (cam_budget >= 0)
+  {
+    accept = accept && (cam_budget > 0);
+    if (cam_budget > 0) { cam_budget--; }
+  }
+  if (accept && cam_sync_result)
+  {
+    SmartLock_OnCameraResult(event_id, 9U, SL_CAM_OK);
+  }
+  return accept;
 }
 
 /* ---- помічники ---------------------------------------------------------------------- */
@@ -76,6 +101,29 @@ static uint32_t log_seq(unsigned i)
   return r.seq;
 }
 
+/* Скільки записів PHOTO / PHOTO_ERR у журналі мають ref = event_id */
+static unsigned count_refs(uint32_t event_id)
+{
+  sl_log_rec_t r;
+  unsigned n = 0U;
+
+  for (unsigned i = 0U; SmartLock_JournalPeek(i, &r); i++)
+  {
+    if (((r.type == SL_LOG_PHOTO) || (r.type == SL_LOG_PHOTO_ERR)) && (r.ref == event_id)) { n++; }
+  }
+  return n;
+}
+
+static void expect_photo(unsigned i, sl_log_type_t type, uint32_t arg, uint32_t ref)
+{
+  sl_log_rec_t r;
+
+  TEST_ASSERT_TRUE_MESSAGE(SmartLock_JournalPeek(i, &r), "немає запису журналу");
+  TEST_ASSERT_EQUAL_STRING(SmartLock_LogTypeName(type), SmartLock_LogTypeName((sl_log_type_t)r.type));
+  TEST_ASSERT_EQUAL_UINT32(arg, r.arg);
+  TEST_ASSERT_EQUAL_UINT32(ref, r.ref);
+}
+
 static uint32_t servo_last(void)
 {
   return fake_platform.servo_pulse_us;
@@ -106,6 +154,8 @@ void setUp(void)
   memset(cam_ids, 0, sizeof(cam_ids));
   cam_calls = 0U;
   cam_accept = true;
+  cam_budget = -1;
+  cam_sync_result = false;
 }
 
 void tearDown(void)
@@ -536,6 +586,341 @@ static void test_full_cycle_through_super_loop(void)
   TEST_ASSERT_EQUAL_UINT32(5U, SmartLock_JournalUnsaved());   /* DOOR_CLOSED, LOCK_ACTIVATED, LOCKED, ACCESS_GRANTED, UNLOCKED */
 }
 
+/* ---- K08: подія → фото → запис-посилання ------------------------------------------------- */
+static void test_photo_is_requested_only_for_motion_and_tamper(void)
+{
+  go_locked(0U);
+  post(SL_EV_CODE_WRONG, 4U);
+  post(SL_EV_DOOR_OPEN, 0U);       /* FORCED_OPEN */
+  post(SL_EV_ENV_WARNING, 1U);
+  (void)step(20000U);
+  expect_log(0U, SL_LOG_WRONG_CODE, 4U);
+  expect_log(1U, SL_LOG_FORCED_OPEN, 0U);
+  expect_log(2U, SL_LOG_ENV_WARNING, 1U);
+  TEST_ASSERT_EQUAL_UINT(0U, cam_calls);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+  TEST_ASSERT_EQUAL_UINT(3U, SmartLock_JournalPending());   /* жодного PHOTO / PHOTO_ERR */
+}
+
+static void test_motion_gets_exactly_one_photo_record_after_result(void)
+{
+  uint32_t id;
+
+  go_locked(0U);
+  post(SL_EV_MOTION, 0U);
+  (void)step(20000U);
+  id = log_seq(0U);
+  TEST_ASSERT_EQUAL_UINT(1U, cam_calls);
+  TEST_ASSERT_EQUAL_UINT32(id, cam_ids[0]);
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_CameraLinkPending());
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_JournalPending());   /* поки лише MOTION */
+
+  SmartLock_OnCameraResult(id, 1234U, SL_CAM_OK);           /* прохід k+2: кадр у Flash */
+  expect_photo(1U, SL_LOG_PHOTO, 1234U, id);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+  (void)step(21000U);                                       /* далі нічого не додається */
+  (void)step(60000U);
+  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_JournalPending());
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(id));
+  TEST_ASSERT_TRUE(log_seq(1U) > log_seq(0U));              /* PHOTO йде після події */
+}
+
+static void test_tamper_capture_error_gives_photo_err(void)
+{
+  uint32_t id;
+
+  go_locked(0U);
+  post(SL_EV_TAMPER, 700U);
+  (void)step(20000U);
+  id = log_seq(0U);
+  SmartLock_OnCameraResult(id, 0U, SL_CAM_ERR_CAPTURE);
+  expect_photo(1U, SL_LOG_PHOTO_ERR, SL_CAM_ERR_CAPTURE, id);
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(id));
+}
+
+static void test_second_motion_while_camera_busy_gets_rejected_photo_err(void)
+{
+  uint32_t id1;
+  uint32_t id2;
+
+  go_locked(0U);
+  cam_budget = 1;                  /* камера знімає перший кадр і ще зайнята */
+  post(SL_EV_MOTION, 0U);
+  (void)step(20000U);
+  post(SL_EV_MOTION, 0U);          /* другий рух під час зйомки */
+  (void)step(20100U);
+  id1 = log_seq(0U);
+  id2 = log_seq(1U);
+  TEST_ASSERT_EQUAL_UINT(2U, cam_calls);
+  TEST_ASSERT_EQUAL_UINT32(1U, SmartLock_FsmCameraRejected());
+  expect_photo(2U, SL_LOG_PHOTO_ERR, SL_CAM_ERR_REJECTED, id2);   /* одразу, без повторів */
+  TEST_ASSERT_EQUAL_UINT(0U, count_refs(id1));                    /* перший ще чекає кадр */
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_CameraLinkPending());
+  TEST_ASSERT_EQUAL(SL_STATE_LOCKED, SmartLock_FsmState());
+
+  SmartLock_OnCameraResult(id1, 3U, SL_CAM_OK);
+  expect_photo(3U, SL_LOG_PHOTO, 3U, id1);
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(id1));
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(id2));
+  TEST_ASSERT_EQUAL_UINT(4U, SmartLock_JournalPending());
+}
+
+static void test_motion_and_tamper_same_pass_each_end_with_one_record(void)
+{
+  uint32_t m;
+  uint32_t t;
+
+  go_locked(0U);
+  cam_budget = 1;                  /* камера бере лише перший запит проходу */
+  post(SL_EV_MOTION, 0U);
+  post(SL_EV_TAMPER, 900U);
+  (void)step(20000U);
+  m = log_seq(0U);
+  t = log_seq(1U);
+  expect_log(0U, SL_LOG_MOTION, 0U);
+  expect_log(1U, SL_LOG_TAMPER, 900U);
+  TEST_ASSERT_EQUAL_UINT32(m, cam_ids[0]);
+  TEST_ASSERT_EQUAL_UINT32(t, cam_ids[1]);
+  expect_photo(2U, SL_LOG_PHOTO_ERR, SL_CAM_ERR_REJECTED, t);
+  SmartLock_OnCameraResult(m, 55U, SL_CAM_OK);
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(m));
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(t));
+  TEST_ASSERT_EQUAL_UINT(4U, SmartLock_JournalPending());   /* MOTION, TAMPER, PHOTO_ERR, PHOTO */
+}
+
+static void test_missing_result_times_out_with_single_photo_err(void)
+{
+  uint32_t id;
+
+  go_locked(0U);
+  post(SL_EV_MOTION, 0U);
+  (void)step(20000U);
+  id = log_seq(0U);
+  TEST_ASSERT_FALSE(step(20000U + TBD_CAM_RESULT_TIMEOUT_MS - 1U));
+  TEST_ASSERT_EQUAL_UINT(0U, count_refs(id));
+  TEST_ASSERT_TRUE(step(20000U + TBD_CAM_RESULT_TIMEOUT_MS));   /* FSM-прохід нічого не чекає, але додає запис */
+  expect_photo(1U, SL_LOG_PHOTO_ERR, SL_CAM_ERR_TIMEOUT, id);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+
+  SmartLock_OnCameraResult(id, 8U, SL_CAM_OK);                  /* запізніла відповідь */
+  (void)step(40000U);
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(id));                   /* другого запису немає */
+  TEST_ASSERT_EQUAL_UINT32(1U, SmartLock_CameraLinkStats()->unknown);
+  TEST_ASSERT_EQUAL(SL_STATE_LOCKED, SmartLock_FsmState());
+}
+
+static void test_result_for_unknown_id_changes_nothing(void)
+{
+  go_locked(0U);
+  post(SL_EV_MOTION, 0U);
+  (void)step(20000U);
+  SmartLock_OnCameraResult(777U, 1U, SL_CAM_OK);
+  SmartLock_OnCameraResult(SL_LOG_ID_NONE, 1U, SL_CAM_ERR_CAPTURE);
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_JournalPending());
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_CameraLinkPending());
+  TEST_ASSERT_EQUAL_UINT32(2U, SmartLock_CameraLinkStats()->unknown);
+}
+
+static void test_event_lost_on_journal_overflow_requests_no_frame(void)
+{
+  uint32_t drops;
+
+  go_locked(0U);
+  /* звичайні записи займають усе, крім резерву: рухи надходять швидше за storage */
+  while (SmartLock_JournalPending() < (TBD_JOURNAL_FIFO_LEN - TBD_JOURNAL_FIFO_RESERVE))
+  {
+    (void)SmartLock_LogEvent(SL_LOG_ENV_WARNING, 0U);
+  }
+  drops = SmartLock_JournalDropped();
+  post(SL_EV_MOTION, 0U);
+  (void)step(20000U);
+  TEST_ASSERT_EQUAL_UINT32(drops + 1U, SmartLock_JournalDropped());   /* MOTION у журнал не потрапила */
+  TEST_ASSERT_EQUAL_UINT(0U, cam_calls);                              /* кадру без ID не знімаємо */
+  TEST_ASSERT_EQUAL_UINT32(1U, SmartLock_CameraLinkStats()->skipped_no_id);
+  TEST_ASSERT_EQUAL_UINT32(0U, SmartLock_FsmCameraRejected());        /* це не відмова камери */
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+  TEST_ASSERT_EQUAL(SL_STATE_LOCKED, SmartLock_FsmState());
+}
+
+static void test_result_written_into_reserve_when_normal_events_fill_fifo(void)
+{
+  uint32_t id;
+
+  go_locked(0U);
+  post(SL_EV_TAMPER, 0U);
+  (void)step(20000U);
+  id = log_seq(0U);
+  while (SmartLock_JournalPending() < (TBD_JOURNAL_FIFO_LEN - TBD_JOURNAL_FIFO_RESERVE))
+  {
+    (void)SmartLock_LogEvent(SL_LOG_ENV_WARNING, 0U);
+  }
+  TEST_ASSERT_EQUAL_UINT32(SL_LOG_ID_NONE, SmartLock_LogEvent(SL_LOG_ENV_WARNING, 0U));   /* звичайним місця вже немає */
+  SmartLock_OnCameraResult(id, 2U, SL_CAM_OK);                  /* а PHOTO — є: резерв */
+  TEST_ASSERT_EQUAL_UINT(1U, count_refs(id));
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+}
+
+static void test_pending_list_full_gives_rejected_without_new_camera_call(void)
+{
+  uint32_t last;
+
+  go_locked(0U);
+  for (unsigned i = 0U; i < (TBD_CAMLINK_PENDING_MAX + 1U); i++)
+  {
+    post(SL_EV_MOTION, 0U);
+    (void)step(20000U + i);
+  }
+  last = log_seq(TBD_CAMLINK_PENDING_MAX);
+  TEST_ASSERT_EQUAL_UINT(TBD_CAMLINK_PENDING_MAX, cam_calls);
+  expect_photo(TBD_CAMLINK_PENDING_MAX + 1U, SL_LOG_PHOTO_ERR, SL_CAM_ERR_REJECTED, last);
+  TEST_ASSERT_EQUAL_UINT32(1U, SmartLock_FsmCameraRejected());
+}
+
+static void test_camera_result_inside_request_call_is_handled(void)
+{
+  uint32_t id;
+
+  go_locked(0U);
+  cam_sync_result = true;
+  post(SL_EV_MOTION, 0U);
+  (void)step(20000U);
+  id = log_seq(0U);
+  expect_photo(1U, SL_LOG_PHOTO, 9U, id);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_JournalPending());
+  TEST_ASSERT_EQUAL_UINT32(0U, SmartLock_FsmCameraRejected());
+}
+
+static void test_fsm_init_clears_pending_camera_requests(void)
+{
+  go_locked(0U);
+  post(SL_EV_MOTION, 0U);
+  (void)step(20000U);
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_CameraLinkPending());
+  SmartLock_FsmInit();
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+  TEST_ASSERT_EQUAL_UINT32(0U, SmartLock_CameraLinkStats()->requested);
+}
+
+/* Серія охоронних подій (E2E-02/05): камера бере два кадри, решта «зайнято», один результат — помилка */
+static void test_every_security_event_in_a_series_ends_with_one_record(void)
+{
+  uint32_t ids[6];
+  sl_log_rec_t r;
+
+  go_locked(0U);
+  cam_budget = 2;
+  for (unsigned i = 0U; i < 6U; i++)
+  {
+    post((i % 2U == 0U) ? SL_EV_MOTION : SL_EV_TAMPER, i);
+    (void)step(20000U + (i * 10U));
+  }
+  for (unsigned i = 0U, found = 0U; (i < SmartLock_JournalPending()) && (found < 6U); i++)
+  {
+    TEST_ASSERT_TRUE(SmartLock_JournalPeek(i, &r));
+    if ((r.type == SL_LOG_MOTION) || (r.type == SL_LOG_TAMPER)) { ids[found++] = r.seq; }
+  }
+  TEST_ASSERT_EQUAL_UINT(6U, cam_calls);
+  TEST_ASSERT_EQUAL_UINT32(4U, SmartLock_FsmCameraRejected());
+  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_CameraLinkPending());
+  SmartLock_OnCameraResult(ids[0], 1U, SL_CAM_OK);
+  SmartLock_OnCameraResult(ids[1], 0U, SL_CAM_ERR_STORE);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_CameraLinkPending());
+  for (unsigned i = 0U; i < 6U; i++)
+  {
+    TEST_ASSERT_EQUAL_UINT(1U, count_refs(ids[i]));
+  }
+  TEST_ASSERT_EQUAL_UINT(12U, SmartLock_JournalPending());   /* 6 подій + 6 закриттів */
+}
+
+/* FR-15: вимірювання BMP180 не створюють записів журналу, подій і не рухають засувку */
+static void test_bmp180_measurements_create_no_journal_records(void)
+{
+  uint32_t calls;
+
+  go_locked(0U);
+  calls = fake_platform.servo_set_calls;
+  TEST_ASSERT_EQUAL(DEV_OK, fake_sensors_bmp_attach());
+  fake_platform_dht_values(45U, 25U);
+  for (uint32_t t = 0U; t < 10U; t++)
+  {
+    fake_platform.now_ms = 30000U + (t * 2000U);
+    (void)SmartLock_EnvPoll(fake_platform.now_ms);      /* BMP180 читається і друкується в UART */
+    (void)SmartLock_FsmStep(fake_platform.now_ms);
+  }
+  fake_sensors_bmp_set_raw(FAKE_BMP180_DS_UT, FAKE_BMP180_DS_UP + 8000);   /* різка зміна тиску */
+  fake_platform.now_ms += 2000U;
+  (void)SmartLock_EnvPoll(fake_platform.now_ms);
+  (void)SmartLock_FsmStep(fake_platform.now_ms);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_JournalPending());
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_EventsPending());
+  TEST_ASSERT_EQUAL_UINT(0U, cam_calls);
+  TEST_ASSERT_EQUAL_UINT32(calls, fake_platform.servo_set_calls);
+  TEST_ASSERT_EQUAL(SL_STATE_LOCKED, SmartLock_FsmState());
+}
+
+/* ---- I04: alarm_triggered ------------------------------------------------------------ */
+static char evt_out[8192];
+
+/* Надрукувати буфер EVT (Evt_Flush) і повернути вивід */
+static const char *evt_drain(void)
+{
+  FILE *tmp = tmpfile();
+  int saved;
+  size_t n;
+
+  evt_out[0] = '\0';
+  if (tmp == NULL) { return evt_out; }
+  fflush(stdout);
+  saved = dup(1);
+  dup2(fileno(tmp), 1);
+  (void)Evt_Flush(1000U);
+  fflush(stdout);
+  dup2(saved, 1);
+  close(saved);
+  rewind(tmp);
+  n = fread(evt_out, 1U, sizeof(evt_out) - 1U, tmp);
+  evt_out[n] = '\0';
+  fclose(tmp);
+  return evt_out;
+}
+
+static unsigned count_str(const char *hay, const char *needle)
+{
+  unsigned n = 0U;
+
+  for (const char *p = strstr(hay, needle); p != NULL; p = strstr(p + 1, needle)) { n++; }
+  return n;
+}
+
+static void test_alarm_triggered_only_for_motion_accepted_in_locked(void)
+{
+  const char *o;
+
+  Evt_Init();
+  post(SL_EV_MOTION, 0U);            /* UNLOCKED: тривоги немає */
+  (void)step(100U);
+  post(SL_EV_LOCK_REQUEST, SL_LOCK_REQ_T_NOW);
+  (void)step(200U);
+  post(SL_EV_MOTION, 0U);            /* EXIT_DELAY: теж немає */
+  (void)step(300U);
+  o = evt_drain();
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=fsm_motion\r\n"));   /* подію FSM забрала (I04) */
+  TEST_ASSERT_NULL(strstr(o, "alarm_triggered"));
+
+  go_locked(1000U);
+  (void)evt_drain();
+  post(SL_EV_MOTION, 0U);
+  post(SL_EV_TAMPER, 5U);            /* для TAMPER пари в metrics-spec немає */
+  (void)step(30000U);
+  o = evt_drain();
+  TEST_ASSERT_EQUAL_UINT(1U, count_str(o, "name=alarm_triggered\r\n"));
+  /* порядок: FSM забрала MOTION → рішення про тривогу → забрала TAMPER */
+  TEST_ASSERT_TRUE(strstr(o, "name=fsm_motion") < strstr(o, "name=alarm_triggered"));
+  TEST_ASSERT_TRUE(strstr(o, "name=alarm_triggered") < strstr(o, "name=fsm_tamper"));
+  expect_log(0U, SL_LOG_MOTION, 0U);
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -562,5 +947,20 @@ int main(void)
   RUN_TEST(test_camera_rejection_is_counted);
   RUN_TEST(test_storage_with_default_backend_counts_unsaved);
   RUN_TEST(test_full_cycle_through_super_loop);
+  RUN_TEST(test_photo_is_requested_only_for_motion_and_tamper);
+  RUN_TEST(test_motion_gets_exactly_one_photo_record_after_result);
+  RUN_TEST(test_tamper_capture_error_gives_photo_err);
+  RUN_TEST(test_second_motion_while_camera_busy_gets_rejected_photo_err);
+  RUN_TEST(test_motion_and_tamper_same_pass_each_end_with_one_record);
+  RUN_TEST(test_missing_result_times_out_with_single_photo_err);
+  RUN_TEST(test_result_for_unknown_id_changes_nothing);
+  RUN_TEST(test_event_lost_on_journal_overflow_requests_no_frame);
+  RUN_TEST(test_result_written_into_reserve_when_normal_events_fill_fifo);
+  RUN_TEST(test_pending_list_full_gives_rejected_without_new_camera_call);
+  RUN_TEST(test_camera_result_inside_request_call_is_handled);
+  RUN_TEST(test_fsm_init_clears_pending_camera_requests);
+  RUN_TEST(test_every_security_event_in_a_series_ends_with_one_record);
+  RUN_TEST(test_bmp180_measurements_create_no_journal_records);
+  RUN_TEST(test_alarm_triggered_only_for_motion_accepted_in_locked);
   return UNITY_END();
 }

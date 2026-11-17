@@ -15,6 +15,8 @@
 #include <stdint.h>
 
 #include "event_queue.h"
+#include "evt.h"
+#include "perf.h"
 #include "platform.h"
 #include "smartlock_hooks.h"
 
@@ -42,6 +44,7 @@ typedef struct
     bool     stable;     /* прийнятий (антидребезгом) стан: true = натиснуто */
     bool     cand;       /* останній побачений сирий стан */
     uint32_t since_ms;   /* коли cand побачили вперше (або фронт b1_edge) */
+    uint64_t press_us;   /* перший сирий фронт натискання (мкс МК), 0 — немає */
 } btn_t;
 
 static struct
@@ -64,6 +67,7 @@ void SmartLock_ButtonsInit(void)
         s_b.btn[i].stable = false;
         s_b.btn[i].cand = false;
         s_b.btn[i].since_ms = 0U;
+        s_b.btn[i].press_us = 0U;
     }
     for (i = 0U; i < TBD_CODE_LEN; i++)
     {
@@ -126,6 +130,34 @@ static bool debounce(btn_t *b, bool pressed, uint32_t now_ms)
     return false;
 }
 
+/* I04: пара code_key_press → code_key_handled (docs/metrics/metrics-spec.md §3.3).
+ * Кнопки коду опитуються (не EXTI), тож «натискання» — перший сирий фронт, який
+ * побачило опитування; затримка до handled = антидребезг + фаза опитування. */
+static void note_raw_press(btn_t *b)
+{
+    if (b->cand && !b->stable && (b->press_us == 0U))
+    {
+        b->press_us = Perf_TimeUs64();
+        if (b->press_us == 0U)
+        {
+            b->press_us = 1U;   /* 0 зарезервовано як «немає» */
+        }
+    }
+    else if (!b->cand && !b->stable && (b->press_us != 0U))
+    {
+        b->press_us = 0U;       /* короткий імпульс, що не став натисканням */
+    }
+}
+
+static void log_code_key(btn_t *b)
+{
+    if (b->press_us != 0U)
+    {
+        Evt_LogAt(b->press_us, "code_key_press", EVT_NOARG);
+        Evt_Log("code_key_handled");
+    }
+}
+
 /* Оцінка повної послідовності: без раннього виходу, далі введення стирається */
 static void evaluate(void)
 {
@@ -174,6 +206,7 @@ bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge)
     bool     did = false;
     bool     code_press[BTN_CODE_COUNT] = { false, false, false, false };
     bool     b1_press = false;
+    bool     pending_clear[BTN_CODE_COUNT] = { false, false, false, false };
     unsigned presses = 0U;
     uint8_t  i;
 
@@ -192,6 +225,10 @@ bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge)
             s_b.btn[i].since_ms = now_ms;   /* фронт: відлік стабільності заново */
         }
         changed = debounce(&s_b.btn[i], is_pressed(in, i), now_ms);
+        if (i != BTN_IDX_B1)
+        {
+            note_raw_press(&s_b.btn[i]);
+        }
         if (changed)
         {
             did = true;
@@ -203,6 +240,10 @@ bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge)
         else
         {
             code_press[i] = changed && s_b.btn[i].stable;
+            if (changed)
+            {
+                pending_clear[i] = true;   /* фронт використано (лог або акорд) */
+            }
             if (code_press[i])
             {
                 presses++;
@@ -223,8 +264,17 @@ bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge)
         {
             if (code_press[i])
             {
+                log_code_key(&s_b.btn[i]);
                 add_symbol((uint8_t)(i + 1U), now_ms);
             }
+        }
+    }
+
+    for (i = 0U; i < BTN_CODE_COUNT; i++)
+    {
+        if (pending_clear[i])
+        {
+            s_b.btn[i].press_us = 0U;
         }
     }
 

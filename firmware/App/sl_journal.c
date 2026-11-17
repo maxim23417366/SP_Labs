@@ -57,6 +57,8 @@ void SmartLock_JournalSetLastSeq(uint32_t last_seq)
 uint32_t SmartLock_LogEventRef(sl_log_type_t type, uint32_t arg, uint32_t ref)
 {
     sl_log_rec_t *r;
+    bool closing = (type == SL_LOG_PHOTO) || (type == SL_LOG_PHOTO_ERR);
+    unsigned limit = closing ? TBD_JOURNAL_FIFO_LEN : (TBD_JOURNAL_FIFO_LEN - TBD_JOURNAL_FIFO_RESERVE);
 
     if ((type <= SL_LOG_NONE) || (type >= SL_LOG_COUNT))
     {
@@ -67,7 +69,7 @@ uint32_t SmartLock_LogEventRef(sl_log_type_t type, uint32_t arg, uint32_t ref)
     {
         s_last_seq = 1U;
     }
-    if (s_count >= TBD_JOURNAL_FIFO_LEN)
+    if (s_count >= limit)
     {
         s_dropped++;
         return SL_LOG_ID_NONE;
@@ -178,7 +180,7 @@ const char *SmartLock_LogTypeName(sl_log_type_t type)
     static const char *const names[SL_LOG_COUNT] =
     {
         "NONE", "LOCK_ACTIVATED", "LOCKED", "UNLOCKED", "ACCESS_GRANTED", "WRONG_CODE",
-        "MOTION", "TAMPER", "FORCED_OPEN", "ENV_WARNING", "DOOR_OPEN", "DOOR_CLOSED", "PHOTO",
+        "MOTION", "TAMPER", "FORCED_OPEN", "ENV_WARNING", "DOOR_OPEN", "DOOR_CLOSED", "PHOTO", "PHOTO_ERR",
     };
 
     return ((unsigned)type < (unsigned)SL_LOG_COUNT) ? names[type] : "?";

@@ -4,15 +4,16 @@
   * @brief   Збереження кадрів камери у W25Q64 для прикладної логіки (FR-07,
   *          FR-08): FrameStore_GetOps() із docs/tasks.md і стендові команди.
   *
-  *          Задача камери після захоплення кадру:
+  *          Задача камери після захоплення кадру для запиту event_seq
+  *          (SmartLock_CameraRequest, sl_camera_link.h) викликає
   *
-  *            frame_header_t h = { FRAME_FORMAT_RGB565, 160, 120, 0, 0,
-  *                                 event_seq, 38400, 0 };
-  *            uint32_t id;
-  *            if (FrameStore_GetOps()->write_frame(&h, buf, &id) == DEV_OK)
-  *            {
-  *              SmartLock_LogEventRef(SL_LOG_PHOTO, id, event_seq);
-  *            }
+  *            SmartLock_CameraStoreFrame(event_seq, FRAME_FORMAT_RGB565, 160, 120,
+  *                                       buf, 38400);   // sl_camera_frames.h (K08)
+  *
+  *          Вона пише кадр через FrameStore_GetOps()->write_frame() із заголовком
+  *          event_seq і закриває запит: у журналі рівно один SL_LOG_PHOTO (arg = id
+  *          кадру, ref = event_seq) або SL_LOG_PHOTO_ERR. Окремо логувати PHOTO
+  *          камера не повинна — інакше два записи на одну подію.
   *
   *          event_seq — ID події MOTION / TAMPER, який повернув SmartLock_LogEvent()
   *          (sl_journal.h); у Flash це той самий seq. Запис SL_LOG_PHOTO у Flash стає

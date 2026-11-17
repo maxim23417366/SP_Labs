@@ -4,7 +4,7 @@
   * @brief   ЛР3 (K02 + ядро K03/K04/K05): FSM SmartLock (див. sl_fsm.h).
   *
   *          Чиста логіка: вхід — події з черги і now_ms, вихід — три вузькі дії
-  *          (серво, журнал, запит фото). Нічого не чекає і не читає GPIO.
+  *          (серво, журнал, запит фото через sl_camera_link.c). Нічого не чекає і не читає GPIO.
   *          Час — різниця uint32 у мс, тому відлік коректний і через
   *          переповнення Platform_Millis() (~49,7 доби).
   ******************************************************************************
@@ -13,6 +13,7 @@
 
 #include "app_config.h"
 #include "event_queue.h"
+#include "evt.h"
 #include "platform.h"
 #include "sl_camera_link.h"
 #include "sl_journal.h"
@@ -42,11 +43,14 @@ static uint32_t out_log(sl_log_type_t type, uint32_t arg)
     return SmartLock_LogEvent(type, arg);
 }
 
-static void out_photo(uint32_t event_id)
+/* Один кадр на охоронну подію. Результат (PHOTO / PHOTO_ERR) пише sl_camera_link.c;
+ * тут лише рахуємо, скільки разів камера не прийняла запит. event_id = 0 (подію не
+ * записано, FIFO повна) — кадр не запитується, link веде окремий лічильник. */
+static void out_photo(uint32_t event_id, uint32_t now_ms)
 {
-    if (!SmartLock_CameraRequest(event_id))
+    if (!SmartLock_CameraLinkStart(event_id, now_ms) && (event_id != SL_LOG_ID_NONE))
     {
-        s_fsm.cam_rejected++;   /* діагностику помилки камери додає K08 */
+        s_fsm.cam_rejected++;
     }
 }
 
@@ -60,6 +64,7 @@ void SmartLock_FsmInit(void)
     s_fsm.delay_done = false;
     s_fsm.ignored = 0U;
     s_fsm.cam_rejected = 0U;
+    SmartLock_CameraLinkInit();
     out_servo(TBD_SERVO_UNLOCK_US);   /* стан UNLOCKED = засувка UNLOCK */
 }
 
@@ -115,15 +120,22 @@ static void on_door(sl_door_t door, uint32_t arg)
     }
 }
 
-/* Охоронна подія: лише в LOCKED — запис журналу і кадр з посиланням на нього */
-static void on_security(sl_log_type_t type, uint32_t arg)
+/* Охоронна подія: лише в LOCKED — запис журналу і кадр з посиланням на нього.
+ * MOTION у LOCKED — рішення про тривогу: EVT alarm_triggered (I04, пара
+ * pir_trig → alarm_triggered, docs/metrics/metrics-spec.md §3.3). Для TAMPER
+ * специфікація пари не задає — лише mpu_int → mpu_handled з app_tasks.c. */
+static void on_security(sl_log_type_t type, uint32_t arg, uint32_t now_ms)
 {
     if (s_fsm.state != SL_STATE_LOCKED)
     {
         s_fsm.ignored++;
         return;
     }
-    out_photo(out_log(type, arg));
+    if (type == SL_LOG_MOTION)
+    {
+        Evt_Log("alarm_triggered");
+    }
+    out_photo(out_log(type, arg), now_ms);
 }
 
 static void handle_event(const sl_event_t *ev, uint32_t now_ms)
@@ -143,10 +155,10 @@ static void handle_event(const sl_event_t *ev, uint32_t now_ms)
         }
         break;
     case SL_EV_MOTION:
-        on_security(SL_LOG_MOTION, ev->arg);
+        on_security(SL_LOG_MOTION, ev->arg, now_ms);
         break;
     case SL_EV_TAMPER:
-        on_security(SL_LOG_TAMPER, ev->arg);
+        on_security(SL_LOG_TAMPER, ev->arg, now_ms);
         break;
     case SL_EV_DOOR_OPEN:
         on_door(SL_DOOR_OPEN, ev->arg);
@@ -227,6 +239,10 @@ bool SmartLock_FsmStep(uint32_t now_ms)
         did = true;
     }
     if (exit_delay_tick(now_ms))
+    {
+        did = true;
+    }
+    if (SmartLock_CameraLinkPoll(now_ms))   /* тайм-аути фото і повтор запису PHOTO / PHOTO_ERR */
     {
         did = true;
     }
