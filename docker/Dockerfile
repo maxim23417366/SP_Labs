@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils-arm-none-eabi \
     libnewlib-arm-none-eabi \
     git \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Робоча директорія всередині контейнера

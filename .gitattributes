@@ -1,3 +1,5 @@
 # Shell-скрипти виконує sh у Linux-контейнері. На Windows з core.autocrlf=true
 # git інакше віддав би їх з CRLF, і sh не зміг би їх розібрати.
 *.sh text eol=lf
+# ЛР3 (I08): приклад UART-логу кадру зберігається як є (CRLF, як із терміналу)
+docs/examples/*.log -text

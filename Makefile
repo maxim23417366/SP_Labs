@@ -54,7 +54,7 @@ GIT_HASH  ?= $(if $(GIT_REV),$(GIT_REV)$(if $(GIT_DIRTY),-dirty),nogit)
 DOCKER_RUN = docker run --rm $(DOCKER_USER) -v "$(CURDIR):/workspace" -w /workspace $(IMAGE)
 
 .DEFAULT_GOAL := build
-.PHONY: build clean test coverage check-deps flash monitor image help mem-report
+.PHONY: build clean test coverage check-deps flash monitor image help mem-report tools-test
 
 # Образ збирається з кешу за секунду, тому build завжди спирається на актуальний Dockerfile
 image:
@@ -77,6 +77,10 @@ test: image
 coverage: image
 	$(DOCKER_RUN) make -C $(TESTS_DIR) coverage
 
+# ЛР3 (I08): експорт кадру C → UART-лог → tools/frame_decode.py → PNG, без плати
+tools-test: image
+	$(DOCKER_RUN) make -C $(TESTS_DIR) tools
+
 # Правила залежностей між шарами Core / Platform / Devices / App
 # tr прибирає CR: на Windows скрипт може прийти з CRLF, а sh у контейнері його не розбере
 check-deps: image
@@ -93,6 +97,7 @@ help:
 	@echo make clean   - remove build artifacts
 	@echo make test    - run host tests with mocked HAL, no board needed
 	@echo make coverage - host unit tests + driver coverage, COV_MIN=90
+	@echo make tools-test - frame export: C -> UART log -> tools/frame_decode.py -> PNG
 	@echo make check-deps - check include rules between firmware layers
 	@echo make mem-report - LR3 memory reports in firmware/build/mem
 	@echo make flash   - build and flash the board via ST-Link

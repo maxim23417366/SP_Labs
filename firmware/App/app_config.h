@@ -53,6 +53,10 @@
 #define TBD_CAMERA_PCLK_SPIN_MAX    20000U
 #define CAMERA_IRQ_LOCK_PER_LINE   1U
 
+/* I08: байтів кадру в одному рядку FRM (frame_export.h). 32 Б → 64 hex-символи, рядок
+ * ≈ 82 символи ≈ 7 мс TX при 115200; кадр 38 400 Б = 1200 рядків ≈ 8,5 с. */
+#define FRAME_EXPORT_CHUNK         32U
+
 /* Черга подій до FSM (event_queue.h). Має бути більшою за EVQ max_depth у S1–S3 */
 #define TBD_EVQ_LEN                8U
 

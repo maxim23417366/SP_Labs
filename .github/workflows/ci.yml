@@ -25,3 +25,6 @@ jobs:
 
       - name: Driver coverage (gcov, threshold 90 %)
         run: make coverage
+
+      - name: Frame export C -> UART log -> Python -> PNG (I08)
+        run: make tools-test

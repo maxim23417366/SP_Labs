@@ -44,12 +44,13 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 # Тести App/ (перевірки стенда і команди без обладнання): кожен лінкується з усім App/,
 # усіма драйверами і fake_platform (імітація platform.h)
 # ЛР3 (K02–K09): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
-# ЛР3 (I04): evt — подієві мітки EVT; (I07): cam_test — CAM TEST, fake_camera
-APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd evt cam_test \
+# ЛР3 (I04): evt — подієві мітки EVT; (I07): cam_test — CAM TEST, fake_camera;
+# (I08): frame_export — експорт кадру на ПК
+APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd evt cam_test frame_export \
              sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env storage storage_ops frames \
              sl_camera_frames
 APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env storage frames cam_test \
-             sl_camera_frames sl_integration
+             sl_camera_frames sl_integration frame_export
 APP_DBLS  := fake_platform fake_sensors fake_camera
 APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
@@ -71,7 +72,7 @@ BINS      := $(DRV_BINS) $(APP_BINS) $(HOOKS_WEAK_BIN) $(DVP_BIN)
 DEV_HDRS  := $(wildcard $(FW_DEV)/*.h)
 DBL_HDRS  := $(wildcard doubles/*.h)
 
-.PHONY: all run periph unit selftest coverage clean
+.PHONY: all run periph unit selftest coverage tools clean
 .SECONDARY: $(DRV_OBJS) $(DBL_OBJS) $(APP_OBJS) $(UNITY_OBJ) $(DVP_OBJS)
 
 all: run
@@ -88,6 +89,16 @@ selftest:
 
 periph:
 	$(MAKE) -C periph_check run
+
+# ЛР3 (I08): C → лог → Python → PNG. test_frame_export експортує тестовий кадр через
+# задачу uart Super Loop у build/frame_export_host.log; frame_decode.py відновлює його,
+# перевіряє CRC і звіряє побайтно з малюнком CAM PATTERN. Потрібен python3.
+PYTHON ?= python3
+tools: $(BUILD)/test_frame_export
+	./$(BUILD)/test_frame_export
+	$(PYTHON) ../tools/test_frame_decode.py
+	$(PYTHON) ../tools/frame_decode.py $(BUILD)/frame_export_host.log \
+		--out $(BUILD)/frame_export_host.png --expect-test-pattern
 
 unit: $(BINS)
 	@set -e; for t in $(BINS); do echo; echo "======== $$t"; ./$$t; done
