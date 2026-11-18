@@ -1,7 +1,7 @@
-# Камера OV7670 на STM32F411 без DCMI (ЛР3: I07, FR-07)
+# Камера OV7670 на STM32F411 без DCMI (ЛР3: I07–I08, FR-07)
 
 > Автор: Непорожній М.О. (дистанційно, без стенда). Фізичну роботу камери і реальний
-> кадр перевіряє Колодницький у **H14** за інструкцією §5. До H14 статус FR-07 —
+> кадр перевіряє Колодницький у **H14** за інструкцією §6. До H14 статус FR-07 —
 > «код готовий, апаратно не підтверджено».
 
 ## 1. Що реалізовано в I07 і де
@@ -19,9 +19,9 @@ SCCB не допускає repeated START, тому драйвер не кори
 Піни DVP вже налаштовані CubeMX (`Core/Src/gpio.c`): D0–D7 = PC0–PC7, VSYNC = PC8,
 HREF = PC10, PCLK = PA10, XCLK = PA8 (MCO1, 24 МГц), RESET = PC11, PWDN = PC12.
 
-Камера як задача Super Loop (черга запитів від FSM, запис у Flash), передача кадру на ПК
-і команди `CAM SNAP/EXPORT/LOAD` — картки I08–I09; вони використовують той самий буфер кадру
-з `cam_test.c`.
+Передача кадру на ПК (`CAM PATTERN`, `CAM EXPORT`, `tools/frame_decode.py`) — I08, §5.
+Камера як задача Super Loop (черга запитів від FSM, запис кадру у Flash з ID події) — I09;
+обидві картки використовують той самий буфер кадру з `cam_test.c`.
 
 **Команда запуску.** Рядок `CAM TEST` + Enter у терміналі 115200 8N1:
 
@@ -116,11 +116,71 @@ HREF до його кінця і вмикаються в гасінні між �
 Драйвер SCCB — `tests/unit/test_ov7670.c` (5 тестів: PID/VER, відсутня камера, порядок
 скидання → CLKRC → таблиця, зупинка на регістрі з помилкою, перевірка параметрів).
 
-## 5. Інструкція для H14 (Колодницький, стенд)
+## 5. Формування й експорт кадру на ПК (I08)
 
-На етапі I07 на стенді перевіряються сигнали камери, реальне захоплення кадру командою
-`CAM TEST` і числа, від яких залежать параметри `TBD_CAMERA_*`. Передача кадру на ПК
-і запис у Flash — після I08–I09.
+| Частина | Файл |
+|---|---|
+| Формат рядків, CRC-32, один рядок за прохід | `firmware/App/frame_export.c/h` (виклик `FrameExport_Step()` у задачі `uart`, `app_tasks.c`) |
+| Команди `CAM PATTERN`, `CAM EXPORT`, блокування буфера на час експорту | `firmware/App/cam_test.c` |
+| Скрипт відновлення: лог → перевірка → PNG | `tools/frame_decode.py` (лише стандартна бібліотека Python 3) |
+| Приклад логу і відновленого кадру | `docs/examples/frame_export_sample.log`, `frame_export_sample.png` |
+| Host-тести | `tests/unit/test_frame_export.c` (6), `tools/test_frame_decode.py` (5), ціль `make tools-test` |
+
+**Формат.** UART той самий, що для EVT, STATS і команд, тож кадр іде текстом —
+рядок у Super Loop друкується цілком і не змішується з іншими:
+
+```
+FRAME_BEGIN id=<event> seq=0 w=160 h=120 fmt=RGB565 len=38400 crc32=<hex8> chunk=32
+FRM off=0 d=<64 hex-символи>
+FRM off=32 d=...
+...                                      ← між FRM можуть бути EVT / LOAD / відповіді
+FRAME_END id=<event> len=38400 crc32=<hex8> lines=1200
+```
+
+- `id` — ID події журналу (I09). Для стендових кадрів `CAM TEST` / `CAM PATTERN` — 0.
+- Піксель RGB565 — 2 байти, **старший першим** (так віддає OV7670), рядки кадру зверху вниз.
+- `off` дозволяє скрипту знайти загублений рядок, `crc32` (CRC-32/zlib, той самий
+  `Devices/crc32.c`, що в `CAM,result` і `frame_store`) — перевірити кадр цілком.
+  CRC у `CAM,result,...,crc=` і в `FRAME_BEGIN` однакові для того самого кадру.
+- EVT `export_start_<id>` / `export_done_<id>` дають час експорту (metrics-spec §3.3).
+
+**Час.** Рядок FRM ≈ 82 символи (16 + 64 hex + CRLF) ≈ 7,1 мс при 115200 8N1 (86,8 мкс на
+символ). 1200 рядків ≈ **8,5 с** на кадр замість 3,3 с для двійкових 38 400 Б
+(`theoretical-estimates.md` §2.3) — ціна текстового формату. Цикл при цьому не стоїть:
+задача `uart` друкує один рядок за прохід, решта задач працює між рядками.
+Поки йде експорт, буфер заблоковано: `CAM TEST` / `CAM PATTERN` / `CAM EXPORT` відповідають
+`CAM,busy,op=..,reason=export`.
+
+**Команди.**
+
+| Команда | Що робить | Відповідь |
+|---|---|---|
+| `CAM PATTERN` | відомий кадр без камери: 8 кольорових смуг зверху, градієнт сірого знизу | `CAM,pattern,bytes=38400,crc=0x...` |
+| `CAM EXPORT` | останній кадр (`CAM TEST` або `CAM PATTERN`) на ПК | `FRAME_BEGIN ...` … `FRAME_END ...`; без кадру — `CAM,export,status=no_frame` |
+
+**Відновлення на ПК** (Python 3, сторонні бібліотеки не потрібні):
+
+```
+python3 tools/frame_decode.py <лог> --out frame.png                      # кадр камери
+python3 tools/frame_decode.py <лог> --out frame.png --expect-test-pattern  # після CAM PATTERN
+python3 tools/frame_decode.py <лог> --index 0 --raw frame.bin            # перший кадр у лозі, сирі байти
+```
+
+Виводить `frame_decode: OK` і код 0, якщо кадр цілий; інакше `FAIL` з причиною
+(`missing ... range(s)`, `crc32 ... != expected`, `no FRAME_END`, `test pattern mismatch`)
+і код 1. Без Python на ПК: `make tools-test` проганяє той самий скрипт у Docker.
+
+**Host-перевірка без плати** (`make tools-test`): `test_frame_export` проганяє
+`CAM PATTERN` + `CAM EXPORT` через задачу `uart` Super Loop, звіряє відновлені байти з
+малюнком і зберігає весь вивід у `tests/build/frame_export_host.log`; далі
+`frame_decode.py` відновлює з нього PNG і звіряє побайтно (C → лог → Python → PNG).
+Цим логом і є `docs/examples/frame_export_sample.log` (з EVT між рядками кадру).
+
+## 6. Інструкція для H14 (Колодницький, стенд)
+
+На стенді перевіряються сигнали камери, реальне захоплення кадру командою `CAM TEST`,
+передача кадру на ПК (`CAM EXPORT`, I08) і числа, від яких залежать параметри
+`TBD_CAMERA_*`. Запис кадру у Flash з ID події — після I09.
 
 **Аналізатор** (fx2lafw, 12 МГц, як `cam_vsync_href_pclk.sr` у ЛР2):
 D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Земля спільна.
@@ -144,7 +204,16 @@ D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Зе
 7. Повторити `CAM TEST` щонайменше 10 разів (методичка §6.3), потім `STATS` —
    рядок `STAT name=camera n=10 min_us=.. avg_us=.. max_us=..`. Сцена нерухома — `crc`
    між кадрами може відрізнятися лише через шум сенсора; `bytes`/`lines` — ні.
-8. Результати — у таблицю M07 (теорія з §3 проти виміру) і в `app_config.h`, якщо
+8. **Передача на ПК (I08).** Термінал — запис у файл (PuTTY: Session → Logging →
+   «All session output»; або `picocom -b 115200 /dev/ttyACM0 | tee H14_frame.log`).
+   Спершу `CAM PATTERN`, потім `CAM EXPORT`, дочекатися `FRAME_END` (≈ 9 с).
+   На ПК: `python3 tools/frame_decode.py H14_frame.log --out pattern.png --expect-test-pattern`
+   → `test pattern matches byte for byte`, `OK`. Це перевіряє лінію UART без камери.
+9. `CAM TEST`, потім `CAM EXPORT`; на ПК `python3 tools/frame_decode.py H14_frame.log --out frame.png`
+   → `OK`; `crc32` у виводі скрипта = `crc` з `CAM,result`. Зберегти `frame.png` і лог у
+   `docs/metrics/`. Час експорту — різниця `t_us` між EVT `export_start_0` і `export_done_0`
+   (очікувано ≈ 8,5 с, §5).
+10. Результати — у таблицю M07 (теорія з §3 і §5 проти виміру) і в `app_config.h`, якщо
    числа розходяться більш ніж на 10–20 %.
 
 **Якщо не вийшло:**
@@ -161,3 +230,7 @@ D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Зе
 | `CAM,result,status=vsync_timeout` | кадрової синхронізації немає — XCLK на PA8, `failed_reg` у `CAM,init` |
 | `status=short_frame` або `short=` > 0 | повільніший CLKRC (`TBD_CAMERA_CLKRC` 0x0F → 0x13) або таблиця вікна; байти на лінію — у PulseView |
 | `vglitch=` > 0 | завади на VSYNC, кадр при цьому цілий — див. рядок вище |
+| `frame_decode: FAIL missing ... range(s)` | термінал загубив рядки: лог писати у файл, а не копіювати з вікна; не друкувати команди під час експорту |
+| `frame_decode: FAIL crc32 ...` при `CAM PATTERN` | спотворення на лінії UART — інший кабель / порт, перевірити 115200 8N1 |
+| `frame_decode: FAIL no FRAME_END` | лог обірвано до кінця експорту — дочекатися `FRAME_END` |
+| кадр «зсунутий» або з кольоровими смугами | `short=` > 0 у `CAM,result` або неправильний порядок байтів — див. `short_frame` |

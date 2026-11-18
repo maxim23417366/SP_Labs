@@ -15,6 +15,7 @@
 #include "cmd.h"
 #include "event_queue.h"
 #include "evt.h"
+#include "frame_export.h"
 #include "platform.h"
 #include "sched.h"
 #include "smartlock_hooks.h"
@@ -110,6 +111,10 @@ static bool task_uart(void)
         did = true;
     }
     if (Evt_Flush(EVT_FLUSH_PER_PASS) != 0U)   /* I04: EVT друкуються порціями */
+    {
+        did = true;
+    }
+    if (FrameExport_Step())   /* I08: один рядок кадру за прохід (CAM EXPORT) */
     {
         did = true;
     }

@@ -12,6 +12,7 @@
 #include "app_config.h"
 #include "crc32.h"
 #include "evt.h"
+#include "frame_export.h"
 #include "ov7670.h"
 #include "platform.h"
 
@@ -100,17 +101,101 @@ static void cam_capture(void)
            (unsigned long)crc32_compute(s_frame, s_frame_bytes));
 }
 
+/* I08: синтетичний кадр — 8 кольорових смуг зверху, градієнт сірого знизу.
+ * Той самий малюнок генерує tools/frame_decode.py::test_pattern(). */
+void CamTest_FillTestPattern(uint8_t *buf, uint16_t width, uint16_t height)
+{
+    static const uint8_t bars[8][3] = {
+        { 255U, 255U, 255U }, { 255U, 255U, 0U }, { 0U, 255U, 255U }, { 0U, 255U, 0U },
+        { 255U, 0U, 255U },   { 255U, 0U, 0U },   { 0U, 0U, 255U },   { 0U, 0U, 0U },
+    };
+    size_t i = 0U;
+
+    if ((buf == NULL) || (width < 2U))
+    {
+        return;
+    }
+    for (uint16_t y = 0U; y < height; y++)
+    {
+        for (uint16_t x = 0U; x < width; x++)
+        {
+            uint32_t r;
+            uint32_t g;
+            uint32_t b;
+            uint16_t v;
+
+            if (y < (height / 2U))
+            {
+                const uint8_t *c = bars[((uint32_t)x * 8U) / width];
+
+                r = c[0];
+                g = c[1];
+                b = c[2];
+            }
+            else
+            {
+                r = ((uint32_t)x * 255U) / (uint32_t)(width - 1U);
+                g = r;
+                b = r;
+            }
+            v = (uint16_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+            buf[i++] = (uint8_t)(v >> 8);       /* RGB565, старший байт першим, як OV7670 */
+            buf[i++] = (uint8_t)(v & 0xFFU);
+        }
+    }
+}
+
+/* Буфер кадру не змінюється, поки йде експорт (I08) */
+static bool frame_locked(const char *op)
+{
+    if (FrameExport_Busy())
+    {
+        printf("CAM,busy,op=%s,reason=export\r\n", op);
+        return true;
+    }
+    return false;
+}
+
 bool CamTest_LineCommand(const char *line)
 {
-    if ((line == NULL) || (strcmp(line, "CAM TEST") != 0))
+    if (line == NULL)
     {
         return false;
     }
-    if (s_ready || cam_init())
+    if (strcmp(line, "CAM TEST") == 0)
     {
-        cam_capture();
+        if (!frame_locked("test") && (s_ready || cam_init()))
+        {
+            cam_capture();
+        }
+        return true;
     }
-    return true;
+    if (strcmp(line, "CAM PATTERN") == 0)
+    {
+        /* I08: відомий кадр без камери — перевірка передачі й відновлення на ПК */
+        if (!frame_locked("pattern"))
+        {
+            CamTest_FillTestPattern(s_frame, (uint16_t)CAMERA_WIDTH, (uint16_t)CAMERA_HEIGHT);
+            s_frame_bytes = CAMERA_FRAME_BYTES;
+            printf("CAM,pattern,bytes=%lu,crc=0x%08lX\r\n", (unsigned long)s_frame_bytes,
+                   (unsigned long)crc32_compute(s_frame, s_frame_bytes));
+        }
+        return true;
+    }
+    if (strcmp(line, "CAM EXPORT") == 0)
+    {
+        /* I08: останній кадр (CAM TEST або CAM PATTERN) на ПК — FRAME_BEGIN/FRM/FRAME_END */
+        if (s_frame_bytes != CAMERA_FRAME_BYTES)
+        {
+            printf("CAM,export,status=no_frame\r\n");
+        }
+        else if (!FrameExport_Start(s_frame, (uint32_t)s_frame_bytes, 0U))
+        {
+            printf("CAM,busy,op=export,reason=export\r\n");
+        }
+        return true;
+    }
+    return false;
 }
 
 const perf_stat_t *CamTest_Stat(void)
