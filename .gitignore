@@ -11,3 +11,5 @@ build/
 .settings/
 .idea/
 local.mk
+# ЛР3 (I08): кеш Python після tools/test_frame_decode.py
+__pycache__/
