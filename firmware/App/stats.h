@@ -15,7 +15,7 @@
   *   OVR name=btn_b1|pir|mpu count=..   — повторні фронти до обробки (I04)
   *   STAT name=evq_wait ...                                      — подія в черзі FSM
   *   EVQ len=.. pending=.. max_depth=.. posted=.. dropped=..
-  *   UART rx_overrun=.. cmd_overflow=..
+  *   UART rx_overrun=.. cmd_overflow=.. cmd_dropped=.. rx_peak=..
   *   EVTLOG pending=.. dropped=..                                (I04)
   *   STACK reserved=.. used=.. free=..
   *   HEAP arena=.. used=.. free=..

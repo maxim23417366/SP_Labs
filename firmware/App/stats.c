@@ -87,8 +87,9 @@ void Stats_Print(bool raw)
     printf("EVQ len=%u pending=%u max_depth=%u posted=%lu dropped=%lu\r\n", (unsigned)TBD_EVQ_LEN,
            SmartLock_EventsPending(), SmartLock_EventsMaxDepth(),
            (unsigned long)SmartLock_EventsPosted(), (unsigned long)SmartLock_EventsDropped());
-    printf("UART rx_overrun=%lu cmd_overflow=%lu\r\n",
-           (unsigned long)Platform_UartOverruns(), (unsigned long)Cmd_LineOverflows());
+    printf("UART rx_overrun=%lu cmd_overflow=%lu cmd_dropped=%lu rx_peak=%lu\r\n",
+           (unsigned long)Platform_UartOverruns(), (unsigned long)Cmd_LineOverflows(),
+           (unsigned long)Cmd_Dropped(), (unsigned long)Platform_UartRxPeak());
     printf("EVTLOG pending=%u dropped=%lu\r\n", Evt_Pending(), (unsigned long)Evt_Dropped());
     AppTasks_PrintMem();
     printf("STATS_END\r\n");

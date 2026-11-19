@@ -9,6 +9,7 @@
   */
 #include "board.h"
 #include "platform.h"
+#include "uart_rx.h"
 
 /* ---- піни, яких немає в firmware.ioc ЛР1 ------------------------------------ */
 #define DOOR_PORT   GPIOB
@@ -23,8 +24,6 @@ static volatile uint32_t vsync_count;
 static volatile uint32_t ev_t[PLATFORM_EV_COUNT];
 static volatile uint8_t  ev_pending[PLATFORM_EV_COUNT];
 static volatile uint32_t ev_overruns[PLATFORM_EV_COUNT];
-
-static uint32_t uart_overruns;
 
 
 /* ---- мікросекунди через DWT CYCCNT ------------------------------------------ */
@@ -94,6 +93,9 @@ void Platform_IoInit(void)
   DWT->CYCCNT = 0U;
   DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
   cycles_per_us = HAL_RCC_GetHCLKFreq() / 1000000U;
+
+  /* Прийом команд: DMA у кільце (uart_rx.c). USART2 уже налаштовано MX_USART2_UART_Init(). */
+  UartRx_Start();
 }
 
 static uint32_t pin(GPIO_TypeDef *port, uint16_t p)
@@ -346,25 +348,19 @@ uint32_t Platform_EventOverruns(platform_event_t ev)
 }
 
 /* ---- UART ---------------------------------------------------------------------- */
+/* До ЛР3-фіксу тут було опитування RXNE з task_uart(): байти губились (ORE), коли
+ * цикл стояв довше двох символів. Тепер байти пише DMA, а тут лише читання кільця. */
 int Platform_UartGetChar(void)
 {
-  uint8_t c;
-
-  /* Скидання ORE на F4 — це читання SR і DR, тому робимо його лише тоді, коли
-   * переповнення справді сталося, інакше з'їли б прийнятий символ */
-  if (__HAL_UART_GET_FLAG(BOARD_LOG_UART, UART_FLAG_ORE))
-  {
-    __HAL_UART_CLEAR_OREFLAG(BOARD_LOG_UART);
-    uart_overruns++;   /* ЛР3 (I04): щонайменше один байт загублено (§6.2, потік команд) */
-  }
-  if (HAL_UART_Receive(BOARD_LOG_UART, &c, 1U, 0U) == HAL_OK)
-  {
-    return (int)c;
-  }
-  return -1;
+  return UartRx_Get();
 }
 
 uint32_t Platform_UartOverruns(void)
 {
-  return uart_overruns;
+  return UartRx_Lost();
+}
+
+uint32_t Platform_UartRxPeak(void)
+{
+  return UartRx_Peak();
 }

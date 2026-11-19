@@ -252,11 +252,14 @@ dev_status_t Platform_I2cProbe(uint8_t addr7)
 
 int Platform_UartGetChar(void)
 {
+  unsigned char c;
+
   if ((fake_platform.uart_rx == NULL) || (fake_platform.uart_rx[fake_platform.uart_pos] == '\0'))
   {
-    return -1;
+    return PLATFORM_UART_NONE;
   }
-  return (unsigned char)fake_platform.uart_rx[fake_platform.uart_pos++];
+  c = (unsigned char)fake_platform.uart_rx[fake_platform.uart_pos++];
+  return (c == (unsigned char)FAKE_UART_LOST) ? PLATFORM_UART_LOST : (int)c;
 }
 
 void Platform_SetLoopTraffic(int on)
@@ -322,4 +325,9 @@ uint32_t Platform_EventOverruns(platform_event_t ev)
 uint32_t Platform_UartOverruns(void)
 {
   return fake_platform.uart_overruns;
+}
+
+uint32_t Platform_UartRxPeak(void)
+{
+  return fake_platform.uart_rx_peak;
 }

@@ -5,6 +5,7 @@
 #   make run       — periph_check (ЛР1) + unit-тести драйверів і App/ (Unity)
 #                    + тест форматування self-test (selftest)
 #                    + ЛР3 (I07): OV7670 і алгоритм захоплення DVP (Platform/camera_dvp.c)
+#                    + ЛР3: прийом USART2 через DMA-кільце (Platform/uart_rx.c, test_uart_rx)
 #   make coverage  — unit-тести + покриття firmware/Devices/*.c (поріг COV_MIN)
 #                    і firmware/App/*.c (поріг COV_MIN_APP), gcov
 #   make run-<name> — зібрати і запустити один тест, напр. make run-sl_fsm
@@ -67,13 +68,17 @@ HOOKS_WEAK_BIN  := $(BUILD)/test_hooks_weak
 DVP_BIN   := $(BUILD)/test_camera_dvp
 DVP_OBJS  := $(BUILD)/plat/camera_dvp.o $(BUILD)/doubles/fake_dvp.o $(BUILD)/doubles/fake_platform.o
 
-BINS      := $(DRV_BINS) $(APP_BINS) $(HOOKS_WEAK_BIN) $(DVP_BIN)
+# ЛР3: прийом USART2 через DMA-кільце з Platform/ на моделі DMA1 Stream5 (fake_uart_dma)
+UART_BIN  := $(BUILD)/test_uart_rx
+UART_OBJS := $(BUILD)/plat/uart_rx.o $(BUILD)/doubles/fake_uart_dma.o
+
+BINS      := $(DRV_BINS) $(APP_BINS) $(HOOKS_WEAK_BIN) $(DVP_BIN) $(UART_BIN)
 
 DEV_HDRS  := $(wildcard $(FW_DEV)/*.h)
 DBL_HDRS  := $(wildcard doubles/*.h)
 
 .PHONY: all run periph unit selftest coverage tools clean
-.SECONDARY: $(DRV_OBJS) $(DBL_OBJS) $(APP_OBJS) $(UNITY_OBJ) $(DVP_OBJS)
+.SECONDARY: $(DRV_OBJS) $(DBL_OBJS) $(APP_OBJS) $(UNITY_OBJ) $(DVP_OBJS) $(UART_OBJS)
 
 all: run
 
@@ -118,7 +123,7 @@ $(BUILD)/app/%.o: $(FW_APP)/%.c $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) $(COVFLAGS) -c $< -o $@
 
-$(APP_DBLS:%=$(BUILD)/doubles/%.o) $(BUILD)/doubles/fake_dvp.o: $(BUILD)/doubles/%.o: doubles/%.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
+$(APP_DBLS:%=$(BUILD)/doubles/%.o) $(BUILD)/doubles/fake_dvp.o $(BUILD)/doubles/fake_uart_dma.o: $(BUILD)/doubles/%.o: doubles/%.c $(DBL_HDRS) $(APP_HDRS) $(DEV_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_APP) -c $< -o $@
 
@@ -129,6 +134,14 @@ $(BUILD)/plat/camera_dvp.o: $(FW_PLAT)/camera_dvp.c $(FW_PLAT)/platform.h double
 
 $(DVP_BIN): unit/test_camera_dvp.c $(DVP_OBJS) $(DBL_OBJS) $(UNITY_OBJ)
 	$(CC) $(CFLAGS_APP) $(COVFLAGS) $< $(DVP_OBJS) $(DBL_OBJS) $(UNITY_OBJ) -o $@
+
+# ЛР3: справжній Platform/uart_rx.c, але з fake_uart_rx_port.h замість регістрів DMA
+$(BUILD)/plat/uart_rx.o: $(FW_PLAT)/uart_rx.c $(FW_PLAT)/uart_rx.h $(FW_PLAT)/platform.h doubles/fake_uart_rx_port.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_APP) -DPLATFORM_UART_FAKE $(COVFLAGS) -c $< -o $@
+
+$(UART_BIN): unit/test_uart_rx.c $(UART_OBJS) $(UNITY_OBJ)
+	$(CC) $(CFLAGS_APP) $(COVFLAGS) $< $(UART_OBJS) $(UNITY_OBJ) -o $@
 
 $(UNITY_OBJ): $(UNITY)/unity.c $(UNITY)/unity.h $(UNITY)/unity_internals.h
 	@mkdir -p $(dir $@)
@@ -181,8 +194,8 @@ coverage:
 	    printf "  %-12s lines %6.2f%% of %4d -> %s\n", "TOTAL", pct, tot, ok ? "OK" : "BELOW THRESHOLD"; \
 	    exit !ok }'
 	@echo
-	@echo "======== coverage: firmware/Platform/camera_dvp.c (gcov, line threshold $(COV_MIN_APP)%)"
-	@gcov -n -b -o $(BUILD)/plat $(FW_PLAT)/camera_dvp.c | awk -v min=$(COV_MIN_APP) ' \
+	@echo "======== coverage: firmware/Platform/camera_dvp.c, uart_rx.c (gcov, line threshold $(COV_MIN_APP)%)"
+	@gcov -n -b -o $(BUILD)/plat $(FW_PLAT)/camera_dvp.c $(FW_PLAT)/uart_rx.c | awk -v min=$(COV_MIN_APP) ' \
 	  /^File / { if (keep && got_l && !got_b) printf "\n"; f = $$2; gsub(/\047/, "", f); sub(/.*\//, "", f); \
 	    keep = ($$2 ~ /Platform\/[^\/]*\.c\047$$/); got_l = 0; got_b = 0; next } \
 	  keep && !got_l && /^Lines executed:/ { p = substr($$2, 10) + 0; n = $$4; got_l = 1; \
