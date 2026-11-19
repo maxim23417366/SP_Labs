@@ -25,7 +25,7 @@ STAT name=btn_b1_lat|pir_lat|mpu_lat n=.. min_us=.. avg_us=.. max_us=..   (I04)
 OVR name=btn_b1|pir|mpu count=..             (I04: повторні фронти до обробки)
 STAT name=evq_wait ...                       (подія в черзі FSM: Post → Take)
 EVQ len=8 pending=.. max_depth=.. posted=.. dropped=..
-UART rx_overrun=.. cmd_overflow=..          (rx_overrun — I04)
+UART rx_overrun=.. cmd_overflow=.. cmd_dropped=.. rx_peak=..   (rx_overrun — I04; DMA-прийом — docs/lab_3/uart-rx.md)
 EVTLOG pending=.. dropped=..                 (I04)
 STACK reserved=.. used=.. free=..
 HEAP arena=.. used=.. free=..

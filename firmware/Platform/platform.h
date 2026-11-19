@@ -94,9 +94,14 @@ typedef enum
 int      Platform_TakeEvent(platform_event_t ev, uint32_t *t_cycles);
 uint32_t Platform_EventOverruns(platform_event_t ev);
 
-/* Скільки разів приймач USART2 переповнився (ORE) — байти загублено, бо цикл
- * не встиг забрати попередній. Лічильник веде Platform_UartGetChar(). */
+/* Скільки разів прийом USART2 втратив байти. З прийомом через DMA (uart_rx.c) це
+ * переповнення кільця UART_RX_BUF: програма не читала ~178 мс під потоком байтів.
+ * Кожна втрата — один PLATFORM_UART_LOST з Platform_UartGetChar(). */
 uint32_t Platform_UartOverruns(void);
+
+/* Найбільше байтів, що чекали в кільці прийому (з UART_RX_BUF = 2048) — наскільки
+ * близько потік команд підійшов до втрат */
+uint32_t Platform_UartRxPeak(void);
 
 /* ---- ЛР3 (I06): пам'ять (методичка §5.4) -------------------------------------------- */
 
@@ -162,7 +167,11 @@ uint32_t Platform_VsyncCount(void);
 /* Скан однієї адреси I2C1 (START, addr+W, STOP). DEV_ERR_NACK — немає ACK. */
 dev_status_t Platform_I2cProbe(uint8_t addr7);
 
-/* Один прийнятий з USART2 символ або -1, якщо нічого не прийшло. */
+/* Один прийнятий з USART2 символ (0..255), PLATFORM_UART_NONE, якщо нічого не прийшло,
+ * або PLATFORM_UART_LOST — на цьому місці потоку байти загублено (рядок, у який
+ * вони входили, зіпсований). Байти приймає DMA незалежно від циклу і __disable_irq(). */
+#define PLATFORM_UART_NONE   (-1)
+#define PLATFORM_UART_LOST   (-2)
 int Platform_UartGetChar(void);
 
 /* Вмикає/вимикає періодичний трафік ЛР1 (I2C + JEDEC кожні 500 мс). */
