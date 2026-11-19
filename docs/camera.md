@@ -1,7 +1,7 @@
-# Камера OV7670 на STM32F411 без DCMI (ЛР3: I07–I08, FR-07)
+# Камера OV7670 на STM32F411 без DCMI (ЛР3: I07–I09, FR-07)
 
 > Автор: Непорожній М.О. (дистанційно, без стенда). Фізичну роботу камери і реальний
-> кадр перевіряє Колодницький у **H14** за інструкцією §6. До H14 статус FR-07 —
+> кадр перевіряє Колодницький у **H14** за інструкцією §7. До H14 статус FR-07 —
 > «код готовий, апаратно не підтверджено».
 
 ## 1. Що реалізовано в I07 і де
@@ -20,7 +20,7 @@ SCCB не допускає repeated START, тому драйвер не кори
 HREF = PC10, PCLK = PA10, XCLK = PA8 (MCO1, 24 МГц), RESET = PC11, PWDN = PC12.
 
 Передача кадру на ПК (`CAM PATTERN`, `CAM EXPORT`, `tools/frame_decode.py`) — I08, §5.
-Камера як задача Super Loop (черга запитів від FSM, запис кадру у Flash з ID події) — I09;
+Камера як задача Super Loop (запит від FSM, запис кадру у Flash з ID події) — I09, §6;
 обидві картки використовують той самий буфер кадру з `cam_test.c`.
 
 **Команда запуску.** Рядок `CAM TEST` + Enter у терміналі 115200 8N1:
@@ -137,7 +137,8 @@ FRM off=32 d=...
 FRAME_END id=<event> len=38400 crc32=<hex8> lines=1200
 ```
 
-- `id` — ID події журналу (I09). Для стендових кадрів `CAM TEST` / `CAM PATTERN` — 0.
+- `id` — ID події журналу: для кадру тривоги або кадру, прочитаного `CAM LOAD`, це `event_seq`
+  (I09, §6); для стендових кадрів `CAM TEST` / `CAM PATTERN` — 0.
 - Піксель RGB565 — 2 байти, **старший першим** (так віддає OV7670), рядки кадру зверху вниз.
 - `off` дозволяє скрипту знайти загублений рядок, `crc32` (CRC-32/zlib, той самий
   `Devices/crc32.c`, що в `CAM,result` і `frame_store`) — перевірити кадр цілком.
@@ -176,11 +177,68 @@ python3 tools/frame_decode.py <лог> --index 0 --raw frame.bin            # п
 `frame_decode.py` відновлює з нього PNG і звіряє побайтно (C → лог → Python → PNG).
 Цим логом і є `docs/examples/frame_export_sample.log` (з EVT між рядками кадру).
 
-## 6. Інструкція для H14 (Колодницький, стенд)
+## 6. Кадр охоронної події у W25Q64 (I09)
+
+Точка підключення — `docs/lab_3/journal-camera-integration.md` §4 (Коваль, K08). Файли I09:
+
+| Частина | Файл |
+|---|---|
+| Сильна `SmartLock_CameraRequest()` (замінює слабку заглушку `sl_camera_link.c`), задача `camera` | `firmware/App/camera.c/h` |
+| Задача `camera` у Super Loop (подієва, між `env` і `storage`) | `app_tasks.c`, слабка `SmartLock_CameraPoll()` у `smartlock_hooks_weak.c` |
+| Спільне захоплення для `CAM TEST` і тривоги, `CAM LOAD <frame_id>`, `STAT name=flash_frame` | `cam_test.c/h`, `stats.c` |
+| Host-тест | `tests/unit/test_camera.c` (6): окремий бінарник з `camera.o` (`APP_OBJS_camera`), у решті тестів App/ лишається заглушка, на яку спираються тести K08 |
+
+**Шлях:**
+
+```
+FSM (LOCKED, MOTION / TAMPER) ── запис у журнал (ID = seq) ── SmartLock_CameraLinkStart(id)
+  └► SmartLock_CameraRequest(id)                  camera.c: лише запам'ятовує запит
+задача camera (той самий прохід, після fsm):
+  CamTest_Capture()                    PB2 ↑  EVT capture_start / capture_done, STAT camera
+  SmartLock_CameraStoreFrame(id, RGB565, 160, 120, buf, 38400)
+                                       PB12 ↑ EVT flash_wr_start / flash_wr_done, STAT flash_frame
+    write_frame (H10): заголовок кадру event_seq = id
+    → SmartLock_OnCameraResult → журнал PHOTO {arg = frame_id, ref = id}  (у Flash PHOTO_SAVED)
+  або SmartLock_OnCameraResult(id, 0, SL_CAM_ERR_CAPTURE) → PHOTO_ERR {arg = 2, ref = id}
+CAM,photo,event=<id>,status=ok|capture_err|store_err,cap=<статус>,capture_us=..,store_us=..
+```
+
+- **Рівно один результат на запит:** `PHOTO` або `PHOTO_ERR` з `ref` = ID події. Модуль камери
+  сам `PHOTO` не логує (правило K08).
+- **Один запит за раз.** Поки попередній не оброблено або буфер кадру передається на ПК
+  (`CAM EXPORT`), `SmartLock_CameraRequest()` повертає `false` — журнал запише `PHOTO_ERR`
+  REJECTED (arg = 1). На практиці запит обробляється в тому самому проході, тож друга подія
+  відхиляється лише під час експорту.
+- **Блокування циклу.** Захоплення ≈ 0,5–1,1 с (§3) + запис кадру ≈ 0,74–0,94 с
+  (`flash-layout.md` §4.2) — разом до ≈ 2 с один прохід. Це в межах
+  `TBD_CAM_RESULT_TIMEOUT_MS` (10 с), але на цей час інші задачі стоять: події кнопок і PIR
+  не губляться (ISR, черга `TBD_EVQ_LEN`), їхню затримку покаже `STAT *_lat`. Розбити запис
+  на порції (`frame_store_begin/append/commit`) — кандидат на оптимізацію після вимірів H14.
+- **Зв'язок в обидва боки:** заголовок кадру → `event_seq` = ID події; запис `PHOTO_SAVED`
+  у Flash → seq події і `frame_id`. Після рестарту кадр читається командою
+  `CAM LOAD <frame_id>`:
+  `CAM,load,frame=<n>,status=ok|no_frame|crc|param|flash_err,event=<seq>,w=160,h=120,len=38400,crc=0x...`,
+  а `CAM EXPORT` передає його з `id` = ID події.
+
+**Host-тест** (`test_camera`, справжні `camera.c`, `sl_camera_*`, `sl_journal` → `storage.c`,
+`frames.c` → `frame_store` → драйвер W25Q64 над `fake_w25q64`; підмінено лише DVP і SCCB):
+- `test_alarm_frame_written_and_read_back_bytewise` — кадр → `write_frame` → `read_frame`
+  **побайтно** (38 400 Б), заголовок `event_seq` = ID події, `PHOTO,arg=1,ref=<id>` у журналі,
+  `PHOTO_SAVED` у Flash з тим самим seq і `frame_id`; EVT і `STAT flash_frame`; PB2 / PB12;
+- `test_cam_load_after_restart_and_export_with_event_id` — після «рестарту» `CAM LOAD`
+  повертає той самий кадр побайтно, `CAM EXPORT` — з `id` події;
+- `test_capture_error_gives_photo_err_capture`, `test_store_error_gives_photo_err_store` —
+  `PHOTO_ERR` CAPTURE / STORE з `ref` = ID події, кадру у Flash немає;
+- `test_request_rules` — один запит за раз, відмова під час експорту і для ID = 0;
+- `test_super_loop_motion_in_locked_gives_linked_photo` — повний шлях у Super Loop:
+  LOCK_REQUEST → 15 с → LOCKED → MOTION → FSM → задача camera → Flash → `PHOTO` з `ref` = ID
+  MOTION, `alarm_triggered` у EVT.
+
+## 7. Інструкція для H14 (Колодницький, стенд)
 
 На стенді перевіряються сигнали камери, реальне захоплення кадру командою `CAM TEST`,
-передача кадру на ПК (`CAM EXPORT`, I08) і числа, від яких залежать параметри
-`TBD_CAMERA_*`. Запис кадру у Flash з ID події — після I09.
+передача кадру на ПК (`CAM EXPORT`, I08), кадр тривоги у W25Q64 з ID події (I09) і числа,
+від яких залежать параметри `TBD_CAMERA_*`.
 
 **Аналізатор** (fx2lafw, 12 МГц, як `cam_vsync_href_pclk.sr` у ЛР2):
 D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Земля спільна.
@@ -213,8 +271,18 @@ D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Зе
    → `OK`; `crc32` у виводі скрипта = `crc` з `CAM,result`. Зберегти `frame.png` і лог у
    `docs/metrics/`. Час експорту — різниця `t_us` між EVT `export_start_0` і `export_done_0`
    (очікувано ≈ 8,5 с, §5).
-10. Результати — у таблицю M07 (теорія з §3 і §5 проти виміру) і в `app_config.h`, якщо
-   числа розходяться більш ніж на 10–20 %.
+10. **Кадр тривоги (I09).** B1 → вийти, зачинити двері → через 15 с `LOCKED`. Помахати
+   перед PIR. У лозі: `EVT,id=<N>,...,name=MOTION`, `CAM,photo,event=<N>,status=ok,...`,
+   `EVT,...,name=PHOTO,arg=<frame>,ref=<N>,flash=ok`. PulseView: PB2 — захоплення,
+   PB12 — запис кадру; ширина імпульсів = `capture_us` / `store_us`.
+11. Вимкнути живлення, увімкнути. `CAM LOAD <frame>` → `status=ok,event=<N>`; `CAM EXPORT`
+   і `frame_decode.py` → PNG з `id=<N>` у виводі скрипта. Команда `d` (журнал) показує
+   `PHOTO_SAVED` з тим самим `<N>` і `<frame>`.
+12. Дві події поспіль під час `CAM EXPORT` (≈ 9 с) → друга дає `PHOTO_ERR,arg=1` (REJECTED).
+   `STATS` після серії: `STAT name=camera`, `STAT name=flash_frame`, `STAT name=pir_lat`
+   (затримка PIR під час зйомки і запису кадру — для M-03, сценарій S3).
+13. Результати — у таблицю M07 (теорія з §3, §5 і §6 проти виміру) і в `app_config.h` /
+   `TBD_CAM_RESULT_TIMEOUT_MS`, якщо числа розходяться більш ніж на 10–20 %.
 
 **Якщо не вийшло:**
 
@@ -233,4 +301,7 @@ D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Зе
 | `frame_decode: FAIL missing ... range(s)` | термінал загубив рядки: лог писати у файл, а не копіювати з вікна; не друкувати команди під час експорту |
 | `frame_decode: FAIL crc32 ...` при `CAM PATTERN` | спотворення на лінії UART — інший кабель / порт, перевірити 115200 8N1 |
 | `frame_decode: FAIL no FRAME_END` | лог обірвано до кінця експорту — дочекатися `FRAME_END` |
+| `CAM,photo,...,status=store_err` | Flash не змонтована (`FRM,MOUNT` при старті) або помилка запису — `LOG,ERR` у лозі |
+| `PHOTO_ERR,arg=4` (TIMEOUT) | кадр не встиг за `TBD_CAM_RESULT_TIMEOUT_MS` — порівняти `capture_us + store_us` з 10 с |
+| `CAM,load,...,status=no_frame` | кадр з цим номером перезаписано (кільце з 126 слотів, `flash-layout.md`) або номер не той — взяти `arg` з рядка `PHOTO` |
 | кадр «зсунутий» або з кольоровими смугами | `short=` > 0 у `CAM,result` або неправильний порядок байтів — див. `short_frame` |

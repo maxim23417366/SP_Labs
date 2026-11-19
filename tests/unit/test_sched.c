@@ -256,12 +256,13 @@ static void test_event_queue_fifo_overflow_and_wait(void)
 /* ---- таблиця задач SmartLock і слабкі точки підключення --------------------------- */
 static void test_app_tasks_table_order(void)
 {
-  static const char *const names[] = { "fsm", "buttons", "security", "env", "storage", "mem", "uart" };
+  /* I09: camera — подієва задача між env і storage (metrics-spec M-01) */
+  static const char *const names[] = { "fsm", "buttons", "security", "env", "camera", "storage", "mem", "uart" };
 
   AppTasks_Init();
   TEST_ASSERT_TRUE(Sched_Started());
-  TEST_ASSERT_EQUAL_INT(7, Sched_Count());
-  for (int i = 0; i < 7; i++)
+  TEST_ASSERT_EQUAL_INT(8, Sched_Count());
+  for (int i = 0; i < 8; i++)
   {
     TEST_ASSERT_EQUAL_STRING(names[i], Sched_Task(i)->name);
   }
@@ -356,8 +357,9 @@ static void test_input_edges_reach_fsm_with_react_pulse(void)
     Sched_RunOnce();
   }
   TEST_ASSERT_EQUAL_UINT32(posted, SmartLock_EventsPosted());
-  /* security і env мають власні канали PB2 / PB12 */
-  TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_CAMERA] >= 2U);
+  /* I09: PB2 / PB12 — лише захоплення і запис кадру; у UNLOCKED кадр не запитується */
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_CAMERA]);
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_STORAGE]);
 }
 
 /* ---- I06: рядки STACK/HEAP лише при зростанні максимуму --------------------------------- */
@@ -796,7 +798,8 @@ static void test_uart_task_runs_lr2_commands(void)
   fake_platform.uart_pos = 0U;
   Sched_RunOnce();
   TEST_ASSERT_EQUAL_UINT(1U, (unsigned)fake_platform.uart_pos);   /* символ забрала uart-задача */
-  TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(6)->exec.count);
+  TEST_ASSERT_EQUAL_STRING("uart", Sched_Task(7)->name);
+  TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(7)->exec.count);
 }
 
 int main(void)

@@ -83,6 +83,7 @@ void Stats_Print(bool raw)
     }
 
     print_stat(CamTest_Stat(), raw);   /* I07: тривалість захоплення кадру (CAM TEST) */
+    print_stat(CamTest_StoreStat(), raw);   /* I09: запис кадру у W25Q64 (camera.c) */
     print_stat(SmartLock_EventsWaitStat(), raw);
     printf("EVQ len=%u pending=%u max_depth=%u posted=%lu dropped=%lu\r\n", (unsigned)TBD_EVQ_LEN,
            SmartLock_EventsPending(), SmartLock_EventsMaxDepth(),

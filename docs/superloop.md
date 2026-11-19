@@ -128,8 +128,8 @@ EVT t_us=12000100 name=mark_1
 |---|---|---|---|
 | `PLATFORM_PROBE_LOOP` | PB0 | CN8-4 (A3) | 1 на час кожного проходу `Sched_RunOnce()`: ширина = тривалість проходу, проміжки — період циклу |
 | `PLATFORM_PROBE_REACT` | PB1 | CN10-24 | короткий імпульс, коли задача забрала подію B1 / PIR / MPU_INT з ISR (I04; в I05 — на час роботи fsm з подіями) |
-| `PLATFORM_PROBE_CAMERA` | PB2 | CN10-22 | до I09 — 1 на час задачі security (раз на 20 мс); з I09 — захоплення кадру |
-| `PLATFORM_PROBE_STORAGE` | PB12 | CN10-16 | до I09 — 1 на час задачі env (раз на 2 с, DHT11 + BMP180); з I09 — `write_frame` у W25Q64 |
+| `PLATFORM_PROBE_CAMERA` | PB2 | CN10-22 | з I09 — 1 на час захоплення кадру охоронної події (`camera.c`); до I09 показував задачу security |
+| `PLATFORM_PROBE_STORAGE` | PB12 | CN10-16 | з I09 — 1 на час запису кадру у W25Q64 (`SmartLock_CameraStoreFrame`); до I09 показував задачу env |
 
 * Усі на GPIOB: `PROBE_ON/OFF` — один запис у `GPIOB->BSRR` без HAL (кілька тактів).
 * Піни вільні за `docs/pinout.md`: PB0 звільнено в ЛР2 (тумблер LOCK), PB1/PB2/PB12 не
