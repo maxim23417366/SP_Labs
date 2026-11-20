@@ -9,7 +9,11 @@
 #   3. Super Loop: main → App_Init → App_Loop → Sched_RunOnce лінковано;
 #   4. усі точки підключення (smartlock_hooks.h) і запит кадру — СИЛЬНІ реалізації
 #      модулів (T), а не слабкі заглушки (W): це одна прошивка з усіма картками;
-#   5. git-хеш: рядок GIT_HASH є в .elf, мітка build/.git_hash_<хеш> збігається.
+#   5. git-хеш: мітка build/.git_hash_<хеш> збігається, і в .elf є рядок банера
+#      «BUILD,fw=SmartLock,lab=LR3,git=<хеш>,» (App_PrintBuild(), app.c) — з префіксом
+#      і комою після хеша, тож не підходить ні коротший хеш, ні <хеш>-dirty, ні випадковий
+#      збіг байтів. Запасний варіант (інший формат банера): окремий рядок C, рівно
+#      <хеш> між нулями, — з попередженням.
 #
 # Змінні: GIT_HASH (з кореневого Makefile), REQUIRE_GIT=1 — «nogit» є помилкою (CI),
 #         NM (за замовчуванням arm-none-eabi-nm), FW (каталог прошивки).
@@ -79,22 +83,23 @@ else
 fi
 
 # 5. git-хеш
+# Префікс — як прошивка друкує хеш у першому рядку UART і на VER (app.c, App_PrintBuild)
+BANNER_PREFIX='BUILD,fw=SmartLock,lab=LR3,git='
 stamp=$(ls "$FW"/build/.git_hash_* 2>/dev/null | sed 's|.*/\.git_hash_||')
-if [ "$stamp" != "$GIT_HASH" ]; then
+if [ "$GIT_HASH" = "nogit" ] && [ "$REQUIRE_GIT" = "1" ]; then
+  fail "git-хеш невідомий (nogit): збирайте з клону репозиторію, не з розпакованого ZIP"
+elif [ "$stamp" != "$GIT_HASH" ]; then
   fail "збірка з хешем '$stamp', а зараз GIT_HASH='$GIT_HASH' — make build ще раз"
-elif ! grep -q -a -F "$GIT_HASH" "$ELF"; then
-  fail "рядка '$GIT_HASH' немає в firmware.elf"
-elif [ "$GIT_HASH" = "nogit" ]; then
-  if [ "$REQUIRE_GIT" = "1" ]; then
-    fail "git-хеш невідомий (nogit): збирайте з клону репозиторію, не з розпакованого ZIP"
-  else
-    warn "git-хеш невідомий (nogit): каталог без .git (ZIP?) — для звіту збирайте з клону"
-  fi
-else
+elif LC_ALL=C grep -q -a -F "$BANNER_PREFIX$GIT_HASH," "$ELF"; then
   case "$GIT_HASH" in
+    nogit)   warn "git-хеш невідомий (nogit): каталог без .git (ZIP?) — для звіту збирайте з клону" ;;
     *-dirty) warn "git=$GIT_HASH: є незакомічені зміни — для звіту збирайте чистий коміт" ;;
-    *)       ok "git=$GIT_HASH у firmware.elf (рядок BUILD, STATS_BEGIN, запис BOOT)" ;;
+    *)       ok "git=$GIT_HASH у firmware.elf (рядок BUILD; той самий GIT_HASH — STATS_BEGIN, запис BOOT)" ;;
   esac
+elif tr '\000' '\n' < "$ELF" | LC_ALL=C grep -q -a -x -F "$GIT_HASH"; then
+  warn "рядка '$BANNER_PREFIX$GIT_HASH,' немає (інший формат банера?), але є окремий рядок '$GIT_HASH'"
+else
+  fail "рядка '$BANNER_PREFIX$GIT_HASH,' (і окремого рядка '$GIT_HASH') немає в firmware.elf"
 fi
 
 if [ $status -eq 0 ]; then

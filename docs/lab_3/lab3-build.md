@@ -84,7 +84,7 @@ fw-check: OK   — артефакти: firmware.elf, firmware.hex, firmware.bin
 fw-check: OK   — без RTOS: немає символів FreeRTOS / CMSIS-RTOS / ThreadX / Zephyr і Middlewares/
 fw-check: OK   — Super Loop: main -> App_Init -> while(1) App_Loop -> Sched_RunOnce
 fw-check: OK   — усі 9 точок підключення — сильні реалізації модулів (FSM, buttons, security, env, journal, camera, diag)
-fw-check: OK   — git=<хеш> у firmware.elf (рядок BUILD, STATS_BEGIN, запис BOOT)
+fw-check: OK   — git=<хеш> у firmware.elf (рядок BUILD; той самий GIT_HASH — STATS_BEGIN, запис BOOT)
 fw-check: PASS — єдина прошивка STM32F411, Super Loop без RTOS, git=<хеш>
 ```
 
@@ -130,10 +130,21 @@ UART `s_buf` 2048 Б; найглибший кадр стека — `dht11_line`,
 | `nogit` | збирали з каталогу без `.git` (ZIP) | ні — збирати з клону |
 
 CI запускає `make fw-check REQUIRE_GIT=1`: там `nogit` — помилка. Локально — лише
-попередження.
+попередження. `fw-check` шукає в `.elf` не голий хеш, а рядок банера
+`BUILD,fw=SmartLock,lab=LR3,git=<хеш>,` (у `App_PrintBuild()` хеш вклеєно в рядок
+формату): коротший хеш, `<хеш>-dirty` чи випадковий збіг байтів не пройдуть.
+
+**Хеш у CI** (`.github/workflows/ci.yml`): на pull request збирається **голова PR**
+(`github.event.pull_request.head.sha`), а не тимчасовий коміт злиття `refs/pull/N/merge`,
+на push у `main` — `github.sha`. Короткий хеш (`git rev-parse --short`) передається
+явно: `make build|fw-check|mem-report|host-checks GIT_HASH=<хеш>`. Локально
+`GIT_HASH` не задають — його обчислює `Makefile` (вище).
 
 **Відповідність плата ↔ коміт:** `VER` у терміналі → `git=<хеш>` → `git show <хеш>`
-(або сторінка коміту на GitHub). Артефакт CI з тим самим хешем — та сама прошивка.
+(або сторінка коміту на GitHub). Артефакт CI **`firmware-<хеш>`** (Actions → запуск →
+Artifacts): `firmware.elf`, `.hex`, `.bin`, `.map`, `mem/*.txt` (`memory_usage.txt` з
+`--print-memory-usage` і звіти `make mem-report`) і `I11_host_checks.log` — та сама
+прошивка, що й на платі з цим хешем.
 
 ## 5. Стенд
 

@@ -67,14 +67,16 @@ I11 HOST CHECKS: PASS — …
 ## 4. Лог з CI
 
 На кожен PR і push у `main` (`.github/workflows/ci.yml`): крок
-**Host checks - tests, coverage, tools, python (I11)** і артефакт **`I11_host_checks`**.
+**Host checks - tests, coverage, tools, python (I11)** і артефакт **`firmware-<хеш>`**.
 
 1. GitHub → **Actions** → запуск потрібного коміту (у назві — повідомлення коміту).
-2. Унизу сторінки запуску — **Artifacts** → `I11_host_checks` (zip з
-   `I11_host_checks.log`). Артефакт зберігається і тоді, коли крок упав (`if: always()`).
-3. Для звіту — покласти лог у `docs/lab_3/logs/I11_host_checks.log` (або
-   `I11_host_checks_<хеш>.log`). Хеш у першому рядку логу CI — коміт злиття PR або
-   коміт `main`; його й наводити у звіті.
+2. Унизу сторінки запуску — **Artifacts** → `firmware-<хеш>` (zip:
+   `tests/build/I11_host_checks.log` і прошивка `firmware/build/firmware.{elf,hex,bin,map}`,
+   `firmware/build/mem/*.txt`). Артефакт зберігається і тоді, коли крок упав
+   (`if: always()`) — з тим, що встигло зібратися.
+3. Хеш у першому рядку логу і в назві артефакту — **голова PR** (коміт, видний на
+   сторінці PR) або коміт `main`, а не тимчасовий коміт злиття: CI збирає саме його
+   (`lab3-build.md` §4). Цей хеш і наводити у звіті.
 
 ## 5. Набори тестів
 

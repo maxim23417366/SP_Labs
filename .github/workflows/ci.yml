@@ -12,27 +12,56 @@ jobs:
   build-and-test:
     runs-on: ubuntu-22.04
     steps:
+      # I10/I11: на pull_request checkout за замовчуванням бере refs/pull/N/merge —
+      # тимчасовий коміт злиття, якого немає в жодній гілці; хеш у BUILD / STATS_BEGIN
+      # тоді не знайти через git show. Тому збираємо саму голову PR (той коміт, що
+      # видно на сторінці PR), для push — github.sha.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      # Короткий хеш, як git rev-parse --short у кореневому Makefile; далі передається
+      # явно (make … GIT_HASH=…) у build, fw-check, mem-report, host-checks і назву артефакту
+      - name: Git hash of the built commit (I10)
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          head=$(git rev-parse HEAD)
+          if [ "$head" != "$SHA" ]; then
+            echo "checkout дав $head, очікувався $SHA"; exit 1
+          fi
+          echo "GIT_HASH=$(git rev-parse --short "$SHA")" >> "$GITHUB_ENV"
 
       - name: Dependency rule (Devices/ without HAL)
         run: make check-deps
 
       - name: Firmware build (Docker, arm-none-eabi-gcc)
-        run: make build
+        run: make build GIT_HASH="$GIT_HASH"
 
       - name: Single firmware check - no RTOS, strong modules, git hash (I10)
-        run: make fw-check REQUIRE_GIT=1
+        run: make fw-check REQUIRE_GIT=1 GIT_HASH="$GIT_HASH"
+
+      - name: Memory report (I06)
+        run: make mem-report GIT_HASH="$GIT_HASH"
 
       # I11: periph_check, усі Unity-набори з покриттям (поріг 90 %), self_test,
       # кадр C -> UART-лог -> Python -> PNG (I08), Python-тести scripts/ і tools/.
-      # Один лог з підсумком — артефакт I11_host_checks (Actions -> цей запуск -> Artifacts).
+      # Один лог з підсумком — у артефакті firmware-<хеш> (docs/lab_3/host-tests.md §4).
       - name: Host checks - tests, coverage, tools, python (I11)
-        run: make host-checks
+        run: make host-checks GIT_HASH="$GIT_HASH"
 
-      - name: Upload host checks log (I11)
+      # Прошивка, карта лінкування, звіти пам'яті і лог host-checks одного коміту.
+      # if: always() — лог host-checks і те, що встигло зібратися, і тоді, коли крок упав
+      - name: Upload firmware and host checks log (I10, I11)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: I11_host_checks
-          path: tests/build/I11_host_checks.log
-          if-no-files-found: error
+          name: firmware-${{ env.GIT_HASH }}
+          path: |
+            firmware/build/firmware.elf
+            firmware/build/firmware.hex
+            firmware/build/firmware.bin
+            firmware/build/firmware.map
+            firmware/build/mem/*.txt
+            tests/build/I11_host_checks.log
+          if-no-files-found: warn

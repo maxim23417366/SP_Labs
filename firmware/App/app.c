@@ -83,10 +83,12 @@ static void devices_self_test(void)
 }
 
 /* Перший рядок UART-логу: яка саме збірка працює (методичка §5.2);
- * I10: те саме — команда VER, якщо термінал відкрито вже після старту */
+ * I10: те саме — команда VER, якщо термінал відкрито вже після старту.
+ * GIT_HASH вклеєно в рядок формату (а не через %s): у firmware.elf лежить цілий
+ * «BUILD,fw=SmartLock,lab=LR3,git=<хеш>,», його й шукає scripts/check_firmware.sh */
 void App_PrintBuild(void)
 {
-    printf("BUILD,fw=SmartLock,lab=LR3,git=%s,cpu_hz=%lu,loop=superloop\r\n", GIT_HASH,
+    printf("BUILD,fw=SmartLock,lab=LR3,git=" GIT_HASH ",cpu_hz=%lu,loop=superloop\r\n",
            (unsigned long)Platform_CpuHz());
 }
 
