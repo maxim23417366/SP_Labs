@@ -9,7 +9,7 @@
 #include "unity.h"
 #include "ov7670.h"
 
-#define LOG_MAX 64U
+#define LOG_MAX 256U
 
 static uint8_t      regs[256];
 static int          present;
@@ -205,6 +205,76 @@ static void test_reg_access_params(void)
   TEST_ASSERT_NOT_NULL(ov7670_qqvga_rgb565_table(NULL));
 }
 
+/* ЛР3 (лог 23, кадр пересвічений): після таблиці увімкнено AEC, AGC і AWB, задано
+ * гамму і кольорову матрицю RGB; при цьому не зачеплено регістри, що міняють такти
+ * (DBLV — PLL), вікно, частоту кадрів (NT_CTRL) і порядок байтів (TSLB, COM13[0]) */
+static void test_table_enables_auto_exposure_and_white_balance(void)
+{
+  ov7670_t cam;
+  size_t n = 0U;
+  const ov7670_reg_t *t = ov7670_qqvga_rgb565_table(&n);
+  int last_com8 = -1;
+  int first_com8 = -1;
+  int aew = -1;
+
+  for (size_t i = 0U; i < n; i++)
+  {
+    TEST_ASSERT_NOT_EQUAL_HEX8_MESSAGE(0x6BU, t[i].reg, "DBLV: PLL змінив би PCLK");
+    TEST_ASSERT_NOT_EQUAL_HEX8_MESSAGE(0xA4U, t[i].reg, "NT_CTRL: змінив би період VSYNC");
+    TEST_ASSERT_NOT_EQUAL_HEX8_MESSAGE(OV7670_REG_TSLB, t[i].reg, "TSLB: порядок байтів");
+    TEST_ASSERT_NOT_EQUAL_HEX8_MESSAGE(0x1EU, t[i].reg, "MVFP: дзеркалення");
+    TEST_ASSERT_NOT_EQUAL_HEX8_MESSAGE(OV7670_REG_CLKRC, t[i].reg, "CLKRC пише configure()");
+    if (t[i].reg == OV7670_REG_COM8)
+    {
+      if (first_com8 < 0)
+      {
+        first_com8 = (int)i;
+      }
+      last_com8 = (int)i;
+    }
+    if (t[i].reg == 0x24U)
+    {
+      aew = (int)i;
+    }
+  }
+  /* параметри AEC пишуться при вимкненій автоматиці, вмикається вона останньою */
+  TEST_ASSERT_TRUE(first_com8 >= 0);
+  TEST_ASSERT_EQUAL_HEX8(0x00U, t[first_com8].val & 0x07U);
+  TEST_ASSERT_TRUE(aew > first_com8);
+  TEST_ASSERT_EQUAL_HEX8(OV7670_COM8_AUTO, t[last_com8].val);
+
+  TEST_ASSERT_EQUAL(DEV_OK, ov7670_init(&cam, sccb_read, sccb_write, delay_ms));
+  TEST_ASSERT_EQUAL(DEV_OK, ov7670_configure(&cam, t, n, 0x0FU, NULL));
+  TEST_ASSERT_EQUAL_HEX8(0xE7U, regs[OV7670_REG_COM8]);       /* AEC|AGC|AWB + швидкий AEC */
+  TEST_ASSERT_EQUAL_HEX8(0x00U, regs[OV7670_REG_COM13] & 0x01U);
+  TEST_ASSERT_EQUAL_HEX8(0x80U, regs[OV7670_REG_COM13] & 0x80U);   /* гамма */
+  TEST_ASSERT_EQUAL_HEX8(0xB3U, regs[0x4FU]);                  /* матриця RGB */
+  TEST_ASSERT_EQUAL_HEX8(0x9EU, regs[0x58U]);
+  TEST_ASSERT_EQUAL_HEX8(0x08U, regs[0x41U] & 0x08U);          /* COM16: AWB gain */
+  /* формат QQVGA RGB565 після блоку автоматики не змінився */
+  TEST_ASSERT_EQUAL_HEX8(0x04U, regs[OV7670_REG_COM7]);
+  TEST_ASSERT_EQUAL_HEX8(0xD0U, regs[0x40U]);
+  TEST_ASSERT_EQUAL_HEX8(0x22U, regs[0x72U]);
+  TEST_ASSERT_EQUAL_HEX8(0x1AU, regs[0x3EU]);
+}
+
+/* Порядок байтів RGB565: датчик дає молодший першим, прошивка зберігає старший першим */
+static void test_rgb565_swap_bytes(void)
+{
+  /* червоний F800, зелений 07E0, синій 001F так, як їх віддає датчик */
+  uint8_t px[] = { 0x00U, 0xF8U, 0xE0U, 0x07U, 0x1FU, 0x00U, 0xAAU };
+  const uint8_t be[] = { 0xF8U, 0x00U, 0x07U, 0xE0U, 0x00U, 0x1FU, 0xAAU };
+
+  ov7670_rgb565_swap_bytes(px, 7U);           /* непарний хвіст не чіпається */
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(be, px, sizeof(be));
+  ov7670_rgb565_swap_bytes(px, 6U);
+  ov7670_rgb565_swap_bytes(px, 6U);           /* двічі — те саме */
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(be, px, sizeof(be));
+  ov7670_rgb565_swap_bytes(px, 0U);
+  ov7670_rgb565_swap_bytes(NULL, 6U);
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(be, px, sizeof(be));
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -213,5 +283,7 @@ int main(void)
   RUN_TEST(test_configure_order_reset_clkrc_table);
   RUN_TEST(test_configure_stops_on_failed_register);
   RUN_TEST(test_reg_access_params);
+  RUN_TEST(test_table_enables_auto_exposure_and_white_balance);
+  RUN_TEST(test_rgb565_swap_bytes);
   return UNITY_END();
 }

@@ -10,13 +10,19 @@
 
 Між ними в тому ж потоці можуть бути EVT-, STATS- та інші рядки — вони
 ігноруються. Скрипт перевіряє неперервність off, довжину і CRC-32 (zlib),
-перетворює RGB565 (старший байт першим, як віддає OV7670) у PNG без сторонніх
-бібліотек.
+перетворює RGB565 (старший байт першим — так кадр зберігає прошивка) у PNG без
+сторонніх бібліотек.
+
+Порядок байтів: OV7670 віддає молодший байт пікселя першим, і з виправленням ЛР3
+(CAMERA_RGB565_SWAP, лог 23) прошивка переставляє байти одразу після захоплення.
+Кадри, зняті до цього виправлення (і ще збережені у W25Q64 — CAM LOAD), мають
+молодший байт першим: для них --swap-bytes. Ознака: «райдужні» смуги замість сцени.
 
 Приклади:
     python3 tools/frame_decode.py H14_camera.log --out frame.png
     python3 tools/frame_decode.py sample.log --out f.png --expect-test-pattern
     python3 tools/frame_decode.py run.log --index 2 --raw frame.bin
+    python3 tools/frame_decode.py old_flash_frame.log --out f.png --swap-bytes
 
 Код виходу: 0 — кадр цілий; 1 — немає кадру / пропуски / CRC не збігся /
 не збігся з тестовим малюнком.
@@ -113,6 +119,13 @@ def parse_log(text):
     return frames
 
 
+def swap_pairs(data):
+    """Переставити байти в кожній парі (молодший байт першим ↔ старший першим)."""
+    out = bytearray(data)
+    out[0::2], out[1::2] = data[1::2], data[0::2]
+    return bytes(out)
+
+
 def rgb565_be_to_rgb888(data, width, height):
     """RGB565, старший байт першим → рядки RGB888."""
     rows = []
@@ -166,6 +179,8 @@ def main(argv=None):
     ap.add_argument("--raw", help="зберегти сирі байти RGB565")
     ap.add_argument("--expect-test-pattern", action="store_true",
                     help="порівняти побайтно з синтетичним кадром CAM PATTERN")
+    ap.add_argument("--swap-bytes", action="store_true",
+                    help="кадр з молодшим байтом першим (знятий до виправлення ЛР3, лог 23)")
     args = ap.parse_args(argv)
 
     with open(args.log, "r", encoding="utf-8", errors="replace") as f:
@@ -184,7 +199,8 @@ def main(argv=None):
         with open(args.raw, "wb") as f:
             f.write(data)
     if args.out and fr.fmt == "RGB565" and len(data) == fr.width * fr.height * 2:
-        write_png(args.out, rgb565_be_to_rgb888(data, fr.width, fr.height), fr.width, fr.height)
+        pix = swap_pairs(data) if args.swap_bytes else data   # CRC — завжди по переданих байтах
+        write_png(args.out, rgb565_be_to_rgb888(pix, fr.width, fr.height), fr.width, fr.height)
         print("frame_decode: png -> %s" % args.out)
     if args.expect_test_pattern:
         ref = test_pattern(fr.width, fr.height)

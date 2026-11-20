@@ -61,7 +61,7 @@ static void help(void)
 {
     printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | HELP\r\n");
     printf("#      LOG ERASE (journal W25Q64)\r\n");
-    printf("#      CAM TEST (OV7670: init + 1 frame QQVGA RGB565)\r\n");
+    printf("#      CAM TEST (OV7670: init + 1 frame QQVGA RGB565) | CAM REG <hex> [<hex>]\r\n");
     printf("#      CAM PATTERN (test frame) | CAM EXPORT (last frame -> PC, tools/frame_decode.py)\r\n");
 }
 

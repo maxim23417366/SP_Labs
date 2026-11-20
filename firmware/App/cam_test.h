@@ -39,6 +39,14 @@
 /* true — рядок оброблено (CAM TEST); false — це не команда камери */
 bool CamTest_LineCommand(const char *line);
 
+/* ЛР3: налаштувати камеру при старті (App_Init), щоб AEC/AWB встигли зійтися до
+ * першої тривоги. Друкує CAM,init; якщо камери немає — повтор при першому кадрі. */
+void CamTest_Init(void);
+
+/* true — камера налаштована щонайменше TBD_CAMERA_AEC_SETTLE_MS тому: AEC/AWB зійшлися.
+ * Шлях тривоги не чекає сходження, а лише позначає кадр (CAM,photo,...,aec=) */
+bool CamTest_AecSettled(void);
+
 /* Тривалість захоплення в тактах DWT (STAT name=camera) */
 const perf_stat_t *CamTest_Stat(void);
 void CamTest_ResetStats(void);

@@ -192,6 +192,10 @@ static void test_alarm_frame_written_and_read_back_bytewise(void)
   o = capture(run_poll);                                     /* задача camera: кадр → Flash */
   TEST_ASSERT_NOT_NULL(strstr(o, "CAM,init,status=ok,"));
   TEST_ASSERT_NOT_NULL(strstr(o, "CAM,photo,event=2,status=ok,cap=ok,capture_us=530000,store_us="));
+  /* камеру ініціалізовано щойно (не при старті) — кадр знято одразу, без очікування
+   * сходження AEC, і позначено; Super Loop не блокувався на TBD_CAMERA_AEC_SETTLE_MS */
+  TEST_ASSERT_NOT_NULL(strstr(o, ",aec=settling\r\n"));
+  TEST_ASSERT_TRUE(fake_platform.delay_total_ms < TBD_CAMERA_AEC_SETTLE_MS);
   TEST_ASSERT_FALSE(Camera_Pending());
   TEST_ASSERT_FALSE(SmartLock_CameraLinkAwaiting(id));       /* запит закрито рівно один раз */
   TEST_ASSERT_EQUAL_UINT32(1U, SmartLock_CameraLinkStats()->ok);
@@ -217,7 +221,9 @@ static void test_alarm_frame_written_and_read_back_bytewise(void)
   TEST_ASSERT_EQUAL_MEMORY(frame, rd, CAMERA_FRAME_BYTES);
   for (uint32_t i = 0U; i < CAMERA_FRAME_BYTES; i += 997U)
   {
-    TEST_ASSERT_EQUAL_HEX8((uint8_t)i, rd[i]);               /* те, що «зняла камера» */
+    /* те, що «зняла камера» (байт i = i), з переставленими байтами пікселя:
+     * у Flash RGB565 — старший байт першим (CAMERA_RGB565_SWAP) */
+    TEST_ASSERT_EQUAL_HEX8((uint8_t)(i ^ 1U), rd[i]);
   }
 
   /* подія → кадр: запис PHOTO_SAVED у Flash посилається на seq події і frame_id */
@@ -408,6 +414,32 @@ static void test_super_loop_motion_in_locked_gives_linked_photo(void)
   TEST_ASSERT_EQUAL_UINT32(1U, SmartLock_CameraLinkStats()->ok);
 }
 
+/* Камеру налаштовано при старті (CamTest_Init) і автоматика встигла зійтися — кадр
+ * тривоги з aec=ok; ні старт, ні тривога не чекають TBD_CAMERA_AEC_SETTLE_MS */
+static void test_alarm_after_boot_init_is_settled_without_waiting(void)
+{
+  uint32_t id;
+  const char *o;
+
+  flash_present();
+  camera_present();
+  (void)capture(run_boot);
+  (void)capture(CamTest_Init);
+  TEST_ASSERT_FALSE(CamTest_AecSettled());
+  fake_platform.now_ms += TBD_CAMERA_AEC_SETTLE_MS;          /* EXIT_DELAY і т. ін. */
+  TEST_ASSERT_TRUE(CamTest_AecSettled());
+  fake_platform.delay_total_ms = 0U;
+
+  id = security_event(SL_LOG_MOTION);
+  TEST_ASSERT_TRUE(SmartLock_CameraLinkStart(id, fake_platform.now_ms));
+  poll_now = fake_platform.now_ms;
+  o = capture(run_poll);
+  TEST_ASSERT_NULL(strstr(o, "CAM,init"));
+  TEST_ASSERT_NOT_NULL(strstr(o, ",status=ok,cap=ok,"));
+  TEST_ASSERT_NOT_NULL(strstr(o, ",aec=ok\r\n"));
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.delay_total_ms);
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -417,5 +449,6 @@ int main(void)
   RUN_TEST(test_capture_error_gives_photo_err_capture);
   RUN_TEST(test_store_error_gives_photo_err_store);
   RUN_TEST(test_super_loop_motion_in_locked_gives_linked_photo);
+  RUN_TEST(test_alarm_after_boot_init_is_settled_without_waiting);
   return UNITY_END();
 }
