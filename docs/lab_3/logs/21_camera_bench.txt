@@ -1,0 +1,119 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-19.
+# Прошивка: PR #38 (гілка lab3/I09-camera-flash, коміт 3b9df18, у банері git=3b9df18), збірка в Docker
+# (stm32-builder, arm-none-eabi-gcc 10.3.1), firmware.bin sha256 62a03b63ad8385b9b71d817b6c9064b2f41c72912cc68c1b8c66e6ac4e4a7899.
+# Перевірка камери OV7670 і запису кадру у W25Q64 на стенді за docs/camera.md п. 7 (FR-07, FR-08).
+# Аналізатор fx2lafw (Saleae-сумісний, 8 каналів): CH3 = PCLK (PA10, гніздо CN9 D2), CH4 = D0 камери (PC0, CN8 A5),
+# CH5 = PB2 (захоплення), CH6 = PB12 (запис кадру), CH7 = UART TX, CH8 = PIR OUT (PA0). VSYNC/HREF не підключено:
+# піни зайняті дротами камери; частота кадрів — з лічильника прошивки, тривалість рядка — з PCLK.
+# Команди надсилались по символу з паузою 5 мс і з перевіркою відповіді (втрати прийому UART, issue #41).
+# Рядки LOAD, ENV, FRM і службові EVT uart_cmd_rx/tx пропущено.
+#
+# --- 1. SCCB і self-test ---
+BUILD,fw=SmartLock,lab=LR3,git=3b9df18,cpu_hz=96000000,loop=superloop
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=30
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+#
+# --- 2. CAM TEST × 10 (CLKRC = 0x0F) ---
+CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1040438,crc=0x368F80F7
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1118229,crc=0xF1F2565B
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1472277,crc=0x8A50B887
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1500917,crc=0xF439B972
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1409467,crc=0x48FC8334
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1416922,crc=0x0205E575
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1401119,crc=0xDCA64D2F
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1410464,crc=0x52E22587
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1407657,crc=0xC75E42BA
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1411037,crc=0x24CD8CFE
+STAT name=camera n=10 min_us=1040438 avg_us=1358853 max_us=1500917
+STAT name=loop n=3292728 min_us=18 avg_us=25 max_us=1525051
+STACK reserved=1024 used=920 free=104
+# CAM TEST блокує цикл на час захоплення (loop max ≈ 1,5 с) — це стендова команда; у штатному шляху — задача camera.
+# Команда c (PID/VER + частота VSYNC) блокує цикл ~1 с (STAT name=uart max_us=1005539).
+#
+# --- 3. Сигнали камери (аналізатор, 12 МГц, 4 с, CAM TEST) ---
+# PCLK після ініціалізації: 375 003 фронти/с, період 5,333 мкс = 187,5 кГц (24 МГц / 128), скважність 0,50, завад 0.
+# Тривалість рядка: 320 Б × 5,333 мкс ≈ 1,71 мс; кадр 120 рядків з гасінням ≈ 1 с (лічильник прошивки vsync_hz=1).
+# D0 змінюється через 32–33 семпли (½ періоду) після ↑PCLK, тобто на спаді: на ↑PCLK, де читає прошивка, дані стабільні.
+# До ініціалізації (заводські регістри) PCLK швидший за смугу аналізатора 12 МГц — не вимірювалось.
+#
+# --- 4. Передача на ПК (CAM PATTERN / CAM EXPORT → tools/frame_decode.py) ---
+CAM,pattern,bytes=38400,crc=0xF671E5B8
+FRAME_BEGIN id=0 seq=0 w=160 h=120 fmt=RGB565 len=38400 crc32=F671E5B8 chunk=32
+frame_decode: test pattern matches byte for byte
+frame_decode: OK
+# Час експорту: export_start_0 t_us=131521491 → export_done_0 t_us=142131444 = 10,61 с (у camera.md очікувано ≈ 8,5 с).
+#
+# --- 5. Реальний кадр ---
+# З ковпачком на об'єктиві — шум (img/camera_lens_cap_noise.png), без ковпачка — сцена.
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=1409959,crc=0xDFAB8224
+frame_decode: OK
+# frame_decode.py (старший байт першим) дає впізнавані контури з «райдужними» смугами кольору;
+# той самий кадр із переставленими байтами пікселя — плавні градієнти, сцену видно, але пересвічено й зеленувато.
+# Висновок: порядок байтів у захопленні й декодері не узгоджено; таблиця ініціалізації OV7670 не задає
+# AEC/AGC/AWB/кольорову матрицю — звідси пересвічення. Канал даних і фронт PCLK правильні (п. 3).
+#
+# --- 6. Кадр тривоги (B1 → LOCKED → PIR / TAMPER) ---
+EVT,id=135,t_ms=1001531,name=LOCK_ACTIVATED,arg=15000,flash=ok
+EVT,id=136,t_ms=1016531,name=LOCKED,arg=15000,flash=ok
+CAM,photo,event=137,status=ok,cap=ok,capture_us=2097983,store_us=839499
+EVT,id=137,t_ms=1031525,name=MOTION,arg=0,flash=ok
+EVT,id=138,t_ms=1034378,name=PHOTO,arg=4,ref=137,flash=ok
+CAM,photo,event=139,status=ok,cap=ok,capture_us=1874132,store_us=827339
+EVT,id=140,t_ms=1043865,name=PHOTO,arg=5,ref=139,flash=ok
+CAM,photo,event=141,status=ok,cap=ok,capture_us=1690312,store_us=842179
+EVT,id=142,t_ms=1053382,name=PHOTO,arg=6,ref=141,flash=ok
+CAM,photo,event=143,status=ok,cap=ok,capture_us=1088864,store_us=835620
+EVT,id=144,t_ms=1073529,name=PHOTO,arg=7,ref=143,flash=ok
+CAM,photo,event=145,status=ok,cap=ok,capture_us=1705033,store_us=829460
+EVT,id=146,t_ms=1083025,name=PHOTO,arg=8,ref=145,flash=ok
+CAM,photo,event=147,status=ok,cap=ok,capture_us=1867407,store_us=846060
+EVT,id=148,t_ms=1093604,name=PHOTO,arg=9,ref=147,flash=ok
+CAM,photo,event=149,status=ok,cap=ok,capture_us=1341022,store_us=837461
+EVT,id=150,t_ms=1109481,name=PHOTO,arg=10,ref=149,flash=ok
+CAM,photo,event=151,status=ok,cap=ok,capture_us=1246069,store_us=829541
+EVT,id=151,t_ms=1195797,name=TAMPER,arg=107,flash=ok
+EVT,id=152,t_ms=1197790,name=PHOTO,arg=11,ref=151,flash=ok
+CAM,photo,event=153,status=ok,cap=ok,capture_us=1219440,store_us=830061
+EVT,id=153,t_ms=1197870,name=TAMPER,arg=59,flash=ok
+EVT,id=154,t_ms=1199835,name=PHOTO,arg=12,ref=153,flash=ok
+# B1 → LOCKED: 1001531 → 1016531 мс = 15,000 с.
+# Аналізатор (1 МГц, 300 с), 9 кадрів:
+#   PB2 (захоплення), мс: 2098,0 1874,1 1690,3 1088,9 1705,0 1867,4 1341,0 1246,1 1219,4 — збігається з capture_us
+#   PB12 (запис), мс:     839,5  827,3  842,2  835,6  829,5  846,1  837,5  829,5  830,1  — збігається з store_us
+#   ↑PIR → ↑PB2: 15,1 14,1 27,3 10,2 24,7 10,1 23,0 мс (7 подій MOTION); ↓PB2 → ↑PB12: 6–7 мкс.
+#   27 фронтів PIR за прогін, 7 MOTION: решта — у межах повторного спрацювання після попереднього кадру.
+#
+# --- 7. Після повного вимкнення живлення (USB від'єднано на 10 с) ---
+# (після вмикання журнал змонтовано, boot=15)
+CAM,load,frame=10,status=ok,event=149,w=160,h=120,len=38400,crc=0xF11223E2
+FRAME_BEGIN id=149 seq=0 w=160 h=120 fmt=RGB565 len=38400 crc32=F11223E2 chunk=32
+FRAME_END id=149 len=38400 crc32=F11223E2 lines=1200
+frame_decode: OK
+CAM,load,frame=12,status=ok,event=153,w=160,h=120,len=38400,crc=0xC12DAAB7
+FRAME_BEGIN id=153 seq=0 w=160 h=120 fmt=RGB565 len=38400 crc32=C12DAAB7 chunk=32
+frame_decode: OK
+# Зображення: img/camera_frame10_motion149_decoded.png (як декодує frame_decode.py),
+#             img/camera_frame10_motion149_byteswap.png, img/camera_frame12_tamper153_byteswap.png.
+# Журнал (команда d) після вимкнення:
+LOG,seq=149,boot=14,t_ms=1107386,type=MOTION,arg=0,arg2=0,frame=none,crc=ok
+LOG,seq=150,boot=14,t_ms=1109481,type=PHOTO_SAVED,arg=149,arg2=0,frame=10,crc=ok
+LOG,seq=151,boot=14,t_ms=1195797,type=TAMPER,arg=107,arg2=0,frame=none,crc=ok
+LOG,seq=152,boot=14,t_ms=1197790,type=PHOTO_SAVED,arg=151,arg2=0,frame=11,crc=ok
+LOG,seq=153,boot=14,t_ms=1197870,type=TAMPER,arg=59,arg2=0,frame=none,crc=ok
+LOG,seq=154,boot=14,t_ms=1199835,type=PHOTO_SAVED,arg=153,arg2=0,frame=12,crc=ok
+LOG,seq=161,boot=14,t_ms=1404224,type=FORCED_OPEN,arg=0,arg2=0,frame=none,crc=ok
+LOG,seq=162,boot=15,t_ms=1717,type=BOOT,arg=62512920,arg2=0,frame=none,crc=ok
+LOG,SUMMARY,valid=163,damaged=1,empty=1756,first_seq=1,last_seq=163,order=ok,boot=15
+# damaged=1 — запис, навмисно зіпсований командою z під час перевірки журналу (лог 18).
+# FORCED_OPEN — магніт прибрано від геркона в LOCKED перед вимкненням (очікувана поведінка).
+#
+# --- 8. Пам'ять ---
+# arm-none-eabi-size: text=64868 data=232 bss=47712 → RAM 47 944 Б з 131 072 (36,6 %); буфер кадру s_frame 38 400 Б.
+# Стек: reserved=1024, найбільше використання за сесію used=920 (free=104) — запас 10 %.
+#
+# --- Висновок ---
+# FR-08: кадр і зв'язок з ID події зберігаються у W25Q64 і читаються після вимкнення живлення — PASS
+#        (побайтно за CRC-32, обидва типи подій).
+# FR-07: окремий реальний кадр для MOTION і TAMPER захоплюється й декодується; сцену видно лише після
+#        перестановки байтів і вона пересвічена — «з обмеженням», доки не виправлено порядок байтів і експозицію.
