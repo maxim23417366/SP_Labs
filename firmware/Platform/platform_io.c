@@ -25,6 +25,18 @@ static volatile uint32_t ev_t[PLATFORM_EV_COUNT];
 static volatile uint8_t  ev_pending[PLATFORM_EV_COUNT];
 static volatile uint32_t ev_overruns[PLATFORM_EV_COUNT];
 
+/* ЛР3 (issue #51): натискання кнопок коду з EXTI (platform.h, Platform_TakeKey).
+ * Черга — кільце з одним записувачем (ISR) і одним читачем (цикл). */
+static const uint16_t key_pin[PLATFORM_KEY_COUNT] = { BTN_1_Pin, BTN_2_Pin, BTN_3_Pin, BTN_4_Pin };
+static volatile uint8_t  key_down[PLATFORM_KEY_COUNT];       /* 1 — бачили натискання */
+static volatile uint32_t key_down_ms[PLATFORM_KEY_COUNT];
+static volatile uint32_t key_down_cyc[PLATFORM_KEY_COUNT];
+static platform_key_t    key_q[PLATFORM_KEY_QUEUE];
+static volatile uint8_t  key_head;                           /* пише ISR */
+static volatile uint8_t  key_tail;                           /* пише цикл */
+static volatile uint32_t key_lost;
+static volatile uint32_t key_min_ms;
+
 
 /* ---- мікросекунди через DWT CYCCNT ------------------------------------------ */
 static uint32_t cycles_per_us;
@@ -93,6 +105,21 @@ void Platform_IoInit(void)
   DWT->CYCCNT = 0U;
   DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
   cycles_per_us = HAL_RCC_GetHCLKFreq() / 1000000U;
+
+  /* ЛР3 (issue #51): кнопки коду — EXTI на обидва фронти поверх опитування.
+   * У firmware.ioc вони прості входи з pull-up (gpio.c); тут той самий pull-up, лише
+   * з перериванням. Лінії EXTI 1, 4, 7, 9 інші піни не займають (VSYNC — 8, MPU — 5,
+   * PIR — 0, B1 — 13). Пріоритет 0, як в інших EXTI: ISR лише пише мітки часу. */
+  g.Pin   = BTN_1_Pin | BTN_2_Pin | BTN_3_Pin | BTN_4_Pin;
+  g.Mode  = GPIO_MODE_IT_RISING_FALLING;
+  g.Pull  = GPIO_PULLUP;
+  g.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &g);
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+  /* EXTI9_5 (BTN_4 — 7, BTN_1 — 9) уже ввімкнено в gpio.c для MPU_INT і VSYNC */
 
   /* Прийом команд: DMA у кільце (uart_rx.c). USART2 уже налаштовано MX_USART2_UART_Init(). */
   UartRx_Start();
@@ -303,10 +330,87 @@ static void ev_mark(platform_event_t ev)
   ev_pending[ev] = 1U;
 }
 
+/* Фронт кнопки коду i (лише з ISR). Натиснуто = 0 (pull-up). Дребезг дає кілька
+ * коротких пар «натиснуто/відпущено» (на стенді — до 1,6 мс): вони коротші за
+ * key_min_ms і в чергу не йдуть,
+ * а момент натискання береться з останнього спаду перед стабільним рівнем. */
+static void key_edge(uint8_t i)
+{
+  uint32_t now = HAL_GetTick();
+  uint32_t cyc_now = DWT->CYCCNT;
+  uint32_t held_us;
+
+  if (HAL_GPIO_ReadPin(GPIOA, key_pin[i]) == GPIO_PIN_RESET)
+  {
+    key_down_ms[i]  = now;
+    key_down_cyc[i] = cyc_now;
+    key_down[i]     = 1U;
+    return;
+  }
+  /* Тривалість — за тактами: під час читання ліній кадру SysTick замаскований і
+   * мілісекунди майже стоять (на стенді натискання ~100 мс виглядало як 0–15 мс) */
+  held_us = (cyc_now - key_down_cyc[i]) / cycles_per_us;
+  if ((key_down[i] != 0U) && (held_us >= key_min_ms * 1000U))
+  {
+    uint8_t next = (uint8_t)((key_head + 1U) % PLATFORM_KEY_QUEUE);
+
+    if (next == key_tail)
+    {
+      key_lost++;
+    }
+    else
+    {
+      key_q[key_head].btn        = i;
+      key_q[key_head].t_down_ms  = key_down_ms[i];
+      key_q[key_head].t_up_ms    = now;
+      key_q[key_head].t_down_cyc = key_down_cyc[i];
+      key_q[key_head].t_up_cyc   = cyc_now;
+      __asm volatile ("" ::: "memory");   /* спершу запис, потім індекс */
+      key_head = next;
+    }
+  }
+  key_down[i] = 0U;
+}
+
+void Platform_KeySetMinPress(uint32_t min_press_ms)
+{
+  key_min_ms = min_press_ms;
+}
+
+int Platform_TakeKey(platform_key_t *k)
+{
+  if (key_tail == key_head)
+  {
+    return 0;
+  }
+  __asm volatile ("" ::: "memory");
+  if (k != NULL)
+  {
+    *k = key_q[key_tail];
+  }
+  __asm volatile ("" ::: "memory");
+  key_tail = (uint8_t)((key_tail + 1U) % PLATFORM_KEY_QUEUE);
+  return 1;
+}
+
+uint32_t Platform_KeyLost(void)
+{
+  return key_lost;
+}
+
 /* Усі EXTI з firmware.ioc приходять сюди (слабка функція HAL). Рахуємо кадри
- * камери; для B1, PIR і MPU_INT фіксуємо момент фронту (I04: затримка реакції). */
+ * камери; для B1, PIR і MPU_INT фіксуємо момент фронту (I04: затримка реакції);
+ * кнопки коду — завершені натискання в чергу (issue #51). */
 void HAL_GPIO_EXTI_Callback(uint16_t gpio_pin)
 {
+  for (uint8_t i = 0U; i < PLATFORM_KEY_COUNT; i++)
+  {
+    if (gpio_pin == key_pin[i])
+    {
+      key_edge(i);
+      return;
+    }
+  }
   if (gpio_pin == CAM_VSYNC_Pin)
   {
     vsync_count++;

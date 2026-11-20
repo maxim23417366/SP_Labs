@@ -64,6 +64,13 @@ typedef struct
   uint32_t     uart_overruns;
   uint32_t     uart_rx_peak;      /* Platform_UartRxPeak() */
 
+  /* issue #51: черга завершених натискань кнопок коду (Platform_TakeKey) */
+  platform_key_t key_q[PLATFORM_KEY_QUEUE];
+  unsigned     key_head;
+  unsigned     key_tail;
+  uint32_t     key_lost;
+  uint32_t     key_min_ms;        /* останній Platform_KeySetMinPress() */
+
   uint32_t     inputs;            /* Platform_ReadInputs(): біти PLATFORM_IN_* */
 
   dev_status_t dht_status;        /* != DEV_OK — Platform_Dht11Capture() повертає цю помилку */
@@ -133,5 +140,15 @@ void fake_platform_dht_script(const fake_dht_step_t *steps, size_t n);
 /* ЛР3 (I04): як ISR — фронт у момент t_cycles (шкала Platform_Cycles()). Якщо
  * попередню подію ще не забрали — лише overrun, як на платі. */
 void fake_platform_raise_event(platform_event_t ev, uint32_t t_cycles);
+
+/* issue #51: як ISR кнопок коду — завершене натискання кнопки btn (0..3), натиснули о
+ * t_down_ms, відпустили о t_up_ms (шкала Platform_Millis()). Коротші за key_min_ms
+ * у чергу не йдуть; повна черга — key_lost. Такт натискання = t_down_ms * 1000. */
+void fake_platform_key(uint8_t btn, uint32_t t_down_ms, uint32_t t_up_ms);
+
+/* Те саме з окремими тактами: на платі під час зйомки мілісекунди майже стоять
+ * (SysTick замаскований), а такти DWT ідуть — так моделюємо цей випадок. */
+void fake_platform_key_cyc(uint8_t btn, uint32_t t_down_ms, uint32_t t_up_ms,
+                           uint32_t t_down_cyc, uint32_t t_up_cyc);
 
 #endif /* FAKE_PLATFORM_H */

@@ -186,7 +186,7 @@ PB2 — захоплення кадру, PB12 — запис кадру у W25Q6
 
 ```
 DIAG name=fsm state=UNLOCKED ignored=0 cam_rejected=0
-DIAG name=buttons dropped=0
+DIAG name=buttons dropped=0 late=0 key_lost=0
 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
 DIAG name=journal pending=0 max_depth=2 stored=5 unsaved=0 dropped=0 last_seq=6

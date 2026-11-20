@@ -713,6 +713,199 @@ static void test_code_key_evt_pair_measures_first_edge_to_accept(void)
   TEST_ASSERT_NULL(strstr(o, "code_key"));
 }
 
+/* ---- issue #51: натискання, поки цикл стояв (EXTI-черга платформи) ----------------
+ * fake_platform_key() — те, що на платі кладе ISR кнопок: завершене натискання з часом
+ * натискання і відпускання. Опитування в цей час не викликається (цикл «стоїть»). */
+
+/* Кнопка коду для символу s (1..4) — індекс 0..3 */
+#define KEY(s)  ((uint8_t)((s) - 1U))
+
+/* Увесь код набрано, поки цикл стояв (S2: 4 кадри поспіль, ~10 с) */
+static void test_late_keys_whole_code_during_block_gives_code_ok(void)
+{
+  uint32_t t0;
+
+  start_idle();
+  t0 = g_now;
+  for (unsigned i = 0U; i < TBD_CODE_LEN; i++)
+  {
+    fake_platform_key(KEY(k_code[i]), t0 + 500U * i, t0 + 500U * i + 120U);
+  }
+  TEST_ASSERT_TRUE(poll_at(t0 + 10000U, false));   /* цикл звільнився через 10 с */
+  expect_event(SL_EV_CODE_OK, TBD_CODE_LEN);
+  expect_no_events();
+  TEST_ASSERT_EQUAL_UINT32(TBD_CODE_LEN, SmartLock_ButtonsLate());
+}
+
+/* Неправильний код під час зйомки — WRONG_CODE, а не тиша (крок 5 S2) */
+static void test_late_keys_wrong_code_during_block_gives_code_wrong(void)
+{
+  uint32_t t0;
+
+  start_idle();
+  t0 = g_now;
+  for (unsigned i = 0U; i < TBD_CODE_LEN; i++)
+  {
+    fake_platform_key(0U, t0 + 400U * i, t0 + 400U * i + 100U);   /* червона ×4 */
+  }
+  (void)poll_at(t0 + 3000U, false);
+  expect_event(SL_EV_CODE_WRONG, TBD_CODE_LEN);
+  expect_no_events();
+}
+
+/* Частина коду — опитуванням до зйомки, решта — з черги: порядок і подія правильні */
+static void test_late_keys_continue_entry_started_by_polling(void)
+{
+  uint32_t t0;
+
+  start_idle();
+  tap(k_btn[k_code[0] - 1U]);
+  tap(k_btn[k_code[1] - 1U]);
+  TEST_ASSERT_EQUAL_UINT(2U, SmartLock_ButtonsCodeProgress());
+  t0 = g_now;
+  fake_platform_key(KEY(k_code[2]), t0 + 200U, t0 + 330U);
+  fake_platform_key(KEY(k_code[3]), t0 + 900U, t0 + 1010U);
+  (void)poll_at(t0 + 2900U, false);
+  expect_event(SL_EV_CODE_OK, TBD_CODE_LEN);
+  TEST_ASSERT_EQUAL_UINT32(2U, SmartLock_ButtonsLate());
+}
+
+/* Звичайне натискання на платі теж потрапляє в чергу (ISR бачить обидва фронти) —
+ * воно не має дати другий символ */
+static void test_late_key_already_accepted_by_polling_is_not_counted_twice(void)
+{
+  uint32_t t_down;
+
+  start_idle();
+  t_down = g_now + STEP;
+  tap(k_btn[0]);                                   /* опитування прийняло о g_accept */
+  fake_platform_key(0U, t_down, g_accept + 50U);   /* той самий фізичний натиск */
+  (void)poll_at(g_now + STEP, false);
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_ButtonsCodeProgress());
+  TEST_ASSERT_EQUAL_UINT32(0U, SmartLock_ButtonsLate());
+  expect_no_events();
+}
+
+/* Імпульс, коротший за антидребезг, у чергу не йде (поріг задає модуль кнопок) */
+static void test_late_key_shorter_than_debounce_is_ignored(void)
+{
+  start_idle();
+  TEST_ASSERT_EQUAL_UINT32(TBD_BTN_DEBOUNCE_MS, fake_platform.key_min_ms);
+  fake_platform_key(0U, g_now + 10U, g_now + 10U + TBD_BTN_DEBOUNCE_MS - 1U);
+  (void)poll_at(g_now + 500U, false);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_ButtonsCodeProgress());
+  TEST_ASSERT_EQUAL_UINT32(0U, SmartLock_ButtonsLate());
+}
+
+/* Тайм-аут рахується між натисканнями, а не до моменту, коли цикл звільнився:
+ * символи з паузами < 5 с зберігаються, навіть якщо цикл стояв довше */
+static void test_late_keys_timeout_uses_press_times_not_processing_time(void)
+{
+  uint32_t t0;
+
+  start_idle();
+  tap(k_btn[k_code[0] - 1U]);
+  t0 = g_accept;
+  fake_platform_key(KEY(k_code[1]), t0 + 3000U, t0 + 3100U);
+  fake_platform_key(KEY(k_code[2]), t0 + 6000U, t0 + 6100U);
+  fake_platform_key(KEY(k_code[3]), t0 + 9000U, t0 + 9100U);
+  (void)poll_at(t0 + 12000U, false);               /* до першого опитування — 12 с */
+  expect_event(SL_EV_CODE_OK, TBD_CODE_LEN);
+}
+
+/* А справжня пауза між натисканнями > тайм-ауту скидає незавершене введення */
+static void test_late_key_after_real_pause_starts_new_entry(void)
+{
+  uint32_t t0;
+
+  start_idle();
+  tap(k_btn[k_code[0] - 1U]);
+  t0 = g_accept;
+  fake_platform_key(KEY(k_code[1]), t0 + TBD_CODE_TIMEOUT_MS + 100U,
+                    t0 + TBD_CODE_TIMEOUT_MS + 200U);
+  (void)poll_at(t0 + TBD_CODE_TIMEOUT_MS + 300U, false);
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_ButtonsCodeProgress());   /* лише новий символ */
+  expect_no_events();
+}
+
+/* Два різні натискання, що перетинаються в часі, — акорд, обидва відкидаються */
+static void test_late_keys_overlapping_chord_is_ignored(void)
+{
+  uint32_t t0;
+
+  start_idle();
+  t0 = g_now;
+  fake_platform_key(1U, t0 + 100U, t0 + 300U);
+  fake_platform_key(2U, t0 + 150U, t0 + 320U);
+  (void)poll_at(t0 + 2000U, false);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_ButtonsCodeProgress());
+  TEST_ASSERT_EQUAL_UINT32(0U, SmartLock_ButtonsLate());
+}
+
+/* Пізнє натискання теж дає пару code_key_press → code_key_handled (метрика I04):
+ * press — момент натискання, handled — коли цикл його забрав */
+static void test_late_key_logs_evt_pair_with_press_time(void)
+{
+  const char *o;
+  uint32_t t0;
+
+  Evt_Init();
+  start_idle();
+  (void)evt_drain();
+  t0 = g_now;
+  fake_platform_key(0U, t0 + 100U, t0 + 220U);
+  fake_platform.now_ms = t0 + 2500U;
+  (void)poll_at(t0 + 2500U, false);
+  o = evt_drain();
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=code_key_press\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "name=code_key_handled\r\n"));
+  TEST_ASSERT_TRUE(strstr(o, "name=code_key_press") < strstr(o, "name=code_key_handled"));
+  TEST_ASSERT_TRUE(evt_time(o, "code_key_handled") > evt_time(o, "code_key_press"));
+}
+
+/* Стенд (issue #51): під час читання кадру SysTick замаскований і мілісекунди майже
+ * стоять. Чотири послідовні натискання різних кнопок по ~100 мс мають тоді однакові
+ * мілісекундні мітки — вони не акорд, бо такти показують, що натискання йшли одне
+ * за одним. */
+static void test_late_keys_with_frozen_millis_are_sequential_not_chord(void)
+{
+  uint32_t t_ms;
+  uint32_t c0;
+
+  start_idle();
+  t_ms = g_now + 100U;
+  c0 = t_ms * 1000U;
+  for (unsigned i = 0U; i < TBD_CODE_LEN; i++)
+  {
+    uint32_t down = c0 + 400000U * i;   /* раз на 0,4 с за тактами */
+
+    fake_platform_key_cyc(KEY(k_code[i]), t_ms + i, t_ms + i, down, down + 100000U);
+  }
+  (void)poll_at(g_now + 2000U, false);
+  expect_event(SL_EV_CODE_OK, TBD_CODE_LEN);
+  TEST_ASSERT_EQUAL_UINT32(TBD_CODE_LEN, SmartLock_ButtonsLate());
+}
+
+/* Натискання ~100 мс, за яке мілісекунди не зрушили (SysTick замаскований), — не
+ * дребезг: поріг антидребезгу міряється тактами */
+static void test_late_key_long_by_cycles_short_by_millis_is_kept(void)
+{
+  start_idle();
+  fake_platform_key_cyc(0U, g_now + 50U, g_now + 52U, (g_now + 50U) * 1000U,
+                        (g_now + 50U) * 1000U + 100000U);
+  (void)poll_at(g_now + 1000U, false);
+  TEST_ASSERT_EQUAL_UINT(1U, SmartLock_ButtonsCodeProgress());
+}
+
+/* Натискання до старту модуля (черга вже не порожня) — не код */
+static void test_keys_queued_before_start_are_discarded(void)
+{
+  fake_platform_key(0U, 100U, 200U);
+  start_idle();
+  (void)poll_at(g_now + STEP, false);
+  TEST_ASSERT_EQUAL_UINT(0U, SmartLock_ButtonsCodeProgress());
+}
+
 int main(void)
 {
   UNITY_BEGIN();
@@ -752,5 +945,17 @@ int main(void)
   RUN_TEST(test_b1_edge_restarts_debounce);
   RUN_TEST(test_b1_edge_on_release_gives_no_extra_event);
   RUN_TEST(test_code_key_evt_pair_measures_first_edge_to_accept);
+  RUN_TEST(test_late_keys_whole_code_during_block_gives_code_ok);
+  RUN_TEST(test_late_keys_wrong_code_during_block_gives_code_wrong);
+  RUN_TEST(test_late_keys_continue_entry_started_by_polling);
+  RUN_TEST(test_late_key_already_accepted_by_polling_is_not_counted_twice);
+  RUN_TEST(test_late_key_shorter_than_debounce_is_ignored);
+  RUN_TEST(test_late_keys_timeout_uses_press_times_not_processing_time);
+  RUN_TEST(test_late_key_after_real_pause_starts_new_entry);
+  RUN_TEST(test_late_keys_overlapping_chord_is_ignored);
+  RUN_TEST(test_late_key_logs_evt_pair_with_press_time);
+  RUN_TEST(test_late_keys_with_frozen_millis_are_sequential_not_chord);
+  RUN_TEST(test_late_key_long_by_cycles_short_by_millis_is_kept);
+  RUN_TEST(test_keys_queued_before_start_are_discarded);
   return UNITY_END();
 }

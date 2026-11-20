@@ -11,7 +11,9 @@
   *
   *          Формат — по рядку на модуль, «ключ=значення» (як EVQ / UART у STATS):
   *            DIAG name=fsm state=<стан> ignored=<n> cam_rejected=<n>
-  *            DIAG name=buttons dropped=<n>
+  *            DIAG name=buttons dropped=<n> late=<n> key_lost=<n>
+  *              (late — натискання коду, які додала EXTI-черга під час довгих операцій,
+  *               key_lost — відкинуті через повну чергу; issue #51)
   *            DIAG name=security mpu_ok=0|1 mpu_err=<n> mpu_zero=<n> lost=<n> door_retries=<n>
   *            DIAG name=env dht_err=<n> bmp_err=<n> warnings=<n> post_failed=<n>
   *            DIAG name=journal pending=<n> max_depth=<n> stored=<n> unsaved=<n> dropped=<n> last_seq=<n>
@@ -25,6 +27,7 @@
 #include <stdio.h>
 
 #include "camera.h"
+#include "platform.h"
 #include "sl_buttons.h"
 #include "sl_camera_link.h"
 #include "sl_env.h"
@@ -46,7 +49,9 @@ void SmartLock_PrintDiag(void)
     printf("DIAG name=fsm state=%s ignored=%lu cam_rejected=%lu\r\n",
            SmartLock_FsmStateName(SmartLock_FsmState()),
            (unsigned long)SmartLock_FsmIgnored(), (unsigned long)SmartLock_FsmCameraRejected());
-    printf("DIAG name=buttons dropped=%lu\r\n", (unsigned long)SmartLock_ButtonsDropped());
+    printf("DIAG name=buttons dropped=%lu late=%lu key_lost=%lu\r\n",
+           (unsigned long)SmartLock_ButtonsDropped(), (unsigned long)SmartLock_ButtonsLate(),
+           (unsigned long)Platform_KeyLost());
     printf("DIAG name=security mpu_ok=%u mpu_err=%lu mpu_zero=%lu lost=%lu door_retries=%lu\r\n",
            SlSecurity_MpuHealthy() ? 1U : 0U, (unsigned long)SlSecurity_MpuErrors(),
            (unsigned long)SlSecurity_MpuZeroSamples(), (unsigned long)SlSecurity_EventsLost(),

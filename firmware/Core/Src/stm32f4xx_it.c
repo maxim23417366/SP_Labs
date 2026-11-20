@@ -223,6 +223,9 @@ void EXTI9_5_IRQHandler(void)
   HAL_GPIO_EXTI_IRQHandler(MPU_INT_Pin);
   HAL_GPIO_EXTI_IRQHandler(CAM_VSYNC_Pin);
   /* USER CODE BEGIN EXTI9_5_IRQn 1 */
+  /* issue #51: кнопки коду BTN_4 (PA7) і BTN_1 (PA9), EXTI вмикає Platform_IoInit() */
+  HAL_GPIO_EXTI_IRQHandler(BTN_4_Pin);
+  HAL_GPIO_EXTI_IRQHandler(BTN_1_Pin);
 
   /* USER CODE END EXTI9_5_IRQn 1 */
 }
@@ -242,5 +245,17 @@ void EXTI15_10_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+/* issue #51: кнопки коду BTN_2 (PA1) і BTN_3 (PA4). У firmware.ioc ці лінії EXTI не
+ * ввімкнені, тому обробники тут, у секції користувача (CubeMX їх не перезапише);
+ * EXTI і NVIC вмикає Platform_IoInit(). */
+void EXTI1_IRQHandler(void)
+{
+  HAL_GPIO_EXTI_IRQHandler(BTN_2_Pin);
+}
+
+void EXTI4_IRQHandler(void)
+{
+  HAL_GPIO_EXTI_IRQHandler(BTN_3_Pin);
+}
 
 /* USER CODE END 1 */

@@ -251,7 +251,7 @@ static void test_locked_motion_gives_photo_in_flash_and_clean_stats(void)
   TEST_ASSERT_NOT_NULL(strstr(o, "DIAG name=camera accepted=1 rejected=0 stored=1 capture_err=0 "
                                  "store_err=0 pending=0\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, " unsaved=0 dropped=0 "));    /* журнал: усі записи у Flash */
-  TEST_ASSERT_NOT_NULL(strstr(o, "DIAG name=buttons dropped=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "DIAG name=buttons dropped=0 late=0 key_lost=0\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, " dropped=0\r\nUART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 "));   /* EVQ */
   TEST_ASSERT_NOT_NULL(strstr(o, "STATS_END\r\n"));
 }
