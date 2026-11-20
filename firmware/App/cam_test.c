@@ -24,6 +24,8 @@ static size_t      s_frame_bytes;
 static uint32_t    s_frame_event;   /* I09: ID події кадру (0 — стендовий кадр) для CAM EXPORT */
 static ov7670_t    s_cam;
 static bool        s_ready;
+static uint32_t    s_init_ms;       /* коли камеру налаштовано — відлік сходження AEC/AWB */
+static uint32_t    s_settle_ms;     /* скільки чекали сходження перед останнім кадром */
 static perf_stat_t s_stat = PERF_STAT_INIT("camera");
 static perf_stat_t s_store_stat = PERF_STAT_INIT("flash_frame");   /* I09: запис кадру (camera.c) */
 
@@ -70,7 +72,38 @@ static bool cam_init(void)
            dev_name(s), (unsigned)s_cam.pid, (unsigned)s_cam.ver,
            (unsigned)(TBD_CAMERA_CLKRC & OV7670_CLKRC_MASK), (unsigned)failed);
     s_ready = (s == DEV_OK);
+    s_init_ms = Platform_Millis();
     return s_ready;
+}
+
+void CamTest_Init(void)
+{
+    if (!s_ready)
+    {
+        (void)cam_init();
+    }
+}
+
+bool CamTest_AecSettled(void)
+{
+    return s_ready && ((Platform_Millis() - s_init_ms) >= TBD_CAMERA_AEC_SETTLE_MS);
+}
+
+/* Лише для стендової команди CAM TEST: автоматика датчика працює сама з моменту
+ * налаштування, кадр раніше ніж через TBD_CAMERA_AEC_SETTLE_MS був би пересвічений —
+ * дочекатися решти. У шляху тривоги (camera.c) НЕ чекаємо: Super Loop не можна
+ * блокувати на секунди (кнопки, PIR, журнал); там кадр знімається одразу, а
+ * CAM,photo позначає його aec=settling. */
+static void wait_settle(void)
+{
+    uint32_t age = Platform_Millis() - s_init_ms;
+
+    s_settle_ms = 0U;
+    if (age < TBD_CAMERA_AEC_SETTLE_MS)
+    {
+        s_settle_ms = TBD_CAMERA_AEC_SETTLE_MS - age;
+        Platform_DelayMs(s_settle_ms);
+    }
 }
 
 /* I09: захоплення в спільний буфер — і для CAM TEST, і для задачі camera.
@@ -101,6 +134,9 @@ bool CamTest_Capture(platform_cam_status_t *status, platform_cam_result_t *res)
     }
     Evt_Log("capture_start");
     st = Platform_CameraCapture(&cfg, s_frame, sizeof(s_frame), res);
+#if CAMERA_RGB565_SWAP
+    ov7670_rgb565_swap_bytes(s_frame, res->bytes);   /* датчик: молодший байт першим */
+#endif
     Evt_Log("capture_done");
 
     s_frame_bytes = res->bytes;
@@ -128,15 +164,70 @@ static void cam_capture(void)
     platform_cam_result_t r;
     platform_cam_status_t st;
 
+    if (!s_ready && !cam_init())
+    {
+        return;                     /* init не вдався: причина вже в CAM,init */
+    }
+    wait_settle();
     if (!CamTest_Capture(&st, &r) && (st == PLATFORM_CAM_ERR_ARG) && !s_ready)
     {
         return;                     /* init не вдався: причина вже в CAM,init */
     }
     printf("CAM,result,status=%s,bytes=%lu,lines=%u,short=%u,vglitch=%u,capture_us=%lu,"
-           "crc=0x%08lX\r\n",
+           "crc=0x%08lX,settle_ms=%lu\r\n",
            cam_name(st), (unsigned long)r.bytes, (unsigned)r.lines, (unsigned)r.short_lines,
            (unsigned)r.vsync_glitches, (unsigned long)Perf_CyclesToUs(r.cycles),
-           (unsigned long)crc32_compute(s_frame, s_frame_bytes));
+           (unsigned long)crc32_compute(s_frame, s_frame_bytes), (unsigned long)s_settle_ms);
+}
+
+/* CAM REG <hex>          — прочитати регістр OV7670
+ * CAM REG <hex> <hex>    — записати і прочитати назад
+ * Підбір експозиції / балансу білого на стенді без перепрошивки (H14). Зміна живе до
+ * скидання або наступної ініціалізації камери. */
+static void cam_reg(const char *arg)
+{
+    char         *end = NULL;
+    unsigned long reg = strtoul(arg, &end, 16);
+    unsigned long val = 0UL;
+    bool          wr  = false;
+    uint8_t       rd  = 0U;
+    dev_status_t  s   = DEV_OK;
+
+    if ((end == arg) || (reg > 0xFFUL))
+    {
+        printf("CAM,reg,status=param\r\n");
+        return;
+    }
+    while (*end == ' ')
+    {
+        end++;
+    }
+    if (*end != '\0')
+    {
+        const char *v = end;
+
+        val = strtoul(v, &end, 16);
+        if ((end == v) || (*end != '\0') || (val > 0xFFUL))
+        {
+            printf("CAM,reg,status=param\r\n");
+            return;
+        }
+        wr = true;
+    }
+    if (!s_ready && !cam_init())
+    {
+        return;                     /* причина — у CAM,init */
+    }
+    if (wr)
+    {
+        s = ov7670_write_reg(&s_cam, (uint8_t)reg, (uint8_t)val);
+    }
+    if (s == DEV_OK)
+    {
+        s = ov7670_read_reg(&s_cam, (uint8_t)reg, &rd);
+    }
+    printf("CAM,reg,op=%s,reg=0x%02lX,val=0x%02X,status=%s\r\n", wr ? "write" : "read", reg,
+           (unsigned)rd, dev_name(s));
 }
 
 /* I08: синтетичний кадр — 8 кольорових смуг зверху, градієнт сірого знизу.
@@ -272,6 +363,11 @@ bool CamTest_LineCommand(const char *line)
         {
             cam_load(line + 9);
         }
+        return true;
+    }
+    if (strncmp(line, "CAM REG ", 8U) == 0)
+    {
+        cam_reg(line + 8);
         return true;
     }
     if (strcmp(line, "CAM EXPORT") == 0)
