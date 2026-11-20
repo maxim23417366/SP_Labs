@@ -61,7 +61,7 @@ make lab3 2>&1 | tee lab3_$(git rev-parse --short HEAD).log
 Останній рядок при успіху:
 
 ```
-LAB3: PASS git=<хеш> — check-deps, build, fw-check, mem-report, test, coverage, tools-test
+LAB3: PASS git=<хеш> — check-deps, build, fw-check, mem-report, host-checks (test, coverage, tools, python)
 ```
 
 Кроки окремо (якщо щось упало — запускати той, що впав):
@@ -75,6 +75,7 @@ LAB3: PASS git=<хеш> — check-deps, build, fw-check, mem-report, test, cover
 | `make test` | host-тести на моделях заліза: `periph_check`, 29 наборів Unity, `self_test` | кожен набір `N Tests 0 Failures`, наприкінці `ALL TESTS PASSED` |
 | `make coverage` | покриття gcov: Devices, App ≥ 90 % рядків, `camera_dvp.c` | усі `TOTAL … -> OK` |
 | `make tools-test` | експорт кадру C → UART-лог → `tools/frame_decode.py` → PNG | `frame_decode: OK` |
+| `make host-checks` | I11: test + coverage + tools-test + Python-тести одним запуском, лог `tests/build/I11_host_checks.log` (`docs/lab_3/host-tests.md`) | `I11 HOST CHECKS: PASS — …` |
 
 Що саме перевіряє `make fw-check` (`scripts/check_firmware.sh`, `arm-none-eabi-nm`):
 

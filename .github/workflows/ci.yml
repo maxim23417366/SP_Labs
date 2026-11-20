@@ -23,11 +23,16 @@ jobs:
       - name: Single firmware check - no RTOS, strong modules, git hash (I10)
         run: make fw-check REQUIRE_GIT=1
 
-      - name: Host tests (periph_check + Unity unit tests)
-        run: make test
+      # I11: periph_check, усі Unity-набори з покриттям (поріг 90 %), self_test,
+      # кадр C -> UART-лог -> Python -> PNG (I08), Python-тести scripts/ і tools/.
+      # Один лог з підсумком — артефакт I11_host_checks (Actions -> цей запуск -> Artifacts).
+      - name: Host checks - tests, coverage, tools, python (I11)
+        run: make host-checks
 
-      - name: Driver coverage (gcov, threshold 90 %)
-        run: make coverage
-
-      - name: Frame export C -> UART log -> Python -> PNG (I08)
-        run: make tools-test
+      - name: Upload host checks log (I11)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: I11_host_checks
+          path: tests/build/I11_host_checks.log
+          if-no-files-found: error
