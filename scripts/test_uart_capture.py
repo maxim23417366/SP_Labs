@@ -14,7 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parse_uart_logs import parse_log_file  # noqa: E402
-from uart_capture import Capture, build_parser, encode_command, parse_operator, run  # noqa: E402
+from uart_capture import Capture, build_parser, encode_command, load_command, parse_operator, run  # noqa: E402
+from uart_load import build_command_for_step  # noqa: E402
 
 BOARD_OUTPUT = (
     b"BUILD,fw=SmartLock,lab=LR3,git=a1b2c3d,cpu_hz=96000000,loop=superloop\r\n"
@@ -149,6 +150,68 @@ class PtyRunTest(unittest.TestCase):
             self.assertIn("без відповіді після всіх повторів", cond)
             self.assertIn("`PING 5`", cond)
             self.assertIn("не отримано", cond)  # без BUILD git-хеш вписується вручну
+        os.close(master)
+        os.close(slave)
+
+
+class LoadModeTest(unittest.TestCase):
+    def test_profiles_match_uart_load(self):
+        for profile in ("ping", "mixed"):
+            for step in range(1, 120):
+                self.assertEqual(load_command(step, profile), build_command_for_step(step, profile))
+
+    def test_s3_capture_and_load_share_one_port(self):
+        master, slave = pty.openpty()
+        received = bytearray()
+
+        def board():
+            time.sleep(0.2)
+            os.write(master, BOARD_OUTPUT)
+            pending = b""
+            deadline = time.time() + 6.0
+            while time.time() < deadline:
+                ready, _, _ = select.select([master], [], [], 0.02)
+                if not ready:
+                    continue
+                try:
+                    chunk = os.read(master, 256)
+                except OSError:
+                    break
+                received.extend(chunk)
+                pending += chunk
+                while b"\r\n" in pending:
+                    line, pending = pending.split(b"\r\n", 1)
+                    line = line.lstrip(b"\r")              # encode_command додає провідний \r
+                    if line.startswith(b"PING "):
+                        os.write(master, b"PONG seq=" + line[5:] + b" t_us=1\r\n")
+                    elif line == b"MEM":
+                        os.write(master, b"STACK reserved=1024 used=720 free=304\r\nHEAP arena=1 used=1 free=0\r\n")
+                    elif line == b"STATS":
+                        os.write(master, b"STATS_BEGIN git=a1b2c3d t_us=9 loops=1\r\nSTATS_END\r\n")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            args = build_parser().parse_args([
+                "--port", os.ttyname(slave), "--name", "S3T", "--out", tmp,
+                "--duration", "0.03", "--load-rate", "20", "--load-profile", "ping",
+                "--char-gap", "0", "--cmd-wait", "0.5", "--no-echo", "--no-input", "--plan", "S3",
+                "--end", "STATS",
+            ])
+            t = threading.Thread(target=board, daemon=True)
+            t.start()
+            self.assertEqual(run(args), 0)
+            t.join(timeout=8)
+            raw = Path(tmp, "S3T_uart_raw.txt").read_bytes()
+            self.assertTrue(raw.startswith(BOARD_OUTPUT))         # BUILD з хешем у тому ж лозі
+            self.assertIn(b"PONG seq=1 ", raw)
+            cond = Path(tmp, "S3T_conditions.md").read_text(encoding="utf-8")
+            self.assertIn("`a1b2c3d`", cond)
+            self.assertIn("профіль ping, 20 Гц", cond)
+            sent = bytes(received).count(b"PING ")
+            self.assertGreaterEqual(sent, 20)                     # ≈ 1,8 с × 20 Гц
+            self.assertLessEqual(sent, 45)
+            self.assertNotIn("`PING 1`", cond)                    # навантаження не засмічує таблицю команд
+            parsed = parse_log_file(Path(tmp, "S3T_uart_raw.txt"))
+            self.assertIsNotNone(parsed)
         os.close(master)
         os.close(slave)
 

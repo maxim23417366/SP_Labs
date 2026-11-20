@@ -44,12 +44,22 @@ python3 scripts/uart_capture.py --port /dev/cu.usbmodem12303 --name S1 --duratio
 # S2 — запустити після переходу в LOCKED, ≥ 60 хв (запас 2 хв)
 python3 scripts/uart_capture.py --port /dev/cu.usbmodem12303 --name S2 --duration 62 --plan S2
 
-# S3 — до 30 валідних подій, зупинка Ctrl+C
-python3 scripts/uart_capture.py --port /dev/cu.usbmodem12303 --name S3 --plan S3
+# S3 — до 30 валідних подій, зупинка Ctrl+C; навантаження UART генерує той самий процес
+python3 scripts/uart_capture.py --port /dev/cu.usbmodem12303 --name S3 --plan S3 \
+    --load-rate 20 --load-profile mixed --char-gap 0 --retries 1
 
 # пробний прогін (не доказ) — окрема тека
 python3 scripts/uart_capture.py --port /dev/cu.usbmodem12303 --name S1_dry --out /tmp/smartlock --duration 2
 ```
+
+**Навантаження UART у S3.** Порт плати один: `scripts/uart_load.py` (M03) і `uart_capture.py`
+одночасно його не відкриють. Тому в S3 навантаження дає сам `uart_capture.py`:
+`--load-rate <Гц>` або `--load-burst` (без пауз, методичка §6.2.3), `--load-profile ping|mixed` —
+ті самі команди, що в `uart_load.py` (`PING <n>`, кожна 10-та `MEM`, кожна 25-та `MARK <n>`), без
+очікування відповіді. Підсумок (надіслано, отримано `PONG`, фактичний темп) — у `S3_conditions.md`;
+втрати — за `seq` у сирому лозі (парсер M03). `--char-gap 0 --retries 1` — бо прийом уже через DMA
+(лог 22); з обходом `--char-gap 0.005` рядок `PING <n>` іде ≈ 50 мс і 20 Гц недосяжні.
+`uart_load.py` лишається для окремих перевірок UART без запису S3 (`docs/metrics/uart-load-guide.md`).
 
 Файли S1–S3 — у `docs/metrics/` (вимога протоколу), запис PulseView S3 — `docs/captures/`.
 Логи E2E і §6.2 — `docs/lab_3/logs/` з наступним вільним номером.

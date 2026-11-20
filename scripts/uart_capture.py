@@ -23,6 +23,9 @@
 Приклад (S2, 60 хв після переходу в LOCKED):
     python3 scripts/uart_capture.py --port /dev/cu.usbmodem12303 \
         --name S2 --out docs/metrics --duration 62 --plan S2
+Приклад (S3: запис і навантаження UART одним процесом — порт плати один):
+    python3 scripts/uart_capture.py --port /dev/cu.usbmodem12303 --name S3 --plan S3 \
+        --load-rate 20 --load-profile mixed --char-gap 0 --retries 1
 """
 
 from __future__ import annotations
@@ -84,6 +87,10 @@ class Capture:
     sent: List[Tuple[float, str]] = field(default_factory=list)
     unanswered: List[Tuple[float, str]] = field(default_factory=list)
     notes: List[Tuple[float, str]] = field(default_factory=list)
+    load_sent: int = 0          # команд навантаження (--load-rate / --load-burst)
+    load_pongs: int = 0         # PONG у відповідь на PING навантаження
+    load_first: Optional[float] = None
+    load_last: Optional[float] = None
     _partial: bytes = b""
 
     def feed(self, data: bytes) -> List[str]:
@@ -102,6 +109,8 @@ class Capture:
             if m and self.git is None:
                 self.git = m.group("git")
                 self.build_line = line
+            if line.startswith("PONG seq="):
+                self.load_pongs += 1
             out.append(line)
         return out
 
@@ -135,6 +144,20 @@ def expected_reply(cmd: str) -> Optional["re.Pattern[str]"]:
     if m:
         return re.compile(rf"\bname=mark_{int(m.group(1))}$")
     return None
+
+
+def load_command(step: int, profile: str) -> str:
+    """
+    Чергова команда навантаження UART для S3 — ті самі профілі, що в scripts/uart_load.py
+    (build_command_for_step): ping — лише PING <n>; mixed — кожна 25-та MARK <n>, кожна 10-та MEM.
+    Порт плати один, тож у S3 навантаження генерує той самий процес, що пише лог.
+    """
+    if profile == "mixed":
+        if step % 25 == 0:
+            return f"MARK {step}"
+        if step % 10 == 0:
+            return "MEM"
+    return f"PING {step}"
 
 
 def encode_command(text: str) -> bytes:
@@ -178,6 +201,16 @@ def open_port(path: str, baud: int) -> int:
     return fd
 
 
+def load_summary(cap: Capture, args: argparse.Namespace) -> str:
+    if not (args.load_rate > 0 or args.load_burst):
+        return "немає"
+    mode = "без пауз (--load-burst)" if args.load_burst else f"{args.load_rate:g} Гц"
+    span = (cap.load_last - cap.load_first) if (cap.load_first and cap.load_last) else 0.0
+    eff = f", фактично {cap.load_sent / span:.1f} команд/с" if span > 0 else ""
+    return (f"профіль {args.load_profile}, {mode}{eff}; надіслано {cap.load_sent}, "
+            f"PONG {cap.load_pongs} (втрати PING видно за seq у сирому лозі)")
+
+
 def render_conditions(cap: Capture, args: argparse.Namespace, t_end: float) -> str:
     start = dt.datetime.fromtimestamp(cap.t0).isoformat(timespec="seconds")
     end = dt.datetime.fromtimestamp(t_end).isoformat(timespec="seconds")
@@ -197,6 +230,7 @@ def render_conditions(cap: Capture, args: argparse.Namespace, t_end: float) -> s
         f"| UART | {args.port}, {args.baud} 8N1 |",
         f"| Прийнято | {cap.rx_bytes} Б, {cap.lines} рядків |",
         f"| Сирий лог | `{args.name}_uart_raw.txt` |",
+        f"| Навантаження UART | {load_summary(cap, args)} |",
         f"| Лог з часом ПК | `{args.name}_uart_ts.txt` |",
         "",
         "## Заповнити вручну",
@@ -257,7 +291,7 @@ def run(args: argparse.Namespace) -> int:
             ts.flush()
             print(f"[{t - cap.t0:7.1f} с] {text}", flush=True)
 
-        def send(cmd: str) -> None:
+        def send(cmd: str, log_cmd: bool = True) -> None:
             data = encode_command(cmd)
             if args.char_gap > 0:
                 # USART2 у прошивці опитується без буфера: два байти за одне блокування циклу
@@ -267,7 +301,8 @@ def run(args: argparse.Namespace) -> int:
                     time.sleep(args.char_gap)
             else:
                 os.write(fd, data)
-            cap.sent.append((time.time(), cmd))
+            if log_cmd:
+                cap.sent.append((time.time(), cmd))
             ts.write(f"{stamp(time.time(), cap.t0)} > {cmd}\n")
 
         last_rx = [time.time()]
@@ -346,11 +381,29 @@ def run(args: argparse.Namespace) -> int:
             note("BUILD отримано, надсилаю --start" if cap.git else "BUILD не було — надсилаю --start")
         for cmd in args.start:
             send_checked(cmd)
+        load_on = args.load_rate > 0 or args.load_burst
+        period = 0.0 if args.load_burst else (1.0 / args.load_rate if load_on else 0.0)
+        next_load = time.time()
+        step = 1
+        if load_on:
+            note(f"навантаження UART: профіль {args.load_profile}, "
+                 + ("без пауз" if args.load_burst else f"{args.load_rate:g} Гц"))
         try:
             while deadline is None or time.time() < deadline:
                 while plan and time.time() - cap.t0 >= plan[0][0] * 60.0:
                     note(plan.pop(0)[1])
-                pump(0.2)
+                if load_on and time.time() >= next_load:
+                    # без очікування відповіді: це навантаження, а не службова команда
+                    send(load_command(step, args.load_profile), log_cmd=False)
+                    now = time.time()
+                    cap.load_sent += 1
+                    cap.load_first = cap.load_first or now
+                    cap.load_last = now
+                    step += 1
+                    next_load = now if args.load_burst else max(next_load + period, now - period)
+                    pump(0.0)
+                    continue
+                pump(min(0.2, max(0.0, next_load - time.time())) if load_on else 0.2)
         except KeyboardInterrupt:
             note("зупинено оператором")
         for cmd in args.end:
@@ -394,6 +447,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--quiet", type=float, default=0.2,
                    help="с тиші на лінії перед відправкою команди")
     p.add_argument("--quiet-max", type=float, default=2.0, help="с найдовшого очікування тиші")
+    p.add_argument("--load-rate", type=float, default=0.0,
+                   help="Гц навантаження UART для S3 (PING/MARK/MEM без очікування відповіді); 0 — вимкнено")
+    p.add_argument("--load-burst", action="store_true",
+                   help="навантаження без пауз (методичка §6.2.3); темп обмежує --char-gap")
+    p.add_argument("--load-profile", choices=("ping", "mixed"), default="mixed",
+                   help="профіль команд як у scripts/uart_load.py (за замовчуванням mixed)")
     p.add_argument("--boot-wait", type=float, default=10.0,
                    help="с очікування рядка BUILD перед --start (0 — не чекати)")
     p.add_argument("--boot-settle", type=float, default=3.0,
