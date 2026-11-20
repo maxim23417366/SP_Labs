@@ -26,6 +26,7 @@
 #include "dev_bus.h"
 #include "platform.h"
 
+#define FAKE_UART_LOST      '\xFE'   /* у uart_rx: Platform_UartGetChar() поверне PLATFORM_UART_LOST */
 #define FAKE_SERVO_LOG_LEN  32U
 
 /* Один крок сценарію DHT11: результат захоплення і 5 байт кадру (для DEV_OK) */
@@ -61,6 +62,7 @@ typedef struct
   uint32_t     ev_t[PLATFORM_EV_COUNT];
   uint32_t     ev_overruns[PLATFORM_EV_COUNT];
   uint32_t     uart_overruns;
+  uint32_t     uart_rx_peak;      /* Platform_UartRxPeak() */
 
   uint32_t     inputs;            /* Platform_ReadInputs(): біти PLATFORM_IN_* */
 
@@ -85,7 +87,8 @@ typedef struct
   uint8_t      sccb_last_val;
   uint32_t     vsync_hz;          /* частота кадрів камери для Platform_VsyncCount() */
 
-  const char  *uart_rx;           /* символи для Platform_UartGetChar(); NULL — порожньо */
+  const char  *uart_rx;           /* символи для Platform_UartGetChar(); NULL — порожньо;
+                                   * FAKE_UART_LOST ('\xFE') — тут прийом загубив байти */
   size_t       uart_pos;
 
   /* ЛР3: відновлення I2C1 — Platform_I2cStats() віддає i2c_stats як є,

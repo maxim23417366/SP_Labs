@@ -28,4 +28,9 @@ void     Cmd_Execute(const char *line);
 void     Cmd_Reset(void);
 uint32_t Cmd_LineOverflows(void);
 
+/* Прийом загубив байти (PLATFORM_UART_LOST): рядок до найближчого '\r' / '\n'
+ * відкидається з відповіддю «ERR,cmd=dropped,reason=rx_lost» */
+void     Cmd_RxLost(void);
+uint32_t Cmd_Dropped(void);       /* скільки рядків так відкинуто */
+
 #endif /* CMD_H */

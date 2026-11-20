@@ -24,6 +24,8 @@ static size_t   s_len;
 static bool     s_active;
 static bool     s_overflow;
 static uint32_t s_overflows;
+static bool     s_skip;        /* після втрати байтів — відкинути все до кінця рядка */
+static uint32_t s_dropped;
 
 void Cmd_Reset(void)
 {
@@ -31,11 +33,28 @@ void Cmd_Reset(void)
     s_active = false;
     s_overflow = false;
     s_overflows = 0U;
+    s_skip = false;
+    s_dropped = 0U;
 }
 
 uint32_t Cmd_LineOverflows(void)
 {
     return s_overflows;
+}
+
+/* Байти загублено (PLATFORM_UART_LOST): рядок, що зараз набирається, і будь-який
+ * рядок, у який могли входити загублені байти, не виконується — інакше «PING 12»
+ * без «2» стала б «PING 1», а «MARK 2» без '\r' злиплася б з наступною командою */
+void Cmd_RxLost(void)
+{
+    s_active = false;
+    s_len = 0U;
+    s_skip = true;
+}
+
+uint32_t Cmd_Dropped(void)
+{
+    return s_dropped;
 }
 
 static void help(void)
@@ -98,6 +117,16 @@ void Cmd_Execute(const char *line)
 
 int Cmd_Feed(int c)
 {
+    if (s_skip)
+    {
+        if ((c == '\r') || (c == '\n'))
+        {
+            s_skip = false;
+            s_dropped++;
+            printf("ERR,cmd=dropped,reason=rx_lost\r\n");   /* ПК бачить відповідь і може повторити */
+        }
+        return 1;
+    }
     if (!s_active)
     {
         if ((c < 'A') || (c > 'Z'))

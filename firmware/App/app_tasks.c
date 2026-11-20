@@ -85,6 +85,12 @@ static bool task_env(void)
     return SmartLock_EnvPoll(Platform_Millis());
 }
 
+/* I09: кадр охоронної події — захоплення (PB2) і запис у W25Q64 (PB12), camera.c */
+static bool task_camera(void)
+{
+    return SmartLock_CameraPoll(Platform_Millis());
+}
+
 static bool task_storage(void)
 {
     return SmartLock_StoragePoll(Platform_Millis());
@@ -97,10 +103,14 @@ static bool task_uart(void)
     bool did = false;
     int  c;
 
-    for (unsigned n = 0U; (n < UART_RX_PER_PASS) && ((c = Platform_UartGetChar()) >= 0); n++)
+    for (unsigned n = 0U; (n < UART_RX_PER_PASS) && ((c = Platform_UartGetChar()) != PLATFORM_UART_NONE); n++)
     {
         did = true;
-        if (Cmd_Feed(c) == 0)
+        if (c == PLATFORM_UART_LOST)
+        {
+            Cmd_RxLost();       /* байти загублено — зіпсований рядок не виконувати */
+        }
+        else if (Cmd_Feed(c) == 0)
         {
             Bench_Command(c);   /* блокувальні діагностичні команди ЛР2 */
         }
@@ -175,10 +185,12 @@ void AppTasks_Init(void)
     Sched_Init();
     (void)Sched_Add("fsm",      task_fsm,      PERIOD_FSM_US,          SCHED_NO_PROBE);
     (void)Sched_Add("buttons",  task_buttons,  TBD_PERIOD_BUTTONS_US,  SCHED_NO_PROBE);
-    /* PB2 / PB12 до I09 показують роботу security і env (найдовші періодичні задачі);
-     * у I09 ці канали переходять на захоплення кадру і запис у Flash. */
-    (void)Sched_Add("security", task_security, TBD_PERIOD_SECURITY_US, (int)PLATFORM_PROBE_CAMERA);
-    (void)Sched_Add("env",      task_env,      TBD_PERIOD_ENV_US,      (int)PLATFORM_PROBE_STORAGE);
+    (void)Sched_Add("security", task_security, TBD_PERIOD_SECURITY_US, SCHED_NO_PROBE);
+    (void)Sched_Add("env",      task_env,      TBD_PERIOD_ENV_US,      SCHED_NO_PROBE);
+    /* I09: PB2 / PB12 — захоплення кадру і запис кадру у Flash (camera.c; до I09 ці
+     * канали показували security і env). Задача подієва: працює, лише коли FSM
+     * запросила кадр, тож у звичайному проході коштує одну перевірку. */
+    (void)Sched_Add("camera",   task_camera,   0U,                     SCHED_NO_PROBE);
     (void)Sched_Add("storage",  task_storage,  PERIOD_STORAGE_US,      SCHED_NO_PROBE);
     (void)Sched_Add("mem",      task_mem,      TBD_PERIOD_MEM_US,      SCHED_NO_PROBE);
     (void)Sched_Add("uart",     task_uart,     PERIOD_UART_US,         SCHED_NO_PROBE);

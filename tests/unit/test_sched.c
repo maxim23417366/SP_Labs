@@ -256,12 +256,13 @@ static void test_event_queue_fifo_overflow_and_wait(void)
 /* ---- таблиця задач SmartLock і слабкі точки підключення --------------------------- */
 static void test_app_tasks_table_order(void)
 {
-  static const char *const names[] = { "fsm", "buttons", "security", "env", "storage", "mem", "uart" };
+  /* I09: camera — подієва задача між env і storage (metrics-spec M-01) */
+  static const char *const names[] = { "fsm", "buttons", "security", "env", "camera", "storage", "mem", "uart" };
 
   AppTasks_Init();
   TEST_ASSERT_TRUE(Sched_Started());
-  TEST_ASSERT_EQUAL_INT(7, Sched_Count());
-  for (int i = 0; i < 7; i++)
+  TEST_ASSERT_EQUAL_INT(8, Sched_Count());
+  for (int i = 0; i < 8; i++)
   {
     TEST_ASSERT_EQUAL_STRING(names[i], Sched_Task(i)->name);
   }
@@ -356,8 +357,9 @@ static void test_input_edges_reach_fsm_with_react_pulse(void)
     Sched_RunOnce();
   }
   TEST_ASSERT_EQUAL_UINT32(posted, SmartLock_EventsPosted());
-  /* security і env мають власні канали PB2 / PB12 */
-  TEST_ASSERT_TRUE(fake_platform.probe_rises[PLATFORM_PROBE_CAMERA] >= 2U);
+  /* I09: PB2 / PB12 — лише захоплення і запис кадру; у UNLOCKED кадр не запитується */
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_CAMERA]);
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.probe_rises[PLATFORM_PROBE_STORAGE]);
 }
 
 /* ---- I06: рядки STACK/HEAP лише при зростанні максимуму --------------------------------- */
@@ -498,7 +500,7 @@ static void test_stats_prints_every_metric_line(void)
   TEST_ASSERT_NOT_NULL(strstr(o, "POLL name=uart "));
   TEST_ASSERT_NOT_NULL(strstr(o, "STAT name=evq_wait n=0 "));
   TEST_ASSERT_NOT_NULL(strstr(o, "EVQ len=8 pending=0 max_depth=0 posted=0 dropped=0\r\n"));
-  TEST_ASSERT_NOT_NULL(strstr(o, "UART rx_overrun=0 cmd_overflow=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=0\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "STACK reserved=1024 used=0 free=1024\r\nHEAP arena=0 "));
   TEST_ASSERT_NOT_NULL(strstr(o, "STATS_END\r\n"));
 
@@ -723,9 +725,50 @@ static void test_mark_uart_cmd_evt_and_uart_overrun(void)
   TEST_ASSERT_NOT_NULL(strstr(o, "EVT t_us=5000 name=uart_cmd_tx\r\n"));
 
   fake_platform.uart_overruns = 3U;
+  fake_platform.uart_rx_peak  = 120U;
   o = capture_cmd("STATS");
-  TEST_ASSERT_NOT_NULL(strstr(o, "UART rx_overrun=3 cmd_overflow=0\r\n"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "UART rx_overrun=3 cmd_overflow=0 cmd_dropped=0 rx_peak=120\r\n"));
   TEST_ASSERT_NOT_NULL(strstr(o, "EVTLOG pending=0 dropped=0\r\n"));
+}
+
+/* Прийом загубив байти (PLATFORM_UART_LOST, у fake — '\xFE'): зіпсований рядок не
+ * виконується зі зміненим змістом і не склеюється з наступним, а дає ERR; наступна
+ * ціла команда виконується. Випадки з журналу дефекту (20_uart_rx_loss.txt). */
+static void test_uart_rx_lost_drops_damaged_line(void)
+{
+  const char *o;
+
+  AppTasks_Init();
+  fake_platform.now_ms = 5U;
+
+  /* «PING 12» без «2»: не PONG seq=1 */
+  fake_platform.uart_rx  = "PING 1\xFE\rPING 13\r";
+  fake_platform.uart_pos = 0U;
+  o = capture_pass();
+  TEST_ASSERT_NULL(strstr(o, "PONG seq=1 "));
+  TEST_ASSERT_NOT_NULL(strstr(o, "ERR,cmd=dropped,reason=rx_lost\r\nPONG seq=13 "));
+
+  /* загублений '\r' між командами: не «unknown command 'MMARK 2'»; уламок відкинуто
+   * до найближчого кінця рядка, далі — нормально */
+  fake_platform.uart_rx  = "MARK 1\xFEMARK 2\rPING 5\r";
+  fake_platform.uart_pos = 0U;
+  o = capture_pass();
+  TEST_ASSERT_NULL(strstr(o, "unknown command"));
+  TEST_ASSERT_NULL(strstr(o, "name=mark_"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "ERR,cmd=dropped,reason=rx_lost\r\nPONG seq=5 "));
+
+  /* загублено початок рядка («P»): «ING 12» не стає командою; дві втрати поспіль — одна відповідь */
+  fake_platform.uart_rx  = "\xFE\xFEING 12\r\nPING 6\r";
+  fake_platform.uart_pos = 0U;
+  o = capture_pass();
+  TEST_ASSERT_NULL(strstr(o, "unknown command"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "ERR,cmd=dropped,reason=rx_lost\r\nPONG seq=6 "));
+
+  TEST_ASSERT_EQUAL_UINT32(3U, Cmd_Dropped());
+  o = capture_cmd("STATS");
+  TEST_ASSERT_NOT_NULL(strstr(o, " cmd_dropped=3 "));
+  Cmd_Reset();
+  TEST_ASSERT_EQUAL_UINT32(0U, Cmd_Dropped());
 }
 
 /* ЛР3 (K09): усі п'ять точок підключення заміщені сильними модулями sl_*.c (слабкі
@@ -796,7 +839,8 @@ static void test_uart_task_runs_lr2_commands(void)
   fake_platform.uart_pos = 0U;
   Sched_RunOnce();
   TEST_ASSERT_EQUAL_UINT(1U, (unsigned)fake_platform.uart_pos);   /* символ забрала uart-задача */
-  TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(6)->exec.count);
+  TEST_ASSERT_EQUAL_STRING("uart", Sched_Task(7)->name);
+  TEST_ASSERT_EQUAL_UINT32(1U, Sched_Task(7)->exec.count);
 }
 
 int main(void)
@@ -820,6 +864,7 @@ int main(void)
   RUN_TEST(test_isr_events_give_latency_evt_and_reach_fsm);
   RUN_TEST(test_evt_format_ring_and_drop);
   RUN_TEST(test_mark_uart_cmd_evt_and_uart_overrun);
+  RUN_TEST(test_uart_rx_lost_drops_damaged_line);
   RUN_TEST(test_mem_task_prints_stack_heap_only_on_new_maximum);
   RUN_TEST(test_perf_format_helpers);
   RUN_TEST(test_stats_prints_every_metric_line);
