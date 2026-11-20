@@ -526,7 +526,9 @@ static void test_line_commands(void)
   o = capture_cmd("MEM");
   TEST_ASSERT_EQUAL_STRING("STACK reserved=1024 used=0 free=1024\r\nHEAP arena=0 used=0 free=0\r\n", o);
   o = capture_cmd("HELP");
-  TEST_ASSERT_NOT_NULL(strstr(o, "STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | HELP"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | VER | HELP"));
+  o = capture_cmd("VER");   /* I10: рядок BUILD з git-хешем */
+  TEST_ASSERT_EQUAL_STRING("BUILD,fw=SmartLock,lab=LR3,git=" GIT_HASH ",cpu_hz=1000000,loop=superloop\r\n", o);
   o = capture_cmd("FOO");
   TEST_ASSERT_EQUAL_STRING("# unknown command 'FOO', HELP for list\r\n", o);
 }

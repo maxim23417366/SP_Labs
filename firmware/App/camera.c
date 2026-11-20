@@ -110,3 +110,12 @@ const camera_stats_t *Camera_Stats(void)
 {
     return &s_stats;
 }
+
+void Camera_PrintDiag(void)
+{
+    printf("DIAG name=camera accepted=%lu rejected=%lu stored=%lu capture_err=%lu store_err=%lu "
+           "pending=%u\r\n",
+           (unsigned long)s_stats.accepted, (unsigned long)s_stats.rejected,
+           (unsigned long)s_stats.stored, (unsigned long)s_stats.capture_err,
+           (unsigned long)s_stats.store_err, Camera_Pending() ? 1U : 0U);
+}

@@ -9,7 +9,9 @@
   *          каркас I02, яким він є до злиття гілок: навантаження на шини і
   *          проходження події від хука до «FSM» через чергу.
   */
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "unity.h"
 
@@ -87,10 +89,34 @@ static void test_weak_hooks_through_super_loop(void)
   TEST_ASSERT_EQUAL_UINT32(1U, fake_platform.dht_calls);     /* env (слабкий) читав DHT11 */
 }
 
+/* I10: без модулів sl_* STATS повідомляє «DIAG name=modules present=0» */
+static void test_weak_diag(void)
+{
+  static char buf[128];
+  FILE *tmp = tmpfile();
+  int saved;
+  size_t n;
+
+  TEST_ASSERT_NOT_NULL(tmp);
+  fflush(stdout);
+  saved = dup(1);
+  dup2(fileno(tmp), 1);
+  SmartLock_PrintDiag();
+  fflush(stdout);
+  dup2(saved, 1);
+  close(saved);
+  rewind(tmp);
+  n = fread(buf, 1U, sizeof(buf) - 1U, tmp);
+  buf[n] = '\0';
+  fclose(tmp);
+  TEST_ASSERT_EQUAL_STRING("DIAG name=modules present=0\r\n", buf);
+}
+
 int main(void)
 {
   UNITY_BEGIN();
   RUN_TEST(test_weak_hooks);
   RUN_TEST(test_weak_hooks_through_super_loop);
+  RUN_TEST(test_weak_diag);
   return UNITY_END();
 }

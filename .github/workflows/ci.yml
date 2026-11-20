@@ -20,6 +20,9 @@ jobs:
       - name: Firmware build (Docker, arm-none-eabi-gcc)
         run: make build
 
+      - name: Single firmware check - no RTOS, strong modules, git hash (I10)
+        run: make fw-check REQUIRE_GIT=1
+
       - name: Host tests (periph_check + Unity unit tests)
         run: make test
 

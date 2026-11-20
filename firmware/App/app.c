@@ -82,8 +82,9 @@ static void devices_self_test(void)
     (void)StandTest_Run();
 }
 
-/* Перший рядок UART-логу: яка саме збірка працює (методичка §5.2) */
-static void print_banner(void)
+/* Перший рядок UART-логу: яка саме збірка працює (методичка §5.2);
+ * I10: те саме — команда VER, якщо термінал відкрито вже після старту */
+void App_PrintBuild(void)
 {
     printf("BUILD,fw=SmartLock,lab=LR3,git=%s,cpu_hz=%lu,loop=superloop\r\n", GIT_HASH,
            (unsigned long)Platform_CpuHz());
@@ -92,7 +93,7 @@ static void print_banner(void)
 /* Запуск прикладної логіки */
 void App_Init(void)
 {
-    print_banner();
+    App_PrintBuild();
     Platform_BringUp();
     devices_init();
     devices_self_test();

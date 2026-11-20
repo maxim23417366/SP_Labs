@@ -197,7 +197,9 @@ sigrok-cli -d fx2lafw --config samplerate=1m -C D0,D1,D2,D3,D4 \
 
 Ідентифікатор збірки: кореневий `Makefile` обчислює `git rev-parse --short HEAD`
 (з `-dirty`, якщо є незакомічені зміни) і передає в `firmware.mk` як `GIT_HASH`;
-перший рядок UART-логу — `BUILD,...,git=<хеш>,...`. Без git — `git=nogit`.
+перший рядок UART-логу — `BUILD,...,git=<хеш>,...`. Без git — `git=nogit`. З I10 той самий
+рядок дає команда `VER`, а `make fw-check` перевіряє хеш у `firmware.elf`
+(`docs/lab_3/lab3-build.md` §4).
 
 Формати рядків — `docs/metrics-spec.md` §3.6 (M-07, M-08).
 

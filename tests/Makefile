@@ -47,11 +47,12 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 # ЛР3 (K02–K09): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
 # ЛР3 (I04): evt — подієві мітки EVT; (I07): cam_test — CAM TEST, fake_camera;
 # (I08): frame_export — експорт кадру на ПК; (I09): test_camera — з camera.c (див. нижче)
+# (I10): sl_diag — рядки DIAG у STATS; test_firmware — набір App/*.c прошивки (див. нижче)
 APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd evt cam_test frame_export \
              sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env storage storage_ops frames \
-             sl_camera_frames
+             sl_camera_frames sl_diag
 APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env storage frames cam_test \
-             sl_camera_frames sl_integration frame_export camera
+             sl_camera_frames sl_integration frame_export camera firmware
 APP_DBLS  := fake_platform fake_sensors fake_camera
 APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
@@ -151,6 +152,12 @@ $(UNITY_OBJ): $(UNITY)/unity.c $(UNITY)/unity.h $(UNITY)/unity_internals.h
 # в test_camera; решта тестів App/ лишається зі слабкою заглушкою з sl_camera_link.c,
 # на яку спираються тести K08 (test_sl_camera_frames, test_sl_integration)
 APP_OBJS_camera := $(APP_OBJS) $(BUILD)/app/camera.o
+
+# ЛР3 (I10): test_firmware лінкує РІВНО ті App/*.c, що й firmware.mk (wildcard), — єдина
+# прошивка на ПК. Новий модуль, якого немає в APP_SRCS, або два модулі з одним сильним
+# символом зламають лінкування тут, ще до ARM-збірки.
+FW_APP_SRCS := $(sort $(basename $(notdir $(wildcard $(FW_APP)/*.c))))
+APP_OBJS_firmware := $(FW_APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 
 # Тест sl_journal підставляє власний SmartLock_JournalOps() — без storage_ops.o
 APP_OBJS_sl_journal := $(filter-out $(BUILD)/app/storage_ops.o,$(APP_OBJS))

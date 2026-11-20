@@ -98,6 +98,8 @@ typedef struct
   unsigned     i2c_recover_calls;
 
   int          loop_traffic;      /* останній Platform_SetLoopTraffic() */
+  int          flash_model;       /* I10: Platform_FlashSpi() -> fake_w25q64 (модель W25Q64
+                                   * у RAM) замість mock_spi — повний старт App_Init() з Flash */
   unsigned     bringup_calls;
   unsigned     poll_calls;
 } fake_platform_t;

@@ -14,6 +14,7 @@
   *            SmartLock_EnvPoll        — K06 (Коваль): DHT11/BMP180, ENV_WARNING
   *            SmartLock_StoragePoll    — K07/H09: черга записів журналу W25Q64
   *            SmartLock_CameraPoll     — I09 (Непорожній): кадр охоронної події (camera.c)
+  *            SmartLock_PrintDiag      — I10 (Непорожній): лічильники модулів у STATS (sl_diag.c)
   *
   *          Правила для всіх: функція не чекає (без HAL_Delay і очікувань у
   *          циклі), повертає true, якщо виконала корисну роботу, і викликається
@@ -50,5 +51,10 @@ bool SmartLock_StoragePoll(uint32_t now_ms);
 
 /* I09: кожен прохід — запит кадру від FSM (захоплення + запис у W25Q64), якщо є */
 bool SmartLock_CameraPoll(uint32_t now_ms);
+
+/* I10: не задача, а частина STATS (stats.c) — рядки «DIAG name=<модуль> …» з
+ * лічильниками діагностики модулів sl_* і камери. Слабка версія (без модулів)
+ * друкує «DIAG name=modules present=0». */
+void SmartLock_PrintDiag(void);
 
 #endif /* SMARTLOCK_HOOKS_H */
