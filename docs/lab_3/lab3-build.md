@@ -162,6 +162,9 @@ Artifacts): `firmware.elf`, `.hex`, `.bin`, `.map`, `mem/*.txt` (`memory_usage.t
 
 ### 5.2 Сценарій перевірки (≈ 20 хв + 1 год без втручання)
 
+Це перевірка єдиної прошивки за сценарієм типу **S2** (номінальна робота + година
+циклу). Простій **S1** і найгірший випадок **S3** — §5.5, на тій самій збірці.
+
 | Крок | Дія | Очікувано в лозі |
 |---|---|---|
 | 1 | RESET | перший рядок `BUILD,…,git=<хеш>,cpu_hz=96000000,loop=superloop`; self-test ЛР2 (`ST,…`, `ST,SUMMARY,…`); `LOG,MOUNT,result=ok,…`; `CAM,init,status=ok,pid=0x76,ver=0x73,…`; `STACK …`, `HEAP …` |
@@ -202,6 +205,8 @@ DIAG name=camera accepted=1 rejected=0 stored=1 capture_err=0 store_err=0 pendin
 | `docs/lab_3/logs/I10_stand_<хеш>.txt` | термінал під час 5.2 |
 | `firmware/build/mem/*.txt` | `make mem-report` — для M04 |
 | PNG кадру | `tools/frame_decode.py` (крок 7) |
+| `docs/metrics/S1_uart_raw.txt`, `S2_…`, `S3_…` + умови | прогони S1–S3 (§5.5, `test-scenarios.md`) |
+| `docs/lab_3/logs/I11_host_checks_<хеш>.log` | артефакт CI `firmware-<хеш>` (`host-tests.md` §4) |
 
 Хеш у назвах файлів, у `BUILD` і в `lab3_….log` має бути один і той самий.
 
@@ -218,3 +223,49 @@ DIAG name=camera accepted=1 rejected=0 stored=1 capture_err=0 store_err=0 pendin
 | `LOG,MOUNT,err=…` | W25Q64: CS# = PB10, SPI2 PB13–15; без Flash журнал і кадри вимкнено (`flash=err`) |
 | `CAM,photo,…,status=capture_err` | камера — `docs/camera.md` §7 «Якщо не вийшло» |
 | `DIAG name=modules present=0` | зібрано без модулів `sl_*` (тестова збірка) — у прошивці так бути не може, `make fw-check` |
+
+### 5.5 Сценарії вимірювань S1–S3 на тій самій збірці
+
+Протоколи — `docs/lab_3/test-scenarios.md` (S1, S2, S3), визначення сценаріїв і
+стрес-сценаріїв §6.2 — `docs/metrics/metrics-spec.md` §4, формати рядків — там само §3.
+Тут лише те, що стосується **цієї** прошивки; протоколи не дублюються.
+
+**Спільне для S1, S2, S3:**
+
+1. Одна збірка: `make lab3` один раз, прошити, далі **не перезбирати** між прогонами.
+   Хеш — з першого рядка `BUILD,…,git=<хеш>` (або `VER`); він має бути однаковим у
+   всіх трьох логах і без `-dirty` / `nogit` (§4).
+2. Запис UART з першого байта. Порядок запуску, команди запису, куди класти файли і
+   реєстр прогонів — `docs/lab_3/bench-runs.md` (Колодницький, PR #40): там
+   `scripts/uart_capture.py` пише сирий `<name>_uart_raw.txt`, ts-файл і
+   `<name>_conditions.md` з хешем з `BUILD`. Поки PR #40 не злито — термінал із
+   записом у файл (§5.1, крок 3). Після цієї збірки в `bench-runs.md` змінюються
+   передумови «Єдина прошивка» і «PASS збірки, CI і host-тестів» (I10, I11).
+3. Що записати в умови прогону (`test-scenarios.md`, «Спільні умови»): git-хеш, дата,
+   тривалість, початковий стан FSM, 115200 8N1, порт, що підключено / відключено
+   (камера, Flash), час і вид кожної ручної дії, команди, що надсилались.
+4. Наприкінці — `STATS` (рядки `STAT`, `JITTER`, `CPU`, `EVQ`, `UART`, `DIAG`) і `MEM`.
+   `STATS` сам друкує ≈ 2,3 КБ ≈ 0,2 с (блокувальний `printf`) — у S1 надсилати лише
+   наприкінці.
+
+**S1 — простій** (`test-scenarios.md` §1): RESET → дочекатися `CAM,init`, `STACK` →
+`UNLOCKED`, двері закриті, нічого не торкатися 10 хв, жодних команд → `STATS`, `MEM`.
+Очікувано: немає `MOTION` / `TAMPER` / `CAM,photo`; `STAT name=camera n=0`,
+`STAT name=flash_frame n=0`; щосекунди `LOAD pct=…`, раз на 2 с `ENV,…`.
+
+**S3 — найгірший випадок** (`test-scenarios.md` §3): `LOCKED` (B1 → 15 с), далі
+одночасно:
+
+| Складова | Як отримати на цій прошивці |
+|---|---|
+| довга операція камера + Flash | подія в `LOCKED` (PIR / удар MPU-6050) → задача `camera`: захоплення ≈ 1,0–2,1 с + запис кадру у W25Q64 ≈ 0,83–0,86 с одним проходом (логи 21, 23); `CAM TEST` — лише захоплення; `CAM EXPORT` — ≈ 10,6 с передачі по UART (кадр тривоги в цей час відхиляється, `PHOTO_ERR arg=1`, лог 23) |
+| UART-навантаження | `scripts/uart_capture.py … --name S3 --plan S3 --load-rate 20 --load-profile mixed --char-gap 0 --retries 1` — запис і навантаження одним процесом, бо порт один (`docs/lab_3/bench-runs.md`, PR #40); без пауз — `--load-burst` (методичка §6.2.3). Профілі ті самі, що в `scripts/uart_load.py` (Собкович, `docs/metrics/uart-load-guide.md`) |
+| зовнішні події | 30 окремих PIR / B1 під час довгих операцій, моменти — PulseView: PA0 (PIR), PC13 (B1), PB1 (реакція), PB2 (захоплення), PB12 (запис кадру) (§5.2, `docs/superloop.md` §4) |
+
+Окремий термінал на той самий порт не потрібен (і не відкриється): усе пише `uart_capture.py`,
+підсумок навантаження (надіслано, `PONG`, фактичний темп) — у `S3_conditions.md`. Записати: параметри
+навантаження (`--load-rate`, `--load-profile`, `--load-burst`), підсумок `PING`/`PONG`,
+рядок `UART rx_overrun=… cmd_overflow=… cmd_dropped=… rx_peak=…`, усі `CAM,photo`
+(`capture_us`, `store_us`, `aec=`), `OVR name=pir|btn_b1|mpu`, `DIAG name=camlink|camera`,
+`.sr` PulseView з частотою дискретизації і каналами. Що з цього очікувано погіршиться
+на цій прошивці — `docs/lab_3/host-tests.md` §7.
