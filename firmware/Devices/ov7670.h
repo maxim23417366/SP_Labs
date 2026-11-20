@@ -35,6 +35,10 @@
 #define OV7670_REG_COM7       0x12U
 #define OV7670_COM7_RESET     0x80U   /* скидання всіх регістрів до заводських */
 #define OV7670_CLKRC_MASK     0x3FU   /* CLKRC[5:0]: f_int = XCLK / (CLKRC + 1) */
+#define OV7670_REG_COM8       0x13U   /* автоматика: AEC, AGC, AWB */
+#define OV7670_COM8_AUTO      0xE7U   /* FASTAEC|AECSTEP|BFILT|AGC|AWB|AEC */
+#define OV7670_REG_COM13      0x3DU   /* гамма, насиченість UV; біт 0 — порядок байтів */
+#define OV7670_REG_TSLB       0x3AU   /* біт 3 — порядок байтів (разом з COM13[0]) */
 
 /* Формат, який дає ov7670_qqvga_rgb565_table(): 160x120, RGB565, 2 байти/піксель */
 #define OV7670_QQVGA_WIDTH    160U
@@ -76,7 +80,15 @@ dev_status_t ov7670_write_reg(const ov7670_t *dev, uint8_t reg, uint8_t val);
 dev_status_t ov7670_configure(const ov7670_t *dev, const ov7670_reg_t *table, size_t count,
                               uint8_t clkrc, uint8_t *failed_reg);
 
-/* QQVGA 160x120 RGB565: VGA-вікно, зменшене DCW у 4 рази по X і Y. */
+/* QQVGA 160x120 RGB565: VGA-вікно, зменшене DCW у 4 рази по X і Y, і (ЛР3, виправлення
+ * пересвічення) автоматика AEC/AGC/AWB, гамма і кольорова матриця RGB. */
 const ov7670_reg_t *ov7670_qqvga_rgb565_table(size_t *count);
+
+/* RGB565 з датчика → «старший байт першим» (формат кадру в прошивці, у W25Q64 і в
+ * tools/frame_decode.py). З цією таблицею (TSLB і COM13[0] за замовчуванням) OV7670
+ * віддає молодший байт пікселя першим (GGGBBBBB, RRRRRGGG) — стенд, лог 23 ЛР3:
+ * без перестановки — «райдужні» смуги, з перестановкою — плавна сцена.
+ * Міняє місцями байти кожної пари; len — парна кількість байтів. */
+void ov7670_rgb565_swap_bytes(uint8_t *buf, size_t len);
 
 #endif /* OV7670_H */

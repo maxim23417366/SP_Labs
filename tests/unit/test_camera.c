@@ -217,7 +217,9 @@ static void test_alarm_frame_written_and_read_back_bytewise(void)
   TEST_ASSERT_EQUAL_MEMORY(frame, rd, CAMERA_FRAME_BYTES);
   for (uint32_t i = 0U; i < CAMERA_FRAME_BYTES; i += 997U)
   {
-    TEST_ASSERT_EQUAL_HEX8((uint8_t)i, rd[i]);               /* те, що «зняла камера» */
+    /* те, що «зняла камера» (байт i = i), з переставленими байтами пікселя:
+     * у Flash RGB565 — старший байт першим (CAMERA_RGB565_SWAP) */
+    TEST_ASSERT_EQUAL_HEX8((uint8_t)(i ^ 1U), rd[i]);
   }
 
   /* подія → кадр: запис PHOTO_SAVED у Flash посилається на seq події і frame_id */

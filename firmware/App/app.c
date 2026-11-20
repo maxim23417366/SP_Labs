@@ -15,6 +15,7 @@
 
 #include "app_config.h"
 #include "app_tasks.h"
+#include "cam_test.h"
 #include "frames.h"
 #include "bench.h"
 #include "platform.h"
@@ -98,6 +99,7 @@ void App_Init(void)
     Bench_Help();
     Storage_Init();    /* журнал W25Q64: монтування, BOOT, нумерація подій після рестарту */
     Frames_Init();     /* слоти кадрів W25Q64 */
+    CamTest_Init();    /* OV7670: таблиця + AEC/AWB сходяться, поки чекаємо першої тривоги */
     AppTasks_Init();   /* час, черга подій, таблиця задач (без виводу) */
     AppTasks_PrintMem();   /* I06: пам'ять після self-test (найглибші виклики старту) */
 }
