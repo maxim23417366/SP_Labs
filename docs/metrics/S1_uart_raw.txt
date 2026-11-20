@@ -1,0 +1,1047 @@
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98004
+LOAD pct=12
+LOAD pct=8
+BUILD,fw=SmartLock,lab=LR3,git=5774b8a,cpu_hz=96000000,loop=superloop
+
+=== SmartLÿBUILD,fw=SmartLock,lab=LR3,git=5774b8a,cpu_hz=96000000,loop=superloop
+
+=== SmartLock: peripheral check (LR1, step 6) ===
+[INIT ] I2C1 READY, SPI2 READY, TIM3 READY, USART2 READY -> OK
+[CLOCK] SYSCLK=96000000 HCLK=96000000 PCLK1=48000000 PCLK2=96000000 Hz -> OK
+[I2C1 ] scan 0x08..0x77:
+        0x1D  LSM303D accel/mag (GY-89)
+        0x21  OV7670 camera (SCCB)
+        0x68  MPU-6050
+        0x6B  L3GD20 gyro (GY-89)
+        0x77  BMP180 baro (GY-89)
+        5 device(s) found -> OK
+[SPI2 ] W25Q64 JEDEC ID: EF 40 17 (Winbond, 64 Mbit) -> OK
+[TIM3 ] PWM CH1 (PA6): 50 Hz, pulse 1500 us -> OK
+=== RESULT: ALL OK ===
+
+# SmartLock selftest v2 (LR2)
+I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+ST,START
+ST,UART,OK,baud=115200
+ST,MPU6050,WARN,who=0x68,a_g=1.096,ax_g=0.143,ay_g=0.004,az_g=1.087,gyro_max_dps=12.1,t_c=26.7
+ST,BMP180,OK,id=0x55,t_c=24.0,p_hpa=980.04
+ST,L3GD20,OK,addr=0x6B,who=0xD4
+ST,LSM303D,WARN,addr=0x1D,who=0x49,role=FR06_accel,raw=7FF8,7FF8,4544,a_g=3.025,ax_g=1.998,ay_g=1.998,az_g=1.081
+ST,W25Q64,OK,jedec=EF4017,size_mbit=64
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
+ST,DHT11,OK,t_c=25.3,rh=39.8,raw=270819034B,crc=OK
+ST,SERVO_PWM,OK,freq_hz=50,pulse_us=1500,note=no_feedback
+ST,GPIO,OK,btn=1111,lock_b1=1,door=0,pir=0,mpu_int=0
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+# commands: s selftest | i i2c scan | g gpio watch on/off | m accel x10 (LSM303D, FR-06) | b bmp180
+#           h dht11 x5 | j jedec | f flash r/w | 1/2/3 servo 1000/1500/2000us
+#           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help
+#           w flash persist write | v flash persist verify | t sensor read timing
+#           d journal dump | e journal +100 test events | z corrupt newest record | LOG ERASE erase journal
+#           p frame write 38400 B (+journal) | o frame verify last
+LOG,MOUNT,result=mounted,valid=255,damaged=1,next_seq=256,boot=43,head=256,us=251167
+LOG,seq=256,boot=43,t_ms=1720,type=BOOT,arg=91704202,arg2=0,frame=none,crc=ok
+FRM,MOUNT,frames=26,next_id=27,us=18523
+CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
+STACK reserved=4096 used=720 free=3376
+HEAP arena=1468 used=1468 free=0
+EVT,id=257,t_ms=1946,name=DOOR_CLOSED,arg=0,flash=ok
+EVT t_us=121648 name=fsm_door_closed
+LOAD pct=9
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=97998
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+EVT t_us=11349602 name=pir_trig
+EVT t_us=11360063 name=pir_handled
+EVT t_us=11368388 name=fsm_motion
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98006
+LOAD pct=13
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+EVT t_us=15375052 name=pir_trig
+EVT t_us=15380065 name=pir_handled
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98015
+LOAD pct=13
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=97998
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.5,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+EVT t_us=94026710 name=pir_trig
+EVT t_us=94043713 name=pir_handled
+LOAD pct=13
+EVT t_us=94052045 name=fsm_motion
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97995
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97998
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98001
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=97995
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97998
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97989
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=40,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97997
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97995
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97997
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=97997
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=97997
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=97995
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=97997
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=97997
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98000
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98006
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98029
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98026
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98029
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98035
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.4,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98029
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=39,bmp=ok,p_pa=98023
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98029
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98029
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98003
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.3,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98018
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.0,rh=40,bmp=ok,p_pa=98009
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.2,rh=40,bmp=ok,p_pa=98012
+LOAD pct=12
+LOAD pct=8
+ENV,dht=ok,t_c=25.1,rh=40,bmp=ok,p_pa=98015
+LOAD pct=12
+STATS_BEGIN git=5774b8a t_us=626685476 loops=27040785
+STAT name=loop n=27040785 min_us=16 avg_us=19 max_us=43655
+CPU name=cpu_load windows=626 min_pm=81 avg_pm=100 max_pm=131
+STAT name=fsm n=4 min_us=6 avg_us=10 max_us=12
+POLL name=fsm polls=27040786 runs=4
+STAT name=buttons n=61703 min_us=7 avg_us=11 max_us=11
+JITTER name=buttons period_us=10000 min_us=-4038 max_us=42655 missed=313
+JHIST name=buttons n=61702 h_lt100us=59467 h_lt1ms=415 h_lt10ms=1507 h_lt100ms=313 h_ge100ms=0
+STAT name=security n=31002 min_us=1569 avg_us=1570 max_us=1583
+JITTER name=security period_us=20000 min_us=-4063 max_us=41650 missed=313
+JHIST name=security n=31001 h_lt100us=29988 h_lt1ms=384 h_lt10ms=316 h_lt100ms=313 h_ge100ms=0
+STAT name=env n=313 min_us=40940 avg_us=41847 max_us=41932
+JITTER name=env period_us=2000000 min_us=-1601 max_us=1721 missed=0
+JHIST name=env n=312 h_lt100us=167 h_lt1ms=111 h_lt10ms=34 h_lt100ms=0 h_ge100ms=0
+STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
+POLL name=camera polls=27040786 runs=0
+STAT name=storage n=1 min_us=7328 avg_us=7328 max_us=7328
+POLL name=storage polls=27040786 runs=1
+STAT name=mem n=626 min_us=109 avg_us=109 max_us=109
+JITTER name=mem period_us=1000000 min_us=-43525 max_us=43529 missed=0
+JHIST name=mem n=625 h_lt100us=41 h_lt1ms=0 h_lt10ms=95 h_lt100ms=489 h_ge100ms=0
+STAT name=uart n=637 min_us=4 avg_us=1240 max_us=6736
+POLL name=uart polls=27040785 runs=637
+STAT name=btn_b1_lat n=0 min_us=0 avg_us=0 max_us=0
+OVR name=btn_b1 count=0
+STAT name=pir_lat n=3 min_us=5005 avg_us=10818 max_us=16996
+OVR name=pir count=0
+STAT name=mpu_lat n=0 min_us=0 avg_us=0 max_us=0
+OVR name=mpu count=0
+STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
+STAT name=flash_frame n=0 min_us=0 avg_us=0 max_us=0
+STAT name=evq_wait n=3 min_us=1583 avg_us=6071 max_us=8319
+EVQ len=8 pending=0 max_depth=1 posted=3 dropped=0
+UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
+EVTLOG pending=1 dropped=0
+DIAG name=fsm state=UNLOCKED ignored=2 cam_rejected=0
+DIAG name=buttons dropped=0
+DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
+DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
+DIAG name=journal pending=0 max_depth=1 stored=1 unsaved=0 dropped=0 last_seq=257
+DIAG name=camlink requested=0 rejected=0 ok=0 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
+DIAG name=camera accepted=0 rejected=0 stored=0 capture_err=0 store_err=0 pending=0
+STACK reserved=4096 used=760 free=3336
+HEAP arena=1468 used=1468 free=0
+STATS_END
+EVT t_us=626685469 name=uart_cmd_rx
+EVT t_us=626929900 name=uart_cmd_tx
+LOAD pct=32
+STACK reserved=4096 used=760 free=3336
+HEAP arena=1468 used=1468 free=0
+EVT t
