@@ -1,0 +1,88 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-20.
+# Прошивка: main 1c2da0a (злиті PR #42 — прийом UART через DMA, і PR #43 — кадр охоронної події у W25Q64),
+# у банері git=1c2da0a. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make build і make test — PASS,
+# firmware.bin sha256 bee32e9bb8d4d058d1fa9c14b9c2b8991fc3e50af3d509dae8cf67e8f9c6c4ef.
+# Остаточна перевірка камери OV7670 і запису кадру у W25Q64 (FR-07, FR-08) за docs/camera.md п. 7.
+# Код камери в PR #43 збігається з PR #38, тому сигнали PCLK/D0 і час PB2/PB12 з аналізатором — у лозі 21.
+# Рядки LOAD, ENV, FRM і службові EVT пропущено.
+#
+# --- 1. Self-test і SCCB ---
+BUILD,fw=SmartLock,lab=LR3,git=1c2da0a,cpu_hz=96000000,loop=superloop
+ST,W25Q64,OK,jedec=EF4017,size_mbit=64
+ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=513
+ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+# vsync_hz одразу після скидання МК (камера ще з попередніми регістрами) — 513–515; після ініціалізації
+# камери (CAM TEST, CLKRC=0x0F) команда c стабільно дає vsync_hz=1 (3 з 3).
+#
+# --- 2. CAM TEST: 20 знімків двома серіями по 10 ---
+# серія 1 (одразу після скидання): 9/10 status=ok, 1 × status=href_timeout,bytes=0,lines=0 (другий знімок)
+# серія 2: 10/10 status=ok,bytes=38400,lines=120,short=0,vglitch=0, capture_us 1401448–1607017
+STAT name=camera n=9 min_us=1040427 avg_us=1307998 max_us=1518057
+UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=3
+STACK reserved=1024 used=920 free=104
+#
+# --- 3. Передача на ПК ---
+CAM,pattern,bytes=38400,crc=0xF671E5B8
+frame_decode: test pattern matches byte for byte
+frame_decode: OK
+# Час експорту: export_start_0 t_us=74533679 → export_done_0 t_us=85109951 = 10,58 с.
+#
+# --- 4. Кадри тривоги (B1 → LOCKED → PIR / TAMPER) і подія під час CAM EXPORT ---
+CAM,photo,event=209,status=ok,cap=ok,capture_us=1837382,store_us=854003
+EVT,id=210,t_ms=501441,name=PHOTO,arg=19,ref=209,flash=ok
+CAM,photo,event=211,status=ok,cap=ok,capture_us=1189279,store_us=856047
+EVT,id=211,t_ms=503658,name=TAMPER,arg=13,flash=ok
+EVT,id=212,t_ms=505619,name=PHOTO,arg=20,ref=211,flash=ok
+#> CAM EXPORT
+EVT t_us=517435199 name=export_start_211
+EVT,id=213,t_ms=518396,name=MOTION,arg=0,flash=ok
+EVT,id=214,t_ms=518396,name=PHOTO_ERR,arg=1,ref=213,flash=ok
+EVT t_us=528095437 name=export_done_211
+CAM,photo,event=215,status=ok,cap=ok,capture_us=1057052,store_us=857344
+EVT,id=215,t_ms=533530,name=MOTION,arg=0,flash=ok
+EVT,id=216,t_ms=535361,name=PHOTO,arg=21,ref=215,flash=ok
+#> CAM EXPORT
+EVT t_us=547396920 name=export_start_215
+EVT,id=217,t_ms=548304,name=MOTION,arg=0,flash=ok
+EVT,id=218,t_ms=548304,name=PHOTO_ERR,arg=1,ref=217,flash=ok
+EVT t_us=558050024 name=export_done_215
+# далі ще 5 кадрів MOTION (кадри 22–26), усі status=ok.
+# Разом 8 кадрів (7 MOTION, 1 TAMPER): capture_us 1057052–1999290, store_us 847785–857344.
+# Рух під час CAM EXPORT: 2 з 2 — MOTION записано, кадр відхилено (PHOTO_ERR arg=1 = REJECTED);
+# наступна подія після експорту знову дає кадр.
+#
+# --- 5. Після повного вимкнення живлення (USB від'єднано) ---
+CAM,load,frame=21,status=ok,event=215,w=160,h=120,len=38400,crc=0xAA6DA2AF
+FRAME_BEGIN id=215 seq=0 w=160 h=120 fmt=RGB565 len=38400 crc32=AA6DA2AF chunk=32
+frame_decode: OK
+CAM,load,frame=20,status=ok,event=211,w=160,h=120,len=38400,crc=0x8AC60912
+FRAME_BEGIN id=211 seq=0 w=160 h=120 fmt=RGB565 len=38400 crc32=8AC60912 chunk=32
+frame_decode: OK
+# Кадри 21 і 20 з W25Q64 побайтно збігаються з тими, що експортовані до вимкнення (cmp).
+# Журнал (команда d):
+LOG,seq=211,boot=30,t_ms=503658,type=TAMPER,arg=13,arg2=0,frame=none,crc=ok
+LOG,seq=212,boot=30,t_ms=505619,type=PHOTO_SAVED,arg=211,arg2=0,frame=20,crc=ok
+LOG,seq=213,boot=30,t_ms=518396,type=MOTION,arg=0,arg2=0,frame=none,crc=ok
+LOG,seq=214,boot=30,t_ms=518396,type=PHOTO_FAILED,arg=213,arg2=1,frame=none,crc=ok
+LOG,seq=215,boot=30,t_ms=533530,type=MOTION,arg=0,arg2=0,frame=none,crc=ok
+LOG,seq=216,boot=30,t_ms=535361,type=PHOTO_SAVED,arg=215,arg2=0,frame=21,crc=ok
+LOG,SUMMARY,valid=234,damaged=1,empty=1685,first_seq=1,last_seq=234,order=ok,boot=33
+# damaged=1 — запис, навмисно зіпсований командою z під час перевірки журналу (лог 18).
+#
+# --- 6. Зображення ---
+# img/camera_main_frame21_motion215_decoded.png  — як декодує tools/frame_decode.py: «райдужні» смуги кольору
+# img/camera_main_frame21_motion215_byteswap.png — ті самі байти з переставленим порядком у пікселі:
+#                                                  видно руку перед камерою, сильно пересвічено
+# img/camera_main_frame20_tamper211_byteswap.png — майже суцільно білий, сцену не розібрати
+#
+# --- 7. Пам'ять ---
+# arm-none-eabi-size: text=65212 data=232 bss=49776 → RAM 50 008 Б з 131 072 (38,2 %); буфер кадру 38 400 Б.
+# Стек: reserved=1024, used=920, free=104 — запас 10 %.
+#
+# --- Висновок ---
+# FR-08: кадр і зв'язок з ID події (PHOTO_SAVED / PHOTO_FAILED) зберігаються у W25Q64 і читаються після
+#        вимкнення живлення побайтно — PASS.
+# FR-07: окремий реальний кадр для MOTION і TAMPER захоплюється, зберігається й експортується — з обмеженням:
+#        сцену видно лише після перестановки байтів пікселя, кадр пересвічений (кадр TAMPER — до білого).
+#        Причини — порядок байтів у захопленні/декодері і відсутність AEC/AGC/AWB у таблиці ініціалізації OV7670.
+# Окремо: 1 з 20 знімків (одразу після скидання МК) — href_timeout.
