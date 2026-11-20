@@ -46,12 +46,12 @@ DRV_BINS  := $(DRIVERS:%=$(BUILD)/test_%)
 # усіма драйверами і fake_platform (імітація platform.h)
 # ЛР3 (K02–K09): модулі sl_* і їхні тести; кожен власник картки редагує лише свої файли
 # ЛР3 (I04): evt — подієві мітки EVT; (I07): cam_test — CAM TEST, fake_camera;
-# (I08): frame_export — експорт кадру на ПК
+# (I08): frame_export — експорт кадру на ПК; (I09): test_camera — з camera.c (див. нижче)
 APP_SRCS  := app bench self_test stand_test perf sched app_tasks smartlock_hooks_weak event_queue stats cmd evt cam_test frame_export \
              sl_journal sl_camera_link sl_fsm sl_buttons sl_security sl_env storage storage_ops frames \
              sl_camera_frames
 APP_TESTS := stand_test app sched fakes_lr3 sl_journal sl_fsm sl_buttons sl_security sl_env storage frames cam_test \
-             sl_camera_frames sl_integration frame_export
+             sl_camera_frames sl_integration frame_export camera
 APP_DBLS  := fake_platform fake_sensors fake_camera
 APP_OBJS  := $(APP_SRCS:%=$(BUILD)/app/%.o) $(APP_DBLS:%=$(BUILD)/doubles/%.o)
 APP_BINS  := $(APP_TESTS:%=$(BUILD)/test_%)
@@ -147,6 +147,11 @@ $(UNITY_OBJ): $(UNITY)/unity.c $(UNITY)/unity.h $(UNITY)/unity_internals.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS_VENDOR) -c $< -o $@
 
+# ЛР3 (I09): модуль камери camera.c (сильна SmartLock_CameraRequest) лінкується лише
+# в test_camera; решта тестів App/ лишається зі слабкою заглушкою з sl_camera_link.c,
+# на яку спираються тести K08 (test_sl_camera_frames, test_sl_integration)
+APP_OBJS_camera := $(APP_OBJS) $(BUILD)/app/camera.o
+
 # Тест sl_journal підставляє власний SmartLock_JournalOps() — без storage_ops.o
 APP_OBJS_sl_journal := $(filter-out $(BUILD)/app/storage_ops.o,$(APP_OBJS))
 
@@ -182,7 +187,7 @@ coverage:
 	    exit !ok }'
 	@echo
 	@echo "======== coverage: firmware/App (gcov, line threshold $(COV_MIN_APP)%)"
-	@gcov -n -b -o $(BUILD)/app $(APP_SRCS:%=$(FW_APP)/%.c) | awk -v min=$(COV_MIN_APP) ' \
+	@gcov -n -b -o $(BUILD)/app $(APP_SRCS:%=$(FW_APP)/%.c) $(FW_APP)/camera.c | awk -v min=$(COV_MIN_APP) ' \
 	  /^File / { if (keep && got_l && !got_b) printf "\n"; f = $$2; gsub(/\047/, "", f); sub(/.*\//, "", f); \
 	    keep = ($$2 ~ /App\/[^\/]*\.c\047$$/); got_l = 0; got_b = 0; next } \
 	  keep && !got_l && /^Lines executed:/ { p = substr($$2, 10) + 0; n = $$4; got_l = 1; \

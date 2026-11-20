@@ -148,7 +148,7 @@ static void test_app_init_brings_up_and_runs_selftest(void)
   o += sizeof(banner) - 1U;
   /* ЛР3: після App_Init() таблиця задач Super Loop запущена */
   TEST_ASSERT_TRUE(Sched_Started());
-  TEST_ASSERT_EQUAL_INT(7, Sched_Count());
+  TEST_ASSERT_EQUAL_INT(8, Sched_Count());   /* I09: + camera */
   /* ЛР3 (I06): останні рядки старту — фактична пам'ять (docs/metrics-spec.md §3.6) */
   TEST_ASSERT_NOT_NULL(strstr(o, "STACK reserved=1024 used=712 free=312\r\n"
                                  "HEAP arena=1460 used=1300 free=160\r\n"));

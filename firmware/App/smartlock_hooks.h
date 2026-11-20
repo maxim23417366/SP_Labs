@@ -13,6 +13,7 @@
   *            SmartLock_SecurityPoll   — K05 (Коваль): PIR, MPU-6050, геркон
   *            SmartLock_EnvPoll        — K06 (Коваль): DHT11/BMP180, ENV_WARNING
   *            SmartLock_StoragePoll    — K07/H09: черга записів журналу W25Q64
+  *            SmartLock_CameraPoll     — I09 (Непорожній): кадр охоронної події (camera.c)
   *
   *          Правила для всіх: функція не чекає (без HAL_Delay і очікувань у
   *          циклі), повертає true, якщо виконала корисну роботу, і викликається
@@ -46,5 +47,8 @@ bool SmartLock_EnvPoll(uint32_t now_ms);
 
 /* Кожен прохід: одна порція роботи з чергою журналу */
 bool SmartLock_StoragePoll(uint32_t now_ms);
+
+/* I09: кожен прохід — запит кадру від FSM (захоплення + запис у W25Q64), якщо є */
+bool SmartLock_CameraPoll(uint32_t now_ms);
 
 #endif /* SMARTLOCK_HOOKS_H */

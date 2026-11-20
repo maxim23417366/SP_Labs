@@ -107,3 +107,10 @@ __attribute__((weak)) bool SmartLock_StoragePoll(uint32_t now_ms)
     (void)now_ms;
     return false;
 }
+
+/* I09: без модуля камери (camera.c) задача camera нічого не робить */
+__attribute__((weak)) bool SmartLock_CameraPoll(uint32_t now_ms)
+{
+    (void)now_ms;
+    return false;
+}
