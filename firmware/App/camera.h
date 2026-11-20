@@ -50,4 +50,9 @@ bool Camera_Pending(void);
 const camera_stats_t *Camera_Stats(void);
 void                  Camera_Init(void);
 
+/* I10: рядок STATS «DIAG name=camera accepted= rejected= stored= capture_err=
+ * store_err= pending=». Викликає sl_diag.c; там же слабка версія на випадок
+ * збірки без camera.c («DIAG name=camera present=0»). */
+void Camera_PrintDiag(void);
+
 #endif /* CAMERA_H */

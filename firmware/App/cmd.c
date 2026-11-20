@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app.h"
 #include "app_config.h"
 #include "app_tasks.h"
 #include "cam_test.h"
@@ -59,10 +60,11 @@ uint32_t Cmd_Dropped(void)
 
 static void help(void)
 {
-    printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | HELP\r\n");
+    printf("# LR3: STATS [RAW|RESET] | MEM | PING <n> | MARK <n> | VER | HELP\r\n");
     printf("#      LOG ERASE (journal W25Q64)\r\n");
     printf("#      CAM TEST (OV7670: init + 1 frame QQVGA RGB565) | CAM REG <hex> [<hex>]\r\n");
     printf("#      CAM PATTERN (test frame) | CAM EXPORT (last frame -> PC, tools/frame_decode.py)\r\n");
+    printf("#      CAM LOAD <frame_id> (frame from W25Q64 -> buffer, then CAM EXPORT)\r\n");
 }
 
 void Cmd_Execute(const char *line)
@@ -96,6 +98,10 @@ void Cmd_Execute(const char *line)
     else if (strncmp(line, "MARK ", 5U) == 0)
     {
         Evt_LogArg("mark", (uint32_t)strtoul(&line[5], NULL, 10));
+    }
+    else if (strcmp(line, "VER") == 0)
+    {
+        App_PrintBuild();   /* I10: git-хеш збірки, що зараз у платі */
     }
     else if (strcmp(line, "HELP") == 0)
     {

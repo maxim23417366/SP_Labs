@@ -18,6 +18,7 @@
 #include "perf.h"
 #include "platform.h"
 #include "sched.h"
+#include "smartlock_hooks.h"
 
 static void print_stat(const perf_stat_t *s, bool raw)
 {
@@ -92,6 +93,7 @@ void Stats_Print(bool raw)
            (unsigned long)Platform_UartOverruns(), (unsigned long)Cmd_LineOverflows(),
            (unsigned long)Cmd_Dropped(), (unsigned long)Platform_UartRxPeak());
     printf("EVTLOG pending=%u dropped=%lu\r\n", Evt_Pending(), (unsigned long)Evt_Dropped());
+    SmartLock_PrintDiag();   /* I10: лічильники модулів sl_* і камери (sl_diag.c) */
     AppTasks_PrintMem();
     printf("STATS_END\r\n");
 }

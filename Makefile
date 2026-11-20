@@ -11,6 +11,9 @@
 #   make coverage — unit-тести + покриття шару драйверів (gcov), поріг COV_MIN
 #   make check-deps — правила залежностей між шарами (scripts/check_deps.sh)
 #   make mem-report — ЛР3: звіти пам'яті firmware/build/mem/ (size, nm, .su)
+#   make fw-check — ЛР3 (I10): єдина прошивка — без RTOS, усі модулі, git-хеш у .elf
+#   make lab3     — ЛР3 (I10): усе разом, як CI (docs/lab_3/lab3-build.md)
+#   make host-checks — ЛР3 (I11): усі перевірки без плати + лог tests/build/I11_host_checks.log
 #   make image    — (пере)зібрати Docker-образ з docker/Dockerfile
 #
 # Налаштування під конкретний комп'ютер (шлях до прошивальника, COM-порт)
@@ -54,7 +57,9 @@ GIT_HASH  ?= $(if $(GIT_REV),$(GIT_REV)$(if $(GIT_DIRTY),-dirty),nogit)
 DOCKER_RUN = docker run --rm $(DOCKER_USER) -v "$(CURDIR):/workspace" -w /workspace $(IMAGE)
 
 .DEFAULT_GOAL := build
-.PHONY: build clean test coverage check-deps flash monitor image help mem-report tools-test
+.PHONY: build clean test coverage check-deps flash monitor image help mem-report tools-test \
+        fw-check lab3 version host-checks
+REQUIRE_GIT ?= 0
 
 # Образ збирається з кешу за секунду, тому build завжди спирається на актуальний Dockerfile
 image:
@@ -86,6 +91,25 @@ tools-test: image
 check-deps: image
 	$(DOCKER_RUN) sh -c "tr -d '\r' < scripts/check_deps.sh | sh"
 
+# ЛР3 (I10): зібрана прошивка — одна, без RTOS, з усіма модулями і цим git-хешем.
+# REQUIRE_GIT=1 (CI) — збірка без git (nogit) є помилкою
+fw-check: build
+	$(DOCKER_RUN) sh -c "tr -d '\r' < scripts/check_firmware.sh | GIT_HASH=$(GIT_HASH) REQUIRE_GIT=$(REQUIRE_GIT) sh"
+
+# Який хеш отримає прошивка, якщо зібрати зараз
+version:
+	@echo GIT_HASH=$(GIT_HASH)
+
+# ЛР3 (I10): повна перевірка єдиної прошивки — ті самі кроки, що в CI
+lab3: check-deps fw-check mem-report host-checks
+	@echo "LAB3: PASS git=$(GIT_HASH) — check-deps, build, fw-check, mem-report, host-checks (test, coverage, tools, python)"
+
+# ЛР3 (I11): усі перевірки без плати одним запуском — check-deps, periph_check, усі
+# Unity-набори з покриттям, self_test, tools (кадр → PNG), Python-тести scripts/ і tools/.
+# Повний вивід і підсумок — tests/build/I11_host_checks.log (docs/lab_3/host-tests.md)
+host-checks: image
+	$(DOCKER_RUN) python3 scripts/host_checks.py --git $(GIT_HASH) --out tests/build/I11_host_checks.log
+
 flash: build
 	$(FLASH_CMD)
 
@@ -100,6 +124,10 @@ help:
 	@echo make tools-test - frame export: C -> UART log -> tools/frame_decode.py -> PNG
 	@echo make check-deps - check include rules between firmware layers
 	@echo make mem-report - LR3 memory reports in firmware/build/mem
+	@echo make fw-check - LR3 single firmware: no RTOS, all modules strong, git hash in .elf
+	@echo make lab3    - LR3 full check: check-deps build fw-check mem-report host-checks
+	@echo make host-checks - LR3 all checks without board + tests/build/I11_host_checks.log
+	@echo make version - print GIT_HASH that the next build will embed
 	@echo make flash   - build and flash the board via ST-Link
 	@echo make monitor - open UART terminal, PORT=$(PORT) BAUD=$(BAUD)
 	@echo make image   - rebuild Docker image

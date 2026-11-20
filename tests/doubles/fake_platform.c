@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "fake_i2c.h"
+#include "fake_w25q64.h"
 #include "mock_spi.h"
 #include "platform.h"
 
@@ -31,7 +32,7 @@ const dev_i2c_bus_t *Platform_SensorI2c(void)
 
 const dev_spi_bus_t *Platform_FlashSpi(void)
 {
-  return mock_spi_bus();
+  return (fake_platform.flash_model != 0) ? fake_w25q64_bus() : mock_spi_bus();
 }
 
 void Platform_DelayMs(uint32_t ms)

@@ -205,7 +205,7 @@ FSM (LOCKED, MOTION / TAMPER) ── запис у журнал (ID = seq) ─�
     write_frame (H10): заголовок кадру event_seq = id
     → SmartLock_OnCameraResult → журнал PHOTO {arg = frame_id, ref = id}  (у Flash PHOTO_SAVED)
   або SmartLock_OnCameraResult(id, 0, SL_CAM_ERR_CAPTURE) → PHOTO_ERR {arg = 2, ref = id}
-CAM,photo,event=<id>,status=ok|capture_err|store_err,cap=<статус>,capture_us=..,store_us=..
+CAM,photo,event=<id>,status=ok|capture_err|store_err,cap=<статус>,capture_us=..,store_us=..,aec=ok|settling
 ```
 
 - **Рівно один результат на запит:** `PHOTO` або `PHOTO_ERR` з `ref` = ID події. Модуль камери
