@@ -828,7 +828,8 @@ static void test_late_key_after_real_pause_starts_new_entry(void)
   expect_no_events();
 }
 
-/* Два різні натискання, що перетинаються в часі, — акорд, обидва відкидаються */
+/* Дві різні кнопки натиснуто майже одночасно (ближче за антидребезг) — акорд,
+ * обидва відкидаються, як в опитуванні */
 static void test_late_keys_overlapping_chord_is_ignored(void)
 {
   uint32_t t0;
@@ -836,10 +837,27 @@ static void test_late_keys_overlapping_chord_is_ignored(void)
   start_idle();
   t0 = g_now;
   fake_platform_key(1U, t0 + 100U, t0 + 300U);
-  fake_platform_key(2U, t0 + 150U, t0 + 320U);
+  fake_platform_key(2U, t0 + 100U + TBD_BTN_DEBOUNCE_MS - 1U, t0 + 320U);
   (void)poll_at(t0 + 2000U, false);
   TEST_ASSERT_EQUAL_UINT(0U, SmartLock_ButtonsCodeProgress());
   TEST_ASSERT_EQUAL_UINT32(0U, SmartLock_ButtonsLate());
+}
+
+/* Натискання «внахлест» (наступну кнопку натиснули до відпускання попередньої) —
+ * не акорд: швидке введення коду під час зйомки не має губитися */
+static void test_late_keys_rolling_presses_are_sequential(void)
+{
+  uint32_t t0;
+
+  start_idle();
+  t0 = g_now;
+  for (unsigned i = 0U; i < TBD_CODE_LEN; i++)
+  {
+    fake_platform_key(KEY(k_code[i]), t0 + 100U + 150U * i, t0 + 300U + 150U * i);
+  }
+  (void)poll_at(t0 + 3000U, false);
+  expect_event(SL_EV_CODE_OK, TBD_CODE_LEN);
+  TEST_ASSERT_EQUAL_UINT32(TBD_CODE_LEN, SmartLock_ButtonsLate());
 }
 
 /* Пізнє натискання теж дає пару code_key_press → code_key_handled (метрика I04):
@@ -953,6 +971,7 @@ int main(void)
   RUN_TEST(test_late_keys_timeout_uses_press_times_not_processing_time);
   RUN_TEST(test_late_key_after_real_pause_starts_new_entry);
   RUN_TEST(test_late_keys_overlapping_chord_is_ignored);
+  RUN_TEST(test_late_keys_rolling_presses_are_sequential);
   RUN_TEST(test_late_key_logs_evt_pair_with_press_time);
   RUN_TEST(test_late_keys_with_frozen_millis_are_sequential_not_chord);
   RUN_TEST(test_late_key_long_by_cycles_short_by_millis_is_kept);

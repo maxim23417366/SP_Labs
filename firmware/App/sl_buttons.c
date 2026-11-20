@@ -58,7 +58,7 @@ static struct
     /* issue #51: коли опитування востаннє прийняло натискання кнопки коду — щоб
      * завершене натискання з EXTI-черги не порахувати вдруге */
     bool     poll_seen[BTN_CODE_COUNT];
-    uint32_t poll_ms[BTN_CODE_COUNT];
+    uint32_t poll_cyc[BTN_CODE_COUNT];   /* такт DWT (Platform_Cycles) прийняття */
     uint32_t late;                  /* натискань, які додала EXTI-черга */
 } s_b;
 
@@ -84,7 +84,7 @@ void SmartLock_ButtonsInit(void)
     for (i = 0U; i < BTN_CODE_COUNT; i++)
     {
         s_b.poll_seen[i] = false;
-        s_b.poll_ms[i] = 0U;
+        s_b.poll_cyc[i] = 0U;
     }
     s_b.late = 0U;
 }
@@ -206,11 +206,17 @@ static void add_symbol(uint8_t symbol, uint32_t now_ms)
  * натискання і відпускання (Platform_TakeKey). Тут кожне таке натискання:
  *   - відкидається як повтор, якщо опитування прийняло натискання тієї ж кнопки
  *     між його натисканням і відпусканням (звичайний випадок — цикл не стояв);
- *   - відкидається разом із сусіднім, якщо їхні інтервали перетинаються, а кнопки
- *     різні — акорд, як і в опитуванні;
+ *     EVT code_key_dup;
+ *   - відкидається разом із сусіднім, якщо дві різні кнопки натиснуто майже
+ *     одночасно (ближче за TBD_BTN_DEBOUNCE_MS) — акорд, як і в опитуванні, де
+ *     акорд — це два натискання, прийняті в одному проході; EVT code_key_chord.
+ *     Натискання «внахлест» (наступна кнопка до відпускання попередньої) — не
+ *     акорд: опитування теж приймає їх по черзі;
  *   - інакше стає символом коду з часом t_down + TBD_BTN_DEBOUNCE_MS (так само,
  *     як прийняло б опитування). Тайм-аут між символами рахується від цих часів,
- *     а не від моменту, коли цикл звільнився. */
+ *     а не від моменту, коли цикл звільнився.
+ * Повтор і акорд перевіряються тактами DWT: під час читання кадру SysTick
+ * замаскований, мілісекунди майже стоять, і різні натискання мали б однакові мітки. */
 
 /* a - b у мілісекундах зі знаком (різниця uint32 стійка до переповнення) */
 static int32_t ms_diff(uint32_t a, uint32_t b)
@@ -222,16 +228,16 @@ static bool polled_within(const platform_key_t *k)
 {
     uint8_t i = k->btn;
 
-    return s_b.poll_seen[i] && (ms_diff(s_b.poll_ms[i], k->t_down_ms) >= 0) &&
-           (ms_diff(k->t_up_ms, s_b.poll_ms[i]) >= 0);
+    return s_b.poll_seen[i] && ((int32_t)(s_b.poll_cyc[i] - k->t_down_cyc) >= 0) &&
+           ((int32_t)(k->t_up_cyc - s_b.poll_cyc[i]) >= 0);
 }
 
-/* Перетин — за тактами DWT (platform.h): мілісекунди під час зйомки майже стоять,
- * і два послідовні натискання мали б однакові мітки, тобто «перетиналися» б */
-static bool keys_overlap(const platform_key_t *a, const platform_key_t *b)
+static bool keys_chord(const platform_key_t *a, const platform_key_t *b)
 {
-    return (a->btn != b->btn) && ((int32_t)(a->t_down_cyc - b->t_up_cyc) < 0) &&
-           ((int32_t)(b->t_down_cyc - a->t_up_cyc) < 0);
+    uint32_t d = (a->t_down_cyc > b->t_down_cyc) ? (a->t_down_cyc - b->t_down_cyc)
+                                                 : (b->t_down_cyc - a->t_down_cyc);
+
+    return (a->btn != b->btn) && (Platform_CyclesToUs(d) < TBD_BTN_DEBOUNCE_MS * 1000U);
 }
 
 static void add_late_symbol(const platform_key_t *k)
@@ -261,15 +267,22 @@ static bool take_late_keys(void)
 
     while ((n < PLATFORM_KEY_QUEUE) && (Platform_TakeKey(&k[n]) != 0))
     {
-        if (!polled_within(&k[n]) && (k[n].btn < BTN_CODE_COUNT))
+        if (k[n].btn >= BTN_CODE_COUNT)
         {
-            n++;
+            continue;
         }
+        if (polled_within(&k[n]))
+        {
+            Evt_LogArg("code_key_dup", (uint32_t)k[n].btn + 1U);
+            continue;
+        }
+        n++;
     }
     for (j = 0U; j < n; j++)
     {
-        if ((j + 1U < n) && keys_overlap(&k[j], &k[j + 1U]))
+        if ((j + 1U < n) && keys_chord(&k[j], &k[j + 1U]))
         {
+            Evt_LogArg("code_key_chord", (uint32_t)k[j].btn + 1U);
             j++;   /* акорд: обидва відкидаємо, введення не змінюється */
             continue;
         }
@@ -348,7 +361,7 @@ bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge)
             if (code_press[i])
             {
                 s_b.poll_seen[i] = true;   /* issue #51: це натискання з черги не брати */
-                s_b.poll_ms[i] = now_ms;
+                s_b.poll_cyc[i] = Platform_Cycles();
             }
             if (changed)
             {
