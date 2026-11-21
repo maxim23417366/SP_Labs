@@ -323,6 +323,59 @@ uint32_t Platform_EventOverruns(platform_event_t ev)
   return (ev < PLATFORM_EV_COUNT) ? fake_platform.ev_overruns[ev] : 0U;
 }
 
+/* ---- issue #51: черга натискань кнопок коду ---------------------------------------- */
+void fake_platform_key(uint8_t btn, uint32_t t_down_ms, uint32_t t_up_ms)
+{
+  fake_platform_key_cyc(btn, t_down_ms, t_up_ms, t_down_ms * 1000U, t_up_ms * 1000U);
+}
+
+void fake_platform_key_cyc(uint8_t btn, uint32_t t_down_ms, uint32_t t_up_ms,
+                           uint32_t t_down_cyc, uint32_t t_up_cyc)
+{
+  unsigned next = (fake_platform.key_head + 1U) % PLATFORM_KEY_QUEUE;
+
+  /* як ISR: тривалість — за тактами (1 такт = 1 мкс) */
+  if ((uint32_t)(t_up_cyc - t_down_cyc) < fake_platform.key_min_ms * 1000U)
+  {
+    return;
+  }
+  if (next == fake_platform.key_tail)
+  {
+    fake_platform.key_lost++;
+    return;
+  }
+  fake_platform.key_q[fake_platform.key_head].btn        = btn;
+  fake_platform.key_q[fake_platform.key_head].t_down_ms  = t_down_ms;
+  fake_platform.key_q[fake_platform.key_head].t_up_ms    = t_up_ms;
+  fake_platform.key_q[fake_platform.key_head].t_down_cyc = t_down_cyc;
+  fake_platform.key_q[fake_platform.key_head].t_up_cyc   = t_up_cyc;
+  fake_platform.key_head = next;
+}
+
+void Platform_KeySetMinPress(uint32_t min_press_ms)
+{
+  fake_platform.key_min_ms = min_press_ms;
+}
+
+int Platform_TakeKey(platform_key_t *k)
+{
+  if (fake_platform.key_tail == fake_platform.key_head)
+  {
+    return 0;
+  }
+  if (k != NULL)
+  {
+    *k = fake_platform.key_q[fake_platform.key_tail];
+  }
+  fake_platform.key_tail = (fake_platform.key_tail + 1U) % PLATFORM_KEY_QUEUE;
+  return 1;
+}
+
+uint32_t Platform_KeyLost(void)
+{
+  return fake_platform.key_lost;
+}
+
 uint32_t Platform_UartOverruns(void)
 {
   return fake_platform.uart_overruns;

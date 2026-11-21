@@ -55,6 +55,11 @@ static struct
     uint8_t  count;
     uint32_t last_ms;               /* час останнього прийнятого натискання коду */
     uint32_t dropped;
+    /* issue #51: коли опитування востаннє прийняло натискання кнопки коду — щоб
+     * завершене натискання з EXTI-черги не порахувати вдруге */
+    bool     poll_seen[BTN_CODE_COUNT];
+    uint32_t poll_cyc[BTN_CODE_COUNT];   /* такт DWT (Platform_Cycles) прийняття */
+    uint32_t late;                  /* натискань, які додала EXTI-черга */
 } s_b;
 
 void SmartLock_ButtonsInit(void)
@@ -76,6 +81,17 @@ void SmartLock_ButtonsInit(void)
     s_b.count = 0U;
     s_b.last_ms = 0U;
     s_b.dropped = 0U;
+    for (i = 0U; i < BTN_CODE_COUNT; i++)
+    {
+        s_b.poll_seen[i] = false;
+        s_b.poll_cyc[i] = 0U;
+    }
+    s_b.late = 0U;
+}
+
+uint32_t SmartLock_ButtonsLate(void)
+{
+    return s_b.late;
 }
 
 uint32_t SmartLock_ButtonsDropped(void)
@@ -183,6 +199,99 @@ static void add_symbol(uint8_t symbol, uint32_t now_ms)
     }
 }
 
+/* ---- issue #51: натискання, яких не побачило опитування ---------------------------
+ * Під час зйомки й запису кадру цикл стоїть до ~2,9 с, і натискання, що почалося й
+ * закінчилося за цей час, опитування не бачить. Платформа ловить кнопки коду через
+ * EXTI і віддає завершені натискання (не коротші за TBD_BTN_DEBOUNCE_MS) з часом
+ * натискання і відпускання (Platform_TakeKey). Тут кожне таке натискання:
+ *   - відкидається як повтор, якщо опитування прийняло натискання тієї ж кнопки
+ *     між його натисканням і відпусканням (звичайний випадок — цикл не стояв);
+ *     EVT code_key_dup;
+ *   - відкидається разом із сусіднім, якщо дві різні кнопки натиснуто майже
+ *     одночасно (ближче за TBD_BTN_DEBOUNCE_MS) — акорд, як і в опитуванні, де
+ *     акорд — це два натискання, прийняті в одному проході; EVT code_key_chord.
+ *     Натискання «внахлест» (наступна кнопка до відпускання попередньої) — не
+ *     акорд: опитування теж приймає їх по черзі;
+ *   - інакше стає символом коду з часом t_down + TBD_BTN_DEBOUNCE_MS (так само,
+ *     як прийняло б опитування). Тайм-аут між символами рахується від цих часів,
+ *     а не від моменту, коли цикл звільнився.
+ * Повтор і акорд перевіряються тактами DWT: під час читання кадру SysTick
+ * замаскований, мілісекунди майже стоять, і різні натискання мали б однакові мітки. */
+
+/* a - b у мілісекундах зі знаком (різниця uint32 стійка до переповнення) */
+static int32_t ms_diff(uint32_t a, uint32_t b)
+{
+    return (int32_t)(a - b);
+}
+
+static bool polled_within(const platform_key_t *k)
+{
+    uint8_t i = k->btn;
+
+    return s_b.poll_seen[i] && ((int32_t)(s_b.poll_cyc[i] - k->t_down_cyc) >= 0) &&
+           ((int32_t)(k->t_up_cyc - s_b.poll_cyc[i]) >= 0);
+}
+
+static bool keys_chord(const platform_key_t *a, const platform_key_t *b)
+{
+    uint32_t d = (a->t_down_cyc > b->t_down_cyc) ? (a->t_down_cyc - b->t_down_cyc)
+                                                 : (b->t_down_cyc - a->t_down_cyc);
+
+    return (a->btn != b->btn) && (Platform_CyclesToUs(d) < TBD_BTN_DEBOUNCE_MS * 1000U);
+}
+
+static void add_late_symbol(const platform_key_t *k)
+{
+    uint32_t t_sym = k->t_down_ms + TBD_BTN_DEBOUNCE_MS;
+
+    if ((s_b.count > 0U) && (ms_diff(t_sym, s_b.last_ms) >= (int32_t)TBD_CODE_TIMEOUT_MS))
+    {
+        clear_entry();   /* пауза перед цим натисканням довша за тайм-аут */
+    }
+    Evt_LogAt(Perf_CyclesStampToUs64(k->t_down_cyc), "code_key_press", EVT_NOARG);
+    Evt_Log("code_key_handled");
+    s_b.late++;
+    add_symbol((uint8_t)(k->btn + 1U), t_sym);
+}
+
+/* Буфер — статичний, не на стеку: 16 записів = 256 Б, а резерв стека малий
+ * (docs/superloop.md §5) */
+static platform_key_t s_late[PLATFORM_KEY_QUEUE];
+
+static bool take_late_keys(void)
+{
+    platform_key_t *k = s_late;
+    unsigned       n = 0U;
+    unsigned       j;
+    bool           did = false;
+
+    while ((n < PLATFORM_KEY_QUEUE) && (Platform_TakeKey(&k[n]) != 0))
+    {
+        if (k[n].btn >= BTN_CODE_COUNT)
+        {
+            continue;
+        }
+        if (polled_within(&k[n]))
+        {
+            Evt_LogArg("code_key_dup", (uint32_t)k[n].btn + 1U);
+            continue;
+        }
+        n++;
+    }
+    for (j = 0U; j < n; j++)
+    {
+        if ((j + 1U < n) && keys_chord(&k[j], &k[j + 1U]))
+        {
+            Evt_LogArg("code_key_chord", (uint32_t)k[j].btn + 1U);
+            j++;   /* акорд: обидва відкидаємо, введення не змінюється */
+            continue;
+        }
+        add_late_symbol(&k[j]);
+        did = true;
+    }
+    return did;
+}
+
 /* Ледача ініціалізація: вихідні рівні вважаємо стабільними (затиснута кнопка
  * не дає події до відпускання) */
 static void start(uint32_t in, uint32_t now_ms)
@@ -196,6 +305,11 @@ static void start(uint32_t in, uint32_t now_ms)
         s_b.btn[i].stable = p;
         s_b.btn[i].cand = p;
         s_b.btn[i].since_ms = now_ms;
+    }
+    Platform_KeySetMinPress(TBD_BTN_DEBOUNCE_MS);
+    while (Platform_TakeKey(NULL) != 0)
+    {
+        /* натискання до старту модуля — не код */
     }
     s_b.started = true;
 }
@@ -215,6 +329,10 @@ bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge)
         start(in, now_ms);
         return false;
     }
+
+    /* issue #51: спершу натискання, що завершились, поки цикл стояв, — вони
+     * раніші за все, що опитування прийме зараз */
+    did = take_late_keys();
 
     for (i = 0U; i < BTN_COUNT; i++)
     {
@@ -240,6 +358,11 @@ bool SmartLock_ButtonsPoll(uint32_t now_ms, bool b1_edge)
         else
         {
             code_press[i] = changed && s_b.btn[i].stable;
+            if (code_press[i])
+            {
+                s_b.poll_seen[i] = true;   /* issue #51: це натискання з черги не брати */
+                s_b.poll_cyc[i] = Platform_Cycles();
+            }
             if (changed)
             {
                 pending_clear[i] = true;   /* фронт використано (лог або акорд) */
