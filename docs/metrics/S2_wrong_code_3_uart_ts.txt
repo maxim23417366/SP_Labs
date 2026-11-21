@@ -1,0 +1,202 @@
+2026-11-20T19:36:19.540 +    0.000s # старт запису S2_wrong_code_3, порт /dev/cu.usbmodem11303 115200 8N1
+2026-11-20T19:36:19.825 +    0.286s LOAD pct=8
+2026-11-20T19:36:20.821 +    1.282s ENV,dht=ok,t_c=25.4,rh=37,bmp=ok,p_pa=98127
+2026-11-20T19:36:20.826 +    1.287s LOAD pct=12
+2026-11-20T19:36:21.549 +    2.010s BUILD,fw=SmartLock,lab=LR3,git=5774b8a,cpu_hz=96000000,loop=superBUILD,fw=SmartLock,lab=LR3,git=5774b8a,cpu_hz=96000000,loop=superloop
+2026-11-20T19:36:21.555 +    2.016s === SmartLock: peripheral check (LR1, step 6) ===
+2026-11-20T19:36:21.560 +    2.021s [INIT ] I2C1 READY, SPI2 READY, TIM3 READY, USART2 READY -> OK
+2026-11-20T19:36:21.568 +    2.029s [CLOCK] SYSCLK=96000000 HCLK=96000000 PCLK1=48000000 PCLK2=96000000 Hz -> OK
+2026-11-20T19:36:21.570 +    2.031s [I2C1 ] scan 0x08..0x77:
+2026-11-20T19:36:21.579 +    2.040s         0x1D  LSM303D accel/mag (GY-89)
+2026-11-20T19:36:21.583 +    2.044s         0x21  OV7670 camera (SCCB)
+2026-11-20T19:36:21.601 +    2.062s         0x68  MPU-6050
+2026-11-20T19:36:21.605 +    2.066s         0x6B  L3GD20 gyro (GY-89)
+2026-11-20T19:36:21.611 +    2.072s         0x77  BMP180 baro (GY-89)
+2026-11-20T19:36:21.614 +    2.075s         5 device(s) found -> OK
+2026-11-20T19:36:21.620 +    2.081s [SPI2 ] W25Q64 JEDEC ID: EF 40 17 (Winbond, 64 Mbit) -> OK
+2026-11-20T19:36:21.625 +    2.086s [TIM3 ] PWM CH1 (PA6): 50 Hz, pulse 1500 us -> OK
+2026-11-20T19:36:21.627 +    2.088s === RESULT: ALL OK ===
+2026-11-20T19:36:21.636 +    2.097s # SmartLock selftest v2 (LR2)
+2026-11-20T19:36:21.651 +    2.112s I2C,scan,0x1D,0x21,0x68,0x6B,0x77
+2026-11-20T19:36:22.895 +    3.356s ST,START
+2026-11-20T19:36:22.897 +    3.358s ST,UART,OK,baud=115200
+2026-11-20T19:36:22.906 +    3.367s ST,MPU6050,WARN,who=0x68,a_g=1.098,ax_g=0.152,ay_g=0.014,az_g=1.088,gyro_max_dps=12.0,t_c=27.1
+2026-11-20T19:36:22.911 +    3.372s ST,BMP180,OK,id=0x55,t_c=24.4,p_hpa=981.33
+2026-11-20T19:36:22.914 +    3.375s ST,L3GD20,OK,addr=0x6B,who=0xD4
+2026-11-20T19:36:22.924 +    3.385s ST,LSM303D,WARN,addr=0x1D,who=0x49,role=FR06_accel,raw=7FF8,7FF8,2A22,a_g=2.900,ax_g=1.998,ay_g=1.998,az_g=0.657
+2026-11-20T19:36:22.928 +    3.389s ST,W25Q64,OK,jedec=EF4017,size_mbit=64
+2026-11-20T19:36:22.932 +    3.393s ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
+2026-11-20T19:36:22.937 +    3.398s ST,DHT11,OK,t_c=25.4,rh=37.5,raw=2505190447,crc=OK
+2026-11-20T19:36:22.943 +    3.404s ST,SERVO_PWM,OK,freq_hz=50,pulse_us=1500,note=no_feedback
+2026-11-20T19:36:22.948 +    3.409s ST,GPIO,OK,btn=1111,lock_b1=1,door=0,pir=0,mpu_int=0
+2026-11-20T19:36:22.952 +    3.413s ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
+2026-11-20T19:36:22.962 +    3.423s # commands: s selftest | i i2c scan | g gpio watch on/off | m accel x10 (LSM303D, FR-06) | b bmp180
+2026-11-20T19:36:22.969 +    3.430s #           h dht11 x5 | j jedec | f flash r/w | 1/2/3 servo 1000/1500/2000us
+2026-11-20T19:36:22.981 +    3.442s #           a accel diag (LSM303D) | c camera id | k camera slow PCLK on/off | x NACK demo | l LR1 loop traffic | ? help
+2026-11-20T19:36:22.989 +    3.450s #           w flash persist write | v flash persist verify | t sensor read timing
+2026-11-20T19:36:22.999 +    3.460s #           d journal dump | e journal +100 test events | z corrupt newest record | LOG ERASE erase journal
+2026-11-20T19:36:23.006 +    3.467s #           p frame write 38400 B (+journal) | o frame verify last
+2026-11-20T19:36:23.266 +    3.727s LOG,MOUNT,result=mounted,valid=327,damaged=1,next_seq=328,boot=47,head=328,us=251515
+2026-11-20T19:36:23.275 +    3.736s LOG,seq=328,boot=47,t_ms=1721,type=BOOT,arg=91704202,arg2=0,frame=none,crc=ok
+2026-11-20T19:36:23.297 +    3.758s FRM,MOUNT,frames=51,next_id=52,us=18734
+2026-11-20T19:36:23.369 +    3.830s CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
+2026-11-20T19:36:23.373 +    3.834s STACK reserved=4096 used=720 free=3376
+2026-11-20T19:36:23.377 +    3.838s HEAP arena=1468 used=1468 free=0
+2026-11-20T19:36:23.498 +    3.959s EVT,id=329,t_ms=1947,name=DOOR_CLOSED,arg=0,flash=ok
+2026-11-20T19:36:23.502 +    3.963s EVT t_us=121648 name=fsm_door_closed
+2026-11-20T19:36:24.372 +    4.833s LOAD pct=9
+2026-11-20T19:36:25.413 +    5.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:36:25.416 +    5.877s LOAD pct=12
+2026-11-20T19:36:26.415 +    6.876s LOAD pct=8
+2026-11-20T19:36:27.413 +    7.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98136
+2026-11-20T19:36:27.416 +    7.876s LOAD pct=12
+2026-11-20T19:36:28.416 +    8.877s LOAD pct=8
+2026-11-20T19:36:29.412 +    9.872s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:36:29.416 +    9.876s LOAD pct=12
+2026-11-20T19:36:30.416 +   10.877s LOAD pct=8
+2026-11-20T19:36:31.413 +   11.873s ENV,dht=ok,t_c=25.4,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:36:31.416 +   11.876s LOAD pct=12
+2026-11-20T19:36:32.416 +   12.876s LOAD pct=8
+2026-11-20T19:36:33.413 +   13.873s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:36:33.416 +   13.876s LOAD pct=12
+2026-11-20T19:36:34.416 +   14.876s LOAD pct=8
+2026-11-20T19:36:35.413 +   15.873s ENV,dht=ok,t_c=25.4,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:36:35.416 +   15.876s LOAD pct=12
+2026-11-20T19:36:35.803 +   16.264s EVT t_us=12427395 name=btn_b1_press
+2026-11-20T19:36:35.807 +   16.267s EVT t_us=12430048 name=btn_b1_handled
+2026-11-20T19:36:35.827 +   16.287s EVT,id=330,t_ms=14262,name=LOCK_ACTIVATED,arg=15000,flash=ok
+2026-11-20T19:36:35.831 +   16.291s EVT t_us=12450069 name=fsm_lock_request
+2026-11-20T19:36:36.416 +   16.876s LOAD pct=10
+2026-11-20T19:36:37.413 +   17.873s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98145
+2026-11-20T19:36:37.416 +   17.876s LOAD pct=12
+2026-11-20T19:36:38.416 +   18.876s LOAD pct=8
+2026-11-20T19:36:39.413 +   19.873s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:36:39.417 +   19.877s LOAD pct=12
+2026-11-20T19:36:40.417 +   20.877s LOAD pct=8
+2026-11-20T19:36:41.413 +   21.873s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:36:41.416 +   21.877s LOAD pct=12
+2026-11-20T19:36:42.417 +   22.877s LOAD pct=8
+2026-11-20T19:36:43.413 +   23.873s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:36:43.416 +   23.877s LOAD pct=12
+2026-11-20T19:36:44.417 +   24.877s LOAD pct=8
+2026-11-20T19:36:45.413 +   25.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98136
+2026-11-20T19:36:45.416 +   25.877s LOAD pct=12
+2026-11-20T19:36:46.416 +   26.877s LOAD pct=8
+2026-11-20T19:36:47.413 +   27.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:36:47.416 +   27.877s LOAD pct=12
+2026-11-20T19:36:48.416 +   28.877s LOAD pct=8
+2026-11-20T19:36:49.413 +   29.874s ENV,dht=ok,t_c=25.6,rh=37,bmp=ok,p_pa=98136
+2026-11-20T19:36:49.416 +   29.877s LOAD pct=12
+2026-11-20T19:36:50.416 +   30.877s LOAD pct=8
+2026-11-20T19:36:50.841 +   31.302s EVT,id=331,t_ms=29262,name=LOCKED,arg=15000,flash=ok
+2026-11-20T19:36:51.413 +   31.874s ENV,dht=ok,t_c=25.6,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:36:51.416 +   31.877s LOAD pct=13
+2026-11-20T19:36:52.416 +   32.877s LOAD pct=8
+2026-11-20T19:36:53.413 +   33.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:36:53.416 +   33.877s LOAD pct=12
+2026-11-20T19:36:54.416 +   34.877s LOAD pct=8
+2026-11-20T19:36:55.413 +   35.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98127
+2026-11-20T19:36:55.416 +   35.877s LOAD pct=12
+2026-11-20T19:36:56.416 +   36.877s LOAD pct=8
+2026-11-20T19:36:57.413 +   37.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98121
+2026-11-20T19:36:57.416 +   37.877s LOAD pct=12
+2026-11-20T19:36:58.416 +   38.877s LOAD pct=8
+2026-11-20T19:36:59.413 +   39.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:36:59.417 +   39.878s LOAD pct=12
+2026-11-20T19:37:00.416 +   40.877s LOAD pct=8
+2026-11-20T19:37:01.413 +   41.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:37:01.417 +   41.878s LOAD pct=12
+2026-11-20T19:37:02.417 +   42.878s LOAD pct=8
+2026-11-20T19:37:03.413 +   43.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98121
+2026-11-20T19:37:03.417 +   43.878s LOAD pct=12
+2026-11-20T19:37:05.739 +   46.200s CAM,photo,event=332,status=ok,cap=ok,capture_us=1465845,store_us=831843,aec=ok
+2026-11-20T19:37:05.747 +   46.208s EVT,id=332,t_ms=41846,name=TAMPER,arg=1321,flash=ok
+2026-11-20T19:37:05.750 +   46.211s EVT t_us=40061650 name=fsm_tamper
+2026-11-20T19:37:05.754 +   46.215s EVT t_us=40061667 name=capture_start
+2026-11-20T19:37:05.797 +   46.258s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98136
+2026-11-20T19:37:05.805 +   46.266s EVT,id=333,t_ms=44062,name=PHOTO,arg=52,ref=332,flash=ok
+2026-11-20T19:37:05.806 +   46.267s LOAD pct=99
+2026-11-20T19:37:05.810 +   46.271s EVT t_us=41529924 name=capture_done
+2026-11-20T19:37:05.814 +   46.275s EVT t_us=41529931 name=flash_wr_start
+2026-11-20T19:37:07.881 +   48.342s CAM,photo,event=334,status=ok,cap=ok,capture_us=1214324,store_us=841363,aec=ok
+2026-11-20T19:37:07.889 +   48.350s EVT,id=334,t_ms=44142,name=TAMPER,arg=1339,flash=ok
+2026-11-20T19:37:07.892 +   48.353s EVT t_us=42361782 name=flash_wr_done
+2026-11-20T19:37:07.896 +   48.357s EVT t_us=42444062 name=fsm_tamper
+2026-11-20T19:37:07.939 +   48.400s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:37:07.947 +   48.408s EVT,id=335,t_ms=46115,name=PHOTO,arg=53,ref=334,flash=ok
+2026-11-20T19:37:07.948 +   48.409s LOAD pct=100
+2026-11-20T19:37:07.952 +   48.413s EVT t_us=42445668 name=capture_start
+2026-11-20T19:37:07.956 +   48.417s EVT t_us=43662403 name=capture_done
+2026-11-20T19:37:07.961 +   48.422s EVT t_us=43662411 name=flash_wr_start
+2026-11-20T19:37:07.965 +   48.426s EVT t_us=44503781 name=flash_wr_done
+2026-11-20T19:37:08.897 +   49.358s LOAD pct=14
+2026-11-20T19:37:09.413 +   49.874s ENV,dht=ok,t_c=25.6,rh=37,bmp=ok,p_pa=98130
+2026-11-20T19:37:09.897 +   50.358s LOAD pct=12
+2026-11-20T19:37:10.897 +   51.358s LOAD pct=8
+2026-11-20T19:37:11.413 +   51.874s ENV,dht=ok,t_c=25.6,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:37:11.897 +   52.358s LOAD pct=12
+2026-11-20T19:37:12.897 +   53.358s LOAD pct=8
+2026-11-20T19:37:13.413 +   53.874s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98124
+2026-11-20T19:37:13.897 +   54.358s LOAD pct=12
+2026-11-20T19:37:14.897 +   55.358s LOAD pct=8
+2026-11-20T19:37:15.414 +   55.875s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:37:15.898 +   56.359s LOAD pct=12
+2026-11-20T19:37:16.897 +   57.358s LOAD pct=8
+2026-11-20T19:37:17.414 +   57.875s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98133
+2026-11-20T19:37:17.898 +   58.359s LOAD pct=12
+2026-11-20T19:37:18.898 +   59.359s LOAD pct=8
+2026-11-20T19:37:19.414 +   59.875s ENV,dht=ok,t_c=25.5,rh=37,bmp=ok,p_pa=98127
+2026-11-20T19:37:19.616 +   60.077s > STATS
+2026-11-20T19:37:19.623 +   60.084s STATS_BEGIN git=5774b8a t_us=56247405 loops=2228208
+2026-11-20T19:37:19.629 +   60.090s STAT name=loop n=2228208 min_us=16 avg_us=21 max_us=2322489
+2026-11-20T19:37:19.635 +   60.096s CPU name=cpu_load windows=53 min_pm=81 avg_pm=136 max_pm=999
+2026-11-20T19:37:19.639 +   60.100s STAT name=fsm n=6 min_us=6 avg_us=11 max_us=14
+2026-11-20T19:37:19.643 +   60.104s POLL name=fsm polls=2228209 runs=6
+2026-11-20T19:37:19.648 +   60.109s STAT name=buttons n=5097 min_us=7 avg_us=11 max_us=23
+2026-11-20T19:37:19.655 +   60.116s JITTER name=buttons period_us=10000 min_us=-5119 max_us=2314502 missed=30
+2026-11-20T19:37:19.664 +   60.125s JHIST name=buttons n=5096 h_lt100us=4941 h_lt1ms=12 h_lt10ms=113 h_lt100ms=28 h_ge100ms=2
+2026-11-20T19:37:19.670 +   60.131s STAT name=security n=2564 min_us=1569 avg_us=1570 max_us=1571
+2026-11-20T19:37:19.677 +   60.138s JITTER name=security period_us=20000 min_us=-6014 max_us=2304497 missed=30
+2026-11-20T19:37:19.686 +   60.147s JHIST name=security n=2563 h_lt100us=2495 h_lt1ms=9 h_lt10ms=29 h_lt100ms=28 h_ge100ms=2
+2026-11-20T19:37:19.692 +   60.153s STAT name=env n=28 min_us=40947 avg_us=41837 max_us=41930
+2026-11-20T19:37:19.699 +   60.160s JITTER name=env period_us=2000000 min_us=-526498 max_us=384506 missed=0
+2026-11-20T19:37:19.707 +   60.168s JHIST name=env n=27 h_lt100us=18 h_lt1ms=6 h_lt10ms=0 h_lt100ms=0 h_ge100ms=3
+2026-11-20T19:37:19.713 +   60.174s STAT name=camera n=2 min_us=2065842 avg_us=2186843 max_us=2307845
+2026-11-20T19:37:19.717 +   60.178s POLL name=camera polls=2228209 runs=2
+2026-11-20T19:37:19.723 +   60.184s STAT name=storage n=7 min_us=7328 avg_us=7546 max_us=7831
+2026-11-20T19:37:19.726 +   60.187s POLL name=storage polls=2228209 runs=7
+2026-11-20T19:37:19.732 +   60.193s STAT name=mem n=54 min_us=109 avg_us=109 max_us=109
+2026-11-20T19:37:19.739 +   60.200s JITTER name=mem period_us=1000000 min_us=-517270 max_us=1333344 missed=2
+2026-11-20T19:37:19.746 +   60.207s JHIST name=mem n=53 h_lt100us=0 h_lt1ms=0 h_lt10ms=6 h_lt100ms=44 h_ge100ms=3
+2026-11-20T19:37:19.752 +   60.213s STAT name=uart n=65 min_us=4 avg_us=1787 max_us=8660
+2026-11-20T19:37:19.755 +   60.216s POLL name=uart polls=2228208 runs=65
+2026-11-20T19:37:19.761 +   60.222s STAT name=btn_b1_lat n=1 min_us=2646 avg_us=2646 max_us=2646
+2026-11-20T19:37:19.764 +   60.225s OVR name=btn_b1 count=0
+2026-11-20T19:37:19.769 +   60.230s STAT name=pir_lat n=0 min_us=0 avg_us=0 max_us=0
+2026-11-20T19:37:19.771 +   60.232s OVR name=pir count=0
+2026-11-20T19:37:19.775 +   60.236s STAT name=mpu_lat n=0 min_us=0 avg_us=0 max_us=0
+2026-11-20T19:37:19.778 +   60.239s OVR name=mpu count=0
+2026-11-20T19:37:19.784 +   60.245s STAT name=camera n=2 min_us=1214324 avg_us=1340084 max_us=1465845
+2026-11-20T19:37:19.791 +   60.252s STAT name=flash_frame n=2 min_us=831843 avg_us=836603 max_us=841363
+2026-11-20T19:37:19.797 +   60.258s STAT name=evq_wait n=4 min_us=20 avg_us=14889 max_us=57934
+2026-11-20T19:37:19.802 +   60.263s EVQ len=8 pending=0 max_depth=1 posted=4 dropped=0
+2026-11-20T19:37:19.807 +   60.268s UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
+2026-11-20T19:37:19.810 +   60.271s EVTLOG pending=1 dropped=0
+2026-11-20T19:37:19.815 +   60.276s DIAG name=fsm state=LOCKED ignored=0 cam_rejected=0
+2026-11-20T19:37:19.818 +   60.279s DIAG name=buttons dropped=0
+2026-11-20T19:37:19.825 +   60.286s DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
+2026-11-20T19:37:19.831 +   60.292s DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
+2026-11-20T19:37:19.839 +   60.300s DIAG name=journal pending=0 max_depth=2 stored=7 unsaved=0 dropped=0 last_seq=335
+2026-11-20T19:37:19.848 +   60.309s DIAG name=camlink requested=2 rejected=0 ok=2 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
+2026-11-20T19:37:19.856 +   60.317s DIAG name=camera accepted=2 rejected=0 stored=2 capture_err=0 store_err=0 pending=0
+2026-11-20T19:37:19.860 +   60.321s STACK reserved=4096 used=760 free=3336
+2026-11-20T19:37:19.863 +   60.324s HEAP arena=1468 used=1468 free=0
+2026-11-20T19:37:19.864 +   60.325s STATS_END
+2026-11-20T19:37:19.868 +   60.329s EVT t_us=56247398 name=uart_cmd_rx
+2026-11-20T19:37:19.871 +   60.332s EVT t_us=56494160 name=uart_cmd_tx
+2026-11-20T19:37:19.898 +   60.359s LOAD pct=36
+2026-11-20T19:37:20.106 +   60.567s > MEM
+2026-11-20T19:37:20.112 +   60.573s STACK reserved=4096 used=760 free=3336
+2026-11-20T19:37:20.115 +   60.576s HEAP arena=1468 used=1468 free=0
+2026-11-20T19:37:20.115 +   60.576s EVT 
+2026-11-20T19:37:20.115 +   60.576s # кінець запису: 198 рядків, git=5774b8a

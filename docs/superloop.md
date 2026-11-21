@@ -174,7 +174,8 @@ sigrok-cli -d fx2lafw --config samplerate=1m -C D0,D1,D2,D3,D4 \
 | Фактична глибина стека | stack painting: `Platform_StackPaint()` першим рядком `main()`, шаблон `0xDEADBEEF` | `STACK reserved= used= free=` у UART: при старті (після self-test), щоразу, коли максимум зріс (задача `mem` перевіряє раз на 1 с), і командами `MEM` / `STATS` |
 | Heap | `mallinfo()` (newlib-nano; `printf` бере буфер stdout з heap) | `HEAP arena= used= free=` (поруч зі `STACK`) |
 
-Межі стека — з лінкер-скрипта CubeMX: `_estack`, `_Min_Stack_Size = 0x400` (1 КБ).
+Межі стека — з лінкер-скрипта CubeMX: `_estack`, `_Min_Stack_Size = 0x1000` (4 КБ; до issue #49 —
+`0x400`, 1 КБ: стендова команда `h` доводила стек до 1040 Б, понад резерв).
 Якщо в рядку `STACK` `used = reserved` (`free=0`), шаблон зіпсовано до самого низу: стек, найімовірніше,
 вийшов за резерв — збільшити `_Min_Stack_Size` і повторити (методичка §5.4).
 Повна глибина = найглибший ланцюжок викликів + кадри ISR, тому статичну оцінку `.su`
@@ -197,7 +198,9 @@ sigrok-cli -d fx2lafw --config samplerate=1m -C D0,D1,D2,D3,D4 \
 
 Ідентифікатор збірки: кореневий `Makefile` обчислює `git rev-parse --short HEAD`
 (з `-dirty`, якщо є незакомічені зміни) і передає в `firmware.mk` як `GIT_HASH`;
-перший рядок UART-логу — `BUILD,...,git=<хеш>,...`. Без git — `git=nogit`.
+перший рядок UART-логу — `BUILD,...,git=<хеш>,...`. Без git — `git=nogit`. З I10 той самий
+рядок дає команда `VER`, а `make fw-check` перевіряє хеш у `firmware.elf`
+(`docs/lab_3/lab3-build.md` §4).
 
 Формати рядків — `docs/metrics-spec.md` §3.6 (M-07, M-08).
 

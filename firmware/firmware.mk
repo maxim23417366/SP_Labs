@@ -103,13 +103,16 @@ OBJECTS     := $(OWN_OBJS) $(VENDOR_OBJS) $(ASM_OBJS)
 .PHONY: all clean mem-report
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin
 
-# Зміна git-хеша має перезібрати файли, що його друкують: окремий файл-мітка на хеш
+# Зміна git-хеша має перезібрати файли, що його друкують: окремий файл-мітка на хеш.
+# I10: не лише app.c (BUILD), а всі App/*.c з GIT_HASH — stats.c (STATS_BEGIN git=),
+# storage.c (запис BOOT) — інакше після нового коміту ці рядки показували б старий хеш
 GIT_STAMP := $(BUILD_DIR)/.git_hash_$(GIT_HASH)
+GIT_USERS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(shell grep -l GIT_HASH App/*.c))
 $(GIT_STAMP):
 	@mkdir -p $(BUILD_DIR)
 	@rm -f $(BUILD_DIR)/.git_hash_*
 	@touch $@
-$(BUILD_DIR)/App/app.o: $(GIT_STAMP)
+$(GIT_USERS): $(GIT_STAMP)
 
 $(OWN_OBJS): $(BUILD_DIR)/%.o: %.c firmware.mk
 	@mkdir -p $(dir $@)

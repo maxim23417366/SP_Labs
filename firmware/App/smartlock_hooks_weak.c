@@ -114,3 +114,9 @@ __attribute__((weak)) bool SmartLock_CameraPoll(uint32_t now_ms)
     (void)now_ms;
     return false;
 }
+
+/* I10: без модулів sl_* (sl_diag.c) STATS лише повідомляє, що їх немає */
+__attribute__((weak)) void SmartLock_PrintDiag(void)
+{
+    printf("DIAG name=modules present=0\r\n");
+}

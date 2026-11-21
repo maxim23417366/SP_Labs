@@ -54,6 +54,7 @@ bool SmartLock_CameraPoll(uint32_t now_ms)
     uint32_t store_cyc = 0U;
     const char *result;
     bool ok;
+    bool aec_ok;
 
     (void)now_ms;
     if (id == 0U)
@@ -65,6 +66,9 @@ bool SmartLock_CameraPoll(uint32_t now_ms)
     PROBE_ON(PLATFORM_PROBE_CAMERA);       /* PB2: захоплення кадру */
     ok = CamTest_Capture(&cap, &r);
     PROBE_OFF(PLATFORM_PROBE_CAMERA);
+    /* Без очікування сходження AEC (cam_test.c): камеру налаштовано при старті, і до
+     * LOCKED минає ≥ 15 с; якщо ж її щойно (пере)ініціалізовано — кадр позначено */
+    aec_ok = CamTest_AecSettled();
     if (!ok)
     {
         s_stats.capture_err++;
@@ -95,13 +99,23 @@ bool SmartLock_CameraPoll(uint32_t now_ms)
         }
         Evt_Log("flash_wr_done");
     }
-    printf("CAM,photo,event=%lu,status=%s,cap=%s,capture_us=%lu,store_us=%lu\r\n",
+    printf("CAM,photo,event=%lu,status=%s,cap=%s,capture_us=%lu,store_us=%lu,aec=%s\r\n",
            (unsigned long)id, result, CamTest_StatusName(cap),
-           (unsigned long)Perf_CyclesToUs(r.cycles), (unsigned long)Perf_CyclesToUs(store_cyc));
+           (unsigned long)Perf_CyclesToUs(r.cycles), (unsigned long)Perf_CyclesToUs(store_cyc),
+           aec_ok ? "ok" : "settling");
     return true;
 }
 
 const camera_stats_t *Camera_Stats(void)
 {
     return &s_stats;
+}
+
+void Camera_PrintDiag(void)
+{
+    printf("DIAG name=camera accepted=%lu rejected=%lu stored=%lu capture_err=%lu store_err=%lu "
+           "pending=%u\r\n",
+           (unsigned long)s_stats.accepted, (unsigned long)s_stats.rejected,
+           (unsigned long)s_stats.stored, (unsigned long)s_stats.capture_err,
+           (unsigned long)s_stats.store_err, Camera_Pending() ? 1U : 0U);
 }

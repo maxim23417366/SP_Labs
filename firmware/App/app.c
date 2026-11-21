@@ -15,6 +15,7 @@
 
 #include "app_config.h"
 #include "app_tasks.h"
+#include "cam_test.h"
 #include "frames.h"
 #include "bench.h"
 #include "platform.h"
@@ -81,23 +82,27 @@ static void devices_self_test(void)
     (void)StandTest_Run();
 }
 
-/* Перший рядок UART-логу: яка саме збірка працює (методичка §5.2) */
-static void print_banner(void)
+/* Перший рядок UART-логу: яка саме збірка працює (методичка §5.2);
+ * I10: те саме — команда VER, якщо термінал відкрито вже після старту.
+ * GIT_HASH вклеєно в рядок формату (а не через %s): у firmware.elf лежить цілий
+ * «BUILD,fw=SmartLock,lab=LR3,git=<хеш>,», його й шукає scripts/check_firmware.sh */
+void App_PrintBuild(void)
 {
-    printf("BUILD,fw=SmartLock,lab=LR3,git=%s,cpu_hz=%lu,loop=superloop\r\n", GIT_HASH,
+    printf("BUILD,fw=SmartLock,lab=LR3,git=" GIT_HASH ",cpu_hz=%lu,loop=superloop\r\n",
            (unsigned long)Platform_CpuHz());
 }
 
 /* Запуск прикладної логіки */
 void App_Init(void)
 {
-    print_banner();
+    App_PrintBuild();
     Platform_BringUp();
     devices_init();
     devices_self_test();
     Bench_Help();
     Storage_Init();    /* журнал W25Q64: монтування, BOOT, нумерація подій після рестарту */
     Frames_Init();     /* слоти кадрів W25Q64 */
+    CamTest_Init();    /* OV7670: таблиця + AEC/AWB сходяться, поки чекаємо першої тривоги */
     AppTasks_Init();   /* час, черга подій, таблиця задач (без виводу) */
     AppTasks_PrintMem();   /* I06: пам'ять після self-test (найглибші виклики старту) */
 }

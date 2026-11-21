@@ -45,6 +45,10 @@ void App_Init(void);
  * Super Loop по всіх задачах (docs/tasks.md). */
 void App_Loop(void);
 
+/* I10: рядок ідентифікації збірки «BUILD,fw=SmartLock,lab=LR3,git=<хеш>,…» —
+ * перший рядок логу після скидання і відповідь на команду VER */
+void App_PrintBuild(void);
+
 /* ЛР3: нагляд за MPU-6050 і шиною I2C після старту (docs/lab_3/driver-audit.md,
  * дефекти 1 і 2). Не частіше ніж раз на TBD_MPU_RETRY_MS (sl_security.h):
  *   - датчик справний (mpu_status == DEV_OK) — mpu6050_check(), одне читання

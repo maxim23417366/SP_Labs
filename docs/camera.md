@@ -8,7 +8,7 @@
 
 | Частина | Файл | Шар |
 |---|---|---|
-| PID/VER, скидання, CLKRC, таблиця QQVGA RGB565 по SCCB | `firmware/Devices/ov7670.c/h` | Devices (лише `dev_bus.h`) |
+| PID/VER, скидання, CLKRC, таблиця QQVGA RGB565 + AEC/AGC/AWB, гамма, кольорова матриця (§8) по SCCB; перестановка байтів RGB565 | `firmware/Devices/ov7670.c/h` | Devices (лише `dev_bus.h`) |
 | Захоплення кадру по DVP GPIO: `Platform_CameraCapture()` | `firmware/Platform/camera_dvp.c` + `camera_dvp_port.h`, API — `platform.h` | Platform |
 | Формат кадру і параметри захоплення (`CAMERA_*`, `TBD_CAMERA_*`) | `firmware/App/app_config.h` | App |
 | **Команда запуску на платі `CAM TEST`**: init камери + один кадр у буфер 38 400 Б | `firmware/App/cam_test.c/h`, виклик з `cmd.c`, `STAT name=camera` у `stats.c` | App |
@@ -27,12 +27,15 @@ HREF = PC10, PCLK = PA10, XCLK = PA8 (MCO1, 24 МГц), RESET = PC11, PWDN = PC1
 
 ```
 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
-CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=<мкс>,crc=0x<CRC-32>
+CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=<мкс>,crc=0x<CRC-32>,settle_ms=<мс>
 EVT t_us=<мкс> name=capture_start
 EVT t_us=<мкс> name=capture_done
 ```
 
-Перший `CAM TEST` ініціалізує камеру (рядок `CAM,init`), наступні лише знімають кадр.
+З виправленням §8 камера ініціалізується ще при старті (`App_Init`, рядок `CAM,init` після
+self-test), щоб експозиція і баланс білого встигли зійтися. `settle_ms` — скільки
+`CAM TEST` чекав сходження (> 0 лише якщо кадр просять раніше ніж через 5 с після
+init). Якщо камери при старті не було, перший `CAM TEST` ініціалізує її (рядок `CAM,init`).
 Якщо ініціалізація не вдалась — кадр не знімається, а `status` / `failed_reg` показують причину.
 Тривалість вдалих захоплень — `STAT name=camera` у `STATS` (metrics-spec §3.2, M-01).
 Команда блокує цикл на час кадру (≈ 0,5–1,1 с при CLKRC = 0x0F, §3) — для стендової
@@ -139,7 +142,9 @@ FRAME_END id=<event> len=38400 crc32=<hex8> lines=1200
 
 - `id` — ID події журналу: для кадру тривоги або кадру, прочитаного `CAM LOAD`, це `event_seq`
   (I09, §6); для стендових кадрів `CAM TEST` / `CAM PATTERN` — 0.
-- Піксель RGB565 — 2 байти, **старший першим** (так віддає OV7670), рядки кадру зверху вниз.
+- Піксель RGB565 — 2 байти, **старший першим**, рядки кадру зверху вниз. OV7670 віддає
+  молодший байт першим, тож прошивка переставляє байти одразу після захоплення
+  (`CAMERA_RGB565_SWAP`, §8). Кадри, зняті до виправлення, — `frame_decode.py --swap-bytes`.
 - `off` дозволяє скрипту знайти загублений рядок, `crc32` (CRC-32/zlib, той самий
   `Devices/crc32.c`, що в `CAM,result` і `frame_store`) — перевірити кадр цілком.
   CRC у `CAM,result,...,crc=` і в `FRAME_BEGIN` однакові для того самого кадру.
@@ -200,7 +205,7 @@ FSM (LOCKED, MOTION / TAMPER) ── запис у журнал (ID = seq) ─�
     write_frame (H10): заголовок кадру event_seq = id
     → SmartLock_OnCameraResult → журнал PHOTO {arg = frame_id, ref = id}  (у Flash PHOTO_SAVED)
   або SmartLock_OnCameraResult(id, 0, SL_CAM_ERR_CAPTURE) → PHOTO_ERR {arg = 2, ref = id}
-CAM,photo,event=<id>,status=ok|capture_err|store_err,cap=<статус>,capture_us=..,store_us=..
+CAM,photo,event=<id>,status=ok|capture_err|store_err,cap=<статус>,capture_us=..,store_us=..,aec=ok|settling
 ```
 
 - **Рівно один результат на запит:** `PHOTO` або `PHOTO_ERR` з `ref` = ID події. Модуль камери
@@ -254,7 +259,8 @@ D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Зе
    `TBD_CAMERA_CLKRC = 0x0F`: очікувано VSYNC ≈ 1,9 Гц, кадр ≈ 0,53 с (§3).
 5. Ширина імпульсу VSYNC — має бути більшою за `TBD_CAMERA_VSYNC_MIN_US` (1 мс);
    кількість завад на VSYNC під час роботи руками біля стенда (лог 15 ЛР3).
-6. Натиснути `RESET` (повертає заводський CLKRC після `k`), набрати **`CAM TEST`** + Enter.
+6. Натиснути `RESET` (повертає заводський CLKRC після `k`), зачекати ≥ 5 с (сходження
+   AEC/AWB, §8), набрати **`CAM TEST`** + Enter.
    Критерій: `CAM,init,status=ok,pid=0x76,ver=0x73,...` і
    `CAM,result,status=ok,bytes=38400,lines=120,short=0`. Записати `capture_us` і `crc`.
    PulseView під час команди: кількість фронтів PCLK при HREF = 1 на лінію (очікувано 320)
@@ -281,7 +287,13 @@ D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Зе
 12. Дві події поспіль під час `CAM EXPORT` (≈ 9 с) → друга дає `PHOTO_ERR,arg=1` (REJECTED).
    `STATS` після серії: `STAT name=camera`, `STAT name=flash_frame`, `STAT name=pir_lat`
    (затримка PIR під час зйомки і запису кадру — для M-03, сценарій S3).
-13. Результати — у таблицю M07 (теорія з §3, §5 і §6 проти виміру) і в `app_config.h` /
+13. **Експозиція й колір (§8).** Кадр звичайної сцени і кадр TAMPER (стенд повернуто до
+   вікна / лампи) — `CAM TEST` + `CAM EXPORT` + `frame_decode.py`: сцена розпізнавана, без
+   пересвічення, білий папір — білий. Перевірити `CAM REG 13` → `val=0xE7` (AEC, AGC, AWB
+   увімкнено). Якщо кадр темний/світлий — підібрати `CAM REG 24 <AEW>` і `CAM REG 25 <AEB>`
+   (ціль AEC, §8) без перепрошивки і записати значення в таблицю. Зберегти PNG у
+   `docs/lab_3/img/`.
+14. Результати — у таблицю M07 (теорія з §3, §5 і §6 проти виміру) і в `app_config.h` /
    `TBD_CAM_RESULT_TIMEOUT_MS`, якщо числа розходяться більш ніж на 10–20 %.
 
 **Якщо не вийшло:**
@@ -304,4 +316,50 @@ D0 = PC8 VSYNC, D1 = PC10 HREF, D2 = PA10 PCLK, D3 = PC0 (D0 камери). Зе
 | `CAM,photo,...,status=store_err` | Flash не змонтована (`FRM,MOUNT` при старті) або помилка запису — `LOG,ERR` у лозі |
 | `PHOTO_ERR,arg=4` (TIMEOUT) | кадр не встиг за `TBD_CAM_RESULT_TIMEOUT_MS` — порівняти `capture_us + store_us` з 10 с |
 | `CAM,load,...,status=no_frame` | кадр з цим номером перезаписано (кільце з 126 слотів, `flash-layout.md`) або номер не той — взяти `arg` з рядка `PHOTO` |
-| кадр «зсунутий» або з кольоровими смугами | `short=` > 0 у `CAM,result` або неправильний порядок байтів — див. `short_frame` |
+| кадр «зсунутий» | `short=` > 0 у `CAM,result` — див. `short_frame` |
+| «райдужні» смуги замість сцени, CRC цілий | порядок байтів пікселя: кадр знятий до виправлення §8 (напр. зі старого слоту W25Q64 через `CAM LOAD`) — `frame_decode.py --swap-bytes`; новий кадр з прошивки з `CAMERA_RGB565_SWAP = 1` не має цього ефекту |
+| кадр пересвічений / майже білий | `CAM REG 13` має дати `0xE7`; `settle_ms` = 0 (інакше кадр знято до сходження AEC); нижча ціль AEC — `CAM REG 24 70`, `CAM REG 25 20` |
+| кадр зелений / синій відтінок | AWB ще не зійшовся — зачекати кілька секунд і повторити `CAM TEST`; підсилення каналів AWB видно в `CAM REG 01` (синій) і `CAM REG 02` (червоний) |
+| `CAM,photo,…,aec=settling` | кадр тривоги знято раніше ніж через 5 с після ініціалізації камери (камери не було при старті або вона щойно з'явилась на шині) — він може бути пересвічений; шлях тривоги навмисно не чекає. Перевірити, що `CAM,init,status=ok` є після self-test |
+
+## 8. Порядок байтів і експозиція (виправлення після стенда, лог 23)
+
+На `main` `1c2da0a` кадри знімались, зберігались і передавались без втрат (CRC
+збігається), але зображення було непридатним для FR-07
+(`docs/lab_3/logs/23_camera_bench_main.txt`, `docs/lab_3/img/camera_main_frame21_motion215_*.png`,
+PR `lab3/camera-bench`):
+
+1. **Порядок байтів пікселя.** Декодер вважає RGB565 «старший байт першим», а OV7670
+   з нашою таблицею (TSLB і COM13[0] — значення за замовчуванням) віддає **молодший першим**
+   (GGGBBBBB, потім RRRRRGGG; у Linux цей режим — `MEDIA_BUS_FMT_RGB565_2X8_LE`). Звідси
+   «райдужні» смуги, а ті самі байти з переставленою парою — плавна сцена.
+2. **Пересвічення.** Таблиця вмикала лише формат і вікно QQVGA. Після скидання датчик
+   працює з фіксованою експозицією, без AGC і балансу білого: кадр пересвічений, кадр
+   TAMPER майже білий.
+
+**Виправлення:**
+
+| Що | Де | Як |
+|---|---|---|
+| порядок байтів | `ov7670_rgb565_swap_bytes()` (`Devices/ov7670.c`), виклик у `CamTest_Capture()` після `Platform_CameraCapture()`; `CAMERA_RGB565_SWAP = 1` (`app_config.h`) | переставити байти кожної пари одразу після кадру: ~0,3 мс на 38 400 Б, поза циклом опитування PCLK (його таймінг не змінюється). У буфері, CRC, W25Q64 і `CAM EXPORT` — старший байт першим, як каже формат і як чекає декодер |
+| старі кадри | `tools/frame_decode.py --swap-bytes` | кадри у W25Q64, зняті до виправлення (`CAM LOAD`), декодуються з перестановкою |
+| AEC / AGC / AWB | таблиця `ov7670_qqvga_rgb565_table()` | після формату QQVGA: гамма-крива, параметри AEC (цільова яскравість AEW/AEB/VPT, гістограмний AEC), стеля підсилення ×4, AWB, кольорова матриця RGB, `COM8 = 0xE7` — усе ввімкнено. Значення — з драйвера Linux `drivers/media/i2c/ov7670.c` |
+| сходження автоматики | `CamTest_Init()` у `App_Init()`; `TBD_CAMERA_AEC_SETTLE_MS = 5000` | камера налаштовується при старті й далі працює сама, AEC/AWB сходяться за кілька кадрів (кадр ≈ 0,53 с). До першої тривоги минає ≥ EXIT_DELAY 15 с. Стендова `CAM TEST`, набрана раніше ніж через 5 с після init, чекає решту (`settle_ms` у `CAM,result`). **Шлях тривоги не чекає**: блокувати Super Loop на секунди (кнопки, PIR, журнал) не можна; кадр знімається одразу, а якщо камеру щойно (пере)ініціалізовано — `CAM,photo,…,aec=settling` (обмеження, а не помилка; інакше `aec=ok`) |
+| підбір на стенді | `CAM REG <hex> [<hex>]` | читання / запис будь-якого регістра без перепрошивки: `CAM,reg,op=read,reg=0x13,val=0xE7,status=ok` |
+
+**Свідомо НЕ взято з драйвера Linux** (і перевіряє `test_ov7670`):
+
+| Регістр | Чому |
+|---|---|
+| DBLV `0x6B` = `0x4A` | PLL ×4 — PCLK став би вчетверо швидшим, а опитування GPIO не встигає (§3) |
+| TSLB `0x3A`, COM13[0] | порядок байтів — його вже вирішує перестановка в прошивці; зміна регістра без стенда могла б «перевернути» його вдруге |
+| NT_CTRL `0xA4` | автоматичне зниження частоти кадрів у темряві змінило б період VSYNC і `TBD_CAMERA_VSYNC_TIMEOUT_US` |
+| MVFP `0x1E`, COM10, `0x70`–`0x73`, `0xA2` | дзеркалення, полярність синхросигналів і масштаб QQVGA — без змін |
+
+**Перевірка без стенда:** `test_ov7670` (автоматика ввімкнена останнім записом COM8, формат
+QQVGA не змінився, заборонених регістрів немає; перестановка байтів), `test_cam_test`
+(байти пікселя переставлені, `settle_ms`, init при старті, `CAM REG`), `test_camera`
+(у W25Q64 — старший байт першим; тривога не чекає сходження: `aec=settling` / `aec=ok`), `tools/test_frame_decode.py` (`--swap-bytes` для старих кадрів).
+**На стенді** — §7 крок 13: кадр звичайної сцени і кадр TAMPER, після чого FR-07
+переоцінюється за `fr-verification-matrix.md`.
+

@@ -105,10 +105,18 @@ static void test_cam_test_inits_and_captures_one_frame(void)
 
   frame = CamTest_Frame(&bytes);
   TEST_ASSERT_EQUAL_UINT(CAMERA_FRAME_BYTES, bytes);
-  TEST_ASSERT_EQUAL_HEX8(0x05U, frame[5]);
+  /* fake_camera дає байт i = i; датчик — молодший байт пікселя першим, тож після
+   * перестановки (CAMERA_RGB565_SWAP, лог 23) кожна пара переставлена */
+  TEST_ASSERT_EQUAL_HEX8(0x01U, frame[0]);
+  TEST_ASSERT_EQUAL_HEX8(0x00U, frame[1]);
+  TEST_ASSERT_EQUAL_HEX8(0x05U, frame[4]);
+  TEST_ASSERT_EQUAL_HEX8(0x04U, frame[5]);
+  /* кадр одразу після init: дочекались сходження AEC/AWB */
+  TEST_ASSERT_EQUAL_UINT32(TBD_CAMERA_AEC_SETTLE_MS, fake_platform.delay_total_ms - OV7670_RESET_DELAY_MS);
   snprintf(exp, sizeof(exp),
            "CAM,result,status=ok,bytes=38400,lines=120,short=0,vglitch=0,capture_us=530000,"
-           "crc=0x%08lX\r\n", (unsigned long)crc32_compute(frame, bytes));
+           "crc=0x%08lX,settle_ms=%u\r\n", (unsigned long)crc32_compute(frame, bytes),
+           (unsigned)TBD_CAMERA_AEC_SETTLE_MS);
   TEST_ASSERT_NOT_NULL(strstr(o, exp));
 
   /* параметри захоплення — з app_config.h (docs/camera.md §3–4) */
@@ -136,7 +144,72 @@ static void test_cam_test_inits_and_captures_one_frame(void)
   o = cmd("CAM TEST");
   TEST_ASSERT_NULL(strstr(o, "CAM,init"));
   TEST_ASSERT_NOT_NULL(strstr(o, "CAM,result,status=ok,"));
+  TEST_ASSERT_NOT_NULL(strstr(o, ",settle_ms=0\r\n"));      /* AEC уже зійшовся */
   TEST_ASSERT_EQUAL_UINT32(2U, fake_camera.calls);
+}
+
+/* ЛР3: камера налаштовується при старті (App_Init → CamTest_Init); кадр через
+ * ≥ TBD_CAMERA_AEC_SETTLE_MS — без очікування, із увімкненими AEC/AGC/AWB */
+static void test_init_at_boot_then_capture_without_settle_wait(void)
+{
+  uint8_t *r = add_camera();
+  const char *o;
+
+  o = capture(CamTest_Init);
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,init,status=ok,"));
+  TEST_ASSERT_EQUAL_HEX8(OV7670_COM8_AUTO, r[OV7670_REG_COM8]);
+  o = capture(CamTest_Init);                       /* повторно — нічого */
+  TEST_ASSERT_EQUAL_STRING("", o);
+
+  fake_platform.now_ms += TBD_CAMERA_AEC_SETTLE_MS;  /* чекали EXIT_DELAY і т. ін. */
+  fake_platform.delay_total_ms = 0U;
+  o = cmd("CAM TEST");
+  TEST_ASSERT_NULL(strstr(o, "CAM,init"));
+  TEST_ASSERT_NOT_NULL(strstr(o, ",settle_ms=0\r\n"));
+  TEST_ASSERT_EQUAL_UINT32(0U, fake_platform.delay_total_ms);
+
+  /* камери немає при старті — CAM,init з причиною, повтор при першому кадрі */
+  CamTest_Reset();
+  fake_i2c_reset();
+  o = capture(CamTest_Init);
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,init,status=nack,"));
+  r = add_camera();
+  o = cmd("CAM TEST");
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,init,status=ok,"));
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,result,status=ok,"));
+}
+
+/* CAM REG — читання / запис регістра OV7670 для підбору на стенді */
+static void test_cam_reg_read_write_and_params(void)
+{
+  uint8_t *r = add_camera();
+  const char *o;
+
+  o = cmd("CAM REG 13");
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,init,status=ok,"));         /* init за потреби */
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,reg,op=read,reg=0x13,val=0xE7,status=ok\r\n"));
+  o = cmd("CAM REG 24 70");
+  TEST_ASSERT_EQUAL_STRING("CAM,reg,op=write,reg=0x24,val=0x70,status=ok\r\n", o);
+  TEST_ASSERT_EQUAL_HEX8(0x70U, r[0x24U]);
+  o = cmd("CAM REG 0x55  1f");
+  TEST_ASSERT_EQUAL_STRING("CAM,reg,op=write,reg=0x55,val=0x1F,status=ok\r\n", o);
+
+  TEST_ASSERT_EQUAL_STRING("CAM,reg,status=param\r\n", cmd("CAM REG zz"));
+  TEST_ASSERT_EQUAL_STRING("CAM,reg,status=param\r\n", cmd("CAM REG 100"));
+  TEST_ASSERT_EQUAL_STRING("CAM,reg,status=param\r\n", cmd("CAM REG 13 1FF"));
+  TEST_ASSERT_EQUAL_STRING("CAM,reg,status=param\r\n", cmd("CAM REG 13 x"));
+  TEST_ASSERT_EQUAL_STRING("CAM,reg,status=param\r\n", cmd("CAM REG 13 7 8"));
+
+  /* камера пропала — помилка шини в status */
+  fake_i2c_reset();
+  o = cmd("CAM REG 13");
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,reg,op=read,reg=0x13,val=0x00,status=nack\r\n"));
+
+  /* камери не було з самого початку — лише CAM,init з причиною */
+  CamTest_Reset();
+  o = cmd("CAM REG 13");
+  TEST_ASSERT_NOT_NULL(strstr(o, "CAM,init,status=nack,"));
+  TEST_ASSERT_NULL(strstr(o, "CAM,reg,op"));
 }
 
 /* Камери немає / не та: кадр не знімається, причина — у CAM,init */
@@ -223,5 +296,7 @@ int main(void)
   RUN_TEST(test_cam_test_reports_failed_register);
   RUN_TEST(test_cam_test_capture_errors);
   RUN_TEST(test_cam_test_line_parsing_and_help);
+  RUN_TEST(test_init_at_boot_then_capture_without_settle_wait);
+  RUN_TEST(test_cam_reg_read_write_and_params);
   return UNITY_END();
 }

@@ -96,6 +96,27 @@ class FrameDecodeTest(unittest.TestCase):
                 f.write("no frames here\n")
             self.assertEqual(run_cli([log]), 1)
 
+    def test_swap_bytes_for_frames_before_fix(self):
+        """Кадр з молодшим байтом першим (як знімала прошивка до виправлення ЛР3, лог 23):
+        без --swap-bytes PNG інший («райдужні» смуги), з --swap-bytes — той самий малюнок."""
+        old = fd.swap_pairs(self.data)
+        self.assertEqual(fd.swap_pairs(old), self.data)
+        self.assertEqual(old[0:2], self.data[1::-1])
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "old.log")
+            ref, plain, fixed = (os.path.join(d, n) for n in ("ref.png", "plain.png", "fixed.png"))
+            with open(log, "w", newline="") as f:
+                f.write(make_log(self.data))
+            self.assertEqual(run_cli([log, "--out", ref]), 0)
+            with open(log, "w", newline="") as f:
+                f.write(make_log(old))
+            self.assertEqual(run_cli([log, "--out", plain]), 0)          # CRC цілий
+            self.assertEqual(run_cli([log, "--out", fixed, "--swap-bytes"]), 0)
+            with open(ref, "rb") as a, open(plain, "rb") as b, open(fixed, "rb") as c:
+                r, p_, f_ = a.read(), b.read(), c.read()
+            self.assertNotEqual(r, p_)
+            self.assertEqual(r, f_)
+
     def test_rgb565_conversion(self):
         rows = fd.rgb565_be_to_rgb888(bytes([0xF8, 0x00, 0x07, 0xE0, 0x00, 0x1F, 0xFF, 0xFF]), 4, 1)
         self.assertEqual(rows[0], bytes([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]))
