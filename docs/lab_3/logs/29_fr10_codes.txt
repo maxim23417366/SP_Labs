@@ -1,0 +1,474 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-21.
+# Прошивка: main f5dc804 (після злиття PR #50 — стек 4 КБ, і PR #55 — натискання коду через EXTI),
+# у банері git=f5dc804. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make lab3 — PASS,
+# firmware.bin sha256 ff89e2949a5571af8eaed73cac44a075351f95258ad4dd0366dc18e3993ec5e6.
+# Запис: scripts/uart_capture.py, МК скинуто на старті запису. Формат рядка: «+ <с від старту запису> <рядок UART>».
+# Пропущено: LOAD, службові EVT uart_cmd_*, PING/PONG навантаження, відповіді MEM поза STATS.
+# FR-10 «5 правильних + 5 неправильних кодів». Неправильний код — жовта, зелена, синя, червона
+#   (різні кнопки, щоб не повторювати одну кнопку); правильний — червона, синя, зелена, жовта (TBD_CODE_VALUE).
+# Результат: WRONG_CODE 2 з 5, ACCESS_GRANTED 1 з 5. Помилкових відчинень немає (жоден неправильний код
+#   не відчинив), дублів символів немає. У 7 групах із 12 зараховано 3 з 4 натискань (або менше):
+#   губиться натискання, що припадає на другу зйомку поспіль (TAMPER від натискань → зйомка → наступне
+#   натискання → наступна зйомка). DIAG buttons late=26 key_lost=0 — 26 натискань під час зйомок
+#   додала EXTI-черга, але частину черга не отримала. — issue #54.
+# Підсумок FR-10: FAIL (через втрату натискань під час зйомок; логіка коду і FSM — без помилок).
+#
+# --- FR-10 ---
++   2.014 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=s�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.371 ST,MPU6050,WARN,who=0x68,a_g=1.113,ax_g=0.108,ay_g=0.014,az_g=1.108,gyro_max_dps=12.1,t_c=23.1
++   3.376 ST,BMP180,OK,id=0x55,t_c=20.2,p_hpa=989.75
++   3.397 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.402 ST,DHT11,OK,t_c=21.3,rh=53.8,raw=3508150355,crc=OK
++   3.417 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.735 LOG,MOUNT,result=mounted,valid=1132,damaged=1,next_seq=1135,boot=92,head=1135,us=255324
++   3.840 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.845 STACK reserved=4096 used=720 free=3376
++   3.847 HEAP arena=1468 used=1468 free=0
++   3.969 EVT,id=1136,t_ms=1952,name=DOOR_CLOSED,arg=0,flash=ok
++   3.973 EVT t_us=121649 name=fsm_door_closed
++  21.046 EVT t_us=17194890 name=pir_trig
++  21.053 EVT t_us=17208386 name=fsm_motion
++  27.366 EVT t_us=23503653 name=pir_trig
++  29.295 EVT t_us=25446302 name=btn_b1_press
++  29.298 EVT t_us=25450050 name=btn_b1_handled
++  29.319 EVT,id=1137,t_ms=27268,name=LOCK_ACTIVATED,arg=15000,flash=ok
++  29.323 EVT t_us=25470079 name=fsm_lock_request
++  33.946 EVT t_us=30085676 name=pir_trig
++  33.953 EVT t_us=30108403 name=fsm_motion
++  39.046 EVT t_us=35191471 name=pir_trig
++  44.342 EVT,id=1138,t_ms=42268,name=LOCKED,arg=15000,flash=ok
++  68.606 EVT t_us=64740140 name=pir_trig
++  70.750 CAM,photo,event=1139,status=ok,cap=ok,capture_us=1282584,store_us=847346,aec=ok
++  70.757 EVT,id=1139,t_ms=66513,name=MOTION,arg=0,flash=ok
++  70.761 EVT t_us=64768400 name=fsm_motion
++  70.817 EVT,id=1140,t_ms=68560,name=PHOTO,arg=350,ref=1139,flash=ok
++  70.821 EVT t_us=64768422 name=capture_start
++  70.825 EVT t_us=66053418 name=capture_done
++  70.830 EVT t_us=66053425 name=flash_wr_start
++  70.834 EVT t_us=66900779 name=flash_wr_done
++  70.838 EVT t_us=66800986 name=code_key_press
++  70.841 EVT t_us=66923545 name=code_key_handled
++  71.435 EVT t_us=67570057 name=code_key_press
++  71.439 EVT t_us=67590055 name=code_key_handled
++  71.567 EVT t_us=67720060 name=code_key_dup_2
++  73.949 CAM,photo,event=1141,status=ok,cap=ok,capture_us=1508055,store_us=847626,aec=ok
++  73.956 EVT,id=1141,t_ms=69399,name=TAMPER,arg=614,flash=ok
++  73.960 EVT t_us=67741655 name=fsm_tamper
++  73.964 EVT t_us=67741671 name=capture_start
++  74.015 EVT,id=1142,t_ms=71671,name=PHOTO,arg=351,ref=1141,flash=ok
++  74.020 EVT t_us=69252138 name=capture_done
++  74.024 EVT t_us=69252145 name=flash_wr_start
++  76.090 CAM,photo,event=1144,status=ok,cap=ok,capture_us=1198244,store_us=856146,aec=ok
++  76.098 EVT,id=1143,t_ms=71751,name=WRONG_CODE,arg=4,flash=ok
++  76.101 EVT t_us=70099779 name=flash_wr_done
++  76.105 EVT t_us=68027671 name=code_key_press
++  76.156 EVT,id=1144,t_ms=71751,name=TAMPER,arg=562,flash=ok
++  76.162 EVT t_us=70122545 name=code_key_handled
++  76.166 EVT t_us=68968430 name=code_key_press
++  76.175 EVT,id=1145,t_ms=73726,name=PHOTO,arg=352,ref=1144,flash=ok
++  76.179 EVT t_us=70122556 name=code_key_handled
++  76.183 EVT t_us=70182346 name=fsm_code_wrong
++  76.188 EVT t_us=70182355 name=fsm_tamper
++  76.192 EVT t_us=70183962 name=capture_start
++  76.195 EVT t_us=71384618 name=capture_done
++  76.199 EVT t_us=71384626 name=flash_wr_start
++  76.203 EVT t_us=72240779 name=flash_wr_done
++  76.207 EVT t_us=71461835 name=pir_trig
++  88.407 EVT t_us=84540060 name=code_key_press
++  88.411 EVT t_us=84560068 name=code_key_handled
++  88.496 EVT t_us=84650057 name=code_key_dup_4
++  91.018 CAM,photo,event=1146,status=ok,cap=ok,capture_us=1627896,store_us=855786,aec=ok
++  91.025 EVT,id=1146,t_ms=86149,name=TAMPER,arg=110,flash=ok
++  91.028 EVT t_us=84681654 name=fsm_tamper
++  91.032 EVT t_us=84681670 name=capture_start
++  91.084 EVT,id=1147,t_ms=88552,name=PHOTO,arg=353,ref=1146,flash=ok
++  91.089 EVT t_us=86311978 name=capture_done
++  91.092 EVT t_us=86311986 name=flash_wr_start
++  93.146 CAM,photo,event=1148,status=ok,cap=ok,capture_us=1190092,store_us=851306,aec=ok
++  93.153 EVT,id=1148,t_ms=88631,name=TAMPER,arg=147,flash=ok
++  93.157 EVT t_us=87167779 name=flash_wr_done
++  93.161 EVT t_us=85694733 name=code_key_press
++  93.212 EVT,id=1149,t_ms=90591,name=PHOTO,arg=354,ref=1148,flash=ok
++  93.217 EVT t_us=87190546 name=code_key_handled
++  93.221 EVT t_us=86170164 name=code_key_press
++  93.229 EVT,id=1150,t_ms=90672,name=WRONG_CODE,arg=4,flash=ok
++  93.233 EVT t_us=87190558 name=code_key_handled
++  93.237 EVT t_us=87250347 name=fsm_tamper
++  93.242 EVT t_us=87251954 name=capture_start
++  93.245 EVT t_us=88444458 name=capture_done
++  93.251 EVT t_us=88444466 name=flash_wr_start
++  93.255 EVT t_us=89295779 name=flash_wr_done
++  93.258 EVT t_us=87292851 name=code_key_press
++  93.262 EVT t_us=89318930 name=code_key_handled
++  93.268 EVT t_us=89378828 name=fsm_code_wrong
++  97.816 EVT t_us=93950045 name=code_key_press
++  97.820 EVT t_us=93970066 name=code_key_handled
++  97.936 EVT t_us=94090059 name=code_key_dup_4
++ 100.614 CAM,photo,event=1151,status=ok,cap=ok,capture_us=1784048,store_us=855626,aec=ok
++ 100.621 EVT,id=1151,t_ms=95408,name=TAMPER,arg=151,flash=ok
++ 100.625 EVT t_us=94121662 name=fsm_tamper
++ 100.628 EVT t_us=94121678 name=capture_start
++ 100.737 EVT,id=1152,t_ms=97964,name=PHOTO,arg=355,ref=1151,flash=ok
++ 100.742 EVT t_us=95908138 name=capture_done
++ 100.746 EVT t_us=95908145 name=flash_wr_start
++ 102.753 CAM,photo,event=1153,status=ok,cap=ok,capture_us=1133249,store_us=862146,aec=ok
++ 102.760 EVT,id=1153,t_ms=98100,name=TAMPER,arg=72,flash=ok
++ 102.764 EVT t_us=96763779 name=flash_wr_done
++ 102.768 EVT t_us=94642870 name=code_key_press
++ 102.819 EVT,id=1154,t_ms=100016,name=PHOTO,arg=356,ref=1153,flash=ok
++ 102.824 EVT t_us=96786550 name=code_key_handled
++ 102.828 EVT t_us=95759036 name=code_key_press
++ 102.834 EVT t_us=96786562 name=code_key_handled
++ 102.837 EVT t_us=96903350 name=fsm_tamper
++ 102.841 EVT t_us=96904957 name=capture_start
++ 102.845 EVT t_us=98040618 name=capture_done
++ 102.850 EVT t_us=98040626 name=flash_wr_start
++ 102.854 EVT t_us=98902779 name=flash_wr_done
++ 108.175 EVT t_us=104310055 name=code_key_press
++ 108.180 EVT t_us=104330050 name=code_key_handled
++ 108.256 EVT t_us=104410051 name=code_key_dup_4
++ 110.207 CAM,photo,event=1155,status=ok,cap=ok,capture_us=1060226,store_us=853466,aec=ok
++ 110.215 EVT,id=1155,t_ms=105547,name=TAMPER,arg=32,flash=ok
++ 110.218 EVT t_us=104441644 name=fsm_tamper
++ 110.222 EVT t_us=104441660 name=capture_start
++ 110.273 EVT,id=1156,t_ms=107378,name=PHOTO,arg=357,ref=1155,flash=ok
++ 110.278 EVT t_us=105504298 name=capture_done
++ 110.282 EVT t_us=105504306 name=flash_wr_start
++ 110.288 EVT t_us=106357779 name=flash_wr_done
++ 116.587 EVT t_us=112720055 name=code_key_press
++ 116.591 EVT t_us=112740066 name=code_key_handled
++ 118.729 CAM,photo,event=1157,status=ok,cap=ok,capture_us=1090146,store_us=845546,aec=ok
++ 118.737 EVT,id=1157,t_ms=113952,name=TAMPER,arg=177,flash=ok
++ 118.740 EVT t_us=112941627 name=fsm_tamper
++ 118.744 EVT t_us=112941660 name=capture_start
++ 118.796 EVT,id=1158,t_ms=115805,name=PHOTO,arg=358,ref=1157,flash=ok
++ 118.801 EVT t_us=114034218 name=capture_done
++ 118.804 EVT t_us=114034225 name=flash_wr_start
++ 120.877 CAM,photo,event=1159,status=ok,cap=ok,capture_us=1200041,store_us=860066,aec=ok
++ 120.884 EVT,id=1159,t_ms=115886,name=TAMPER,arg=198,flash=ok
++ 120.888 EVT t_us=114879779 name=flash_wr_done
++ 120.892 EVT t_us=113530056 name=code_key_press
++ 120.944 EVT,id=1160,t_ms=117864,name=PHOTO,arg=359,ref=1159,flash=ok
++ 120.949 EVT t_us=114902837 name=code_key_handled
++ 120.953 EVT t_us=114673801 name=code_key_press
++ 120.959 EVT t_us=114902849 name=code_key_handled
++ 120.962 EVT t_us=114962638 name=fsm_tamper
++ 120.968 EVT t_us=114964245 name=capture_start
++ 120.971 EVT t_us=116166698 name=capture_done
++ 120.975 EVT t_us=116166706 name=flash_wr_start
++ 120.979 EVT t_us=117026779 name=flash_wr_done
++ 138.027 EVT t_us=134176723 name=pir_trig
++ 140.063 CAM,photo,event=1161,status=ok,cap=ok,capture_us=1168004,store_us=853746,aec=ok
++ 140.070 EVT,id=1161,t_ms=135003,name=MOTION,arg=0,flash=ok
++ 140.074 EVT t_us=134188580 name=fsm_motion
++ 140.129 EVT,id=1162,t_ms=136942,name=PHOTO,arg=360,ref=1161,flash=ok
++ 140.134 EVT t_us=134188601 name=capture_start
++ 140.138 EVT t_us=135359018 name=capture_done
++ 140.144 EVT t_us=135359026 name=flash_wr_start
++ 140.147 EVT t_us=136212779 name=flash_wr_done
++ 143.250 CAM,photo,event=1163,status=ok,cap=ok,capture_us=1993654,store_us=842026,aec=ok
++ 143.258 EVT,id=1163,t_ms=137289,name=TAMPER,arg=128,flash=ok
++ 143.261 EVT t_us=136561655 name=fsm_tamper
++ 143.265 EVT t_us=136561671 name=capture_start
++ 143.316 EVT,id=1164,t_ms=140043,name=PHOTO,arg=361,ref=1163,flash=ok
++ 143.321 EVT t_us=138557738 name=capture_done
++ 143.325 EVT t_us=138557746 name=flash_wr_start
++ 145.389 CAM,photo,event=1165,status=ok,cap=ok,capture_us=1203561,store_us=847546,aec=ok
++ 145.396 EVT,id=1165,t_ms=140124,name=TAMPER,arg=100,flash=ok
++ 145.400 EVT t_us=139399779 name=flash_wr_done
++ 145.404 EVT t_us=137290971 name=code_key_press
++ 145.456 EVT,id=1166,t_ms=142094,name=PHOTO,arg=362,ref=1165,flash=ok
++ 145.461 EVT t_us=139422838 name=code_key_handled
++ 145.465 EVT t_us=138419699 name=code_key_press
++ 145.471 EVT t_us=139422850 name=code_key_handled
++ 145.474 EVT t_us=138924820 name=code_key_press
++ 145.479 EVT t_us=139422862 name=code_key_handled
++ 145.482 EVT t_us=139482638 name=fsm_tamper
++ 145.486 EVT t_us=139484245 name=capture_start
++ 145.490 EVT t_us=140690218 name=capture_done
++ 145.495 EVT t_us=140690226 name=flash_wr_start
++ 145.499 EVT t_us=141537779 name=flash_wr_done
++ 145.502 EVT t_us=140799816 name=pir_trig
++ 149.188 EVT t_us=145332241 name=btn_b1_press
++ 149.192 EVT t_us=145340053 name=btn_b1_handled
++ 149.209 EVT t_us=145361658 name=fsm_lock_request
++ 150.448 EVT t_us=146587174 name=pir_trig
++ 152.843 CAM,photo,event=1167,status=ok,cap=ok,capture_us=1542869,store_us=837866,aec=ok
++ 152.850 EVT,id=1167,t_ms=147156,name=MOTION,arg=0,flash=ok
++ 152.854 EVT t_us=146608594 name=fsm_motion
++ 152.909 EVT,id=1168,t_ms=149457,name=PHOTO,arg=363,ref=1167,flash=ok
++ 152.914 EVT t_us=146608616 name=capture_start
++ 152.918 EVT t_us=148153898 name=capture_done
++ 152.923 EVT t_us=148153906 name=flash_wr_start
++ 152.927 EVT t_us=148991779 name=flash_wr_done
++ 170.288 EVT t_us=166435424 name=pir_trig
++ 173.124 CAM,photo,event=1169,status=ok,cap=ok,capture_us=1961448,store_us=861306,aec=ok
++ 173.131 EVT,id=1169,t_ms=166892,name=MOTION,arg=0,flash=ok
++ 173.135 EVT t_us=166448560 name=fsm_motion
++ 173.190 EVT,id=1170,t_ms=169632,name=PHOTO,arg=364,ref=1169,flash=ok
++ 173.195 EVT t_us=166448598 name=capture_start
++ 173.199 EVT t_us=168412458 name=capture_done
++ 173.205 EVT t_us=168412465 name=flash_wr_start
++ 173.208 EVT t_us=169273779 name=flash_wr_done
++ 174.028 EVT t_us=170179692 name=pir_trig
++ 185.388 EVT t_us=181521212 name=pir_trig
++ 188.037 CAM,photo,event=1171,status=ok,cap=ok,capture_us=1788793,store_us=845946,aec=ok
++ 188.044 EVT,id=1171,t_ms=181891,name=MOTION,arg=0,flash=ok
++ 188.048 EVT t_us=181548590 name=fsm_motion
++ 188.103 EVT,id=1172,t_ms=184445,name=PHOTO,arg=365,ref=1171,flash=ok
++ 188.108 EVT t_us=181548612 name=capture_start
++ 188.112 EVT t_us=183339818 name=capture_done
++ 188.117 EVT t_us=183339826 name=flash_wr_start
++ 188.121 EVT t_us=184185779 name=flash_wr_done
++ 188.688 EVT t_us=184821014 name=pir_trig
++ 193.108 EVT t_us=189257057 name=pir_trig
++ 195.524 CAM,photo,event=1173,status=ok,cap=ok,capture_us=1299426,store_us=869266,aec=ok
++ 195.531 EVT,id=1173,t_ms=189755,name=TAMPER,arg=322,flash=ok
++ 195.535 EVT t_us=189501644 name=fsm_tamper
++ 195.539 EVT t_us=189501660 name=capture_start
++ 195.590 EVT,id=1174,t_ms=191840,name=PHOTO,arg=366,ref=1173,flash=ok
++ 195.595 EVT t_us=190803498 name=capture_done
++ 195.599 EVT t_us=190803505 name=flash_wr_start
++ 197.650 CAM,photo,event=1175,status=ok,cap=ok,capture_us=1176321,store_us=861786,aec=ok
++ 197.656 EVT,id=1175,t_ms=191921,name=TAMPER,arg=122,flash=ok
++ 197.660 EVT t_us=191672779 name=flash_wr_done
++ 197.664 EVT t_us=191755638 name=fsm_tamper
++ 197.715 EVT,id=1176,t_ms=193880,name=PHOTO,arg=367,ref=1175,flash=ok
++ 197.720 EVT t_us=191757245 name=capture_start
++ 197.724 EVT t_us=192935978 name=capture_done
++ 199.773 CAM,photo,event=1177,status=ok,cap=ok,capture_us=1183798,store_us=853306,aec=ok
++ 199.780 EVT,id=1177,t_ms=193961,name=MOTION,arg=0,flash=ok
++ 199.784 EVT t_us=192935986 name=flash_wr_start
++ 199.788 EVT t_us=193797779 name=flash_wr_done
++ 199.839 EVT,id=1178,t_ms=195916,name=PHOTO,arg=368,ref=1177,flash=ok
++ 199.844 EVT t_us=193446371 name=pir_trig
++ 199.895 EVT t_us=193880636 name=fsm_motion
++ 199.904 EVT t_us=193882248 name=capture_start
++ 199.908 EVT t_us=195068458 name=capture_done
++ 199.913 EVT t_us=195068466 name=flash_wr_start
++ 199.917 EVT t_us=195921779 name=flash_wr_done
++ 204.030 CAM,photo,event=1179,status=ok,cap=ok,capture_us=1729339,store_us=845346,aec=ok
++ 204.038 EVT,id=1179,t_ms=197592,name=TAMPER,arg=69,flash=ok
++ 204.041 EVT t_us=197601650 name=fsm_tamper
++ 204.045 EVT t_us=197601666 name=capture_start
++ 204.096 EVT,id=1180,t_ms=200083,name=PHOTO,arg=369,ref=1179,flash=ok
++ 204.101 EVT t_us=199333418 name=capture_done
++ 204.105 EVT t_us=199333425 name=flash_wr_start
++ 204.114 EVT,id=1181,t_ms=200164,name=ACCESS_GRANTED,arg=4,flash=ok
++ 204.118 EVT t_us=200178779 name=flash_wr_done
++ 204.122 EVT t_us=197596466 name=code_key_press
++ 204.129 EVT,id=1182,t_ms=200164,name=UNLOCKED,arg=0,flash=ok
++ 204.133 EVT t_us=200201744 name=code_key_handled
++ 204.137 EVT t_us=198503112 name=code_key_press
++ 204.142 EVT t_us=200201757 name=code_key_handled
++ 204.146 EVT t_us=199053080 name=code_key_press
++ 204.152 EVT t_us=200201769 name=code_key_handled
++ 204.156 EVT t_us=199794427 name=code_key_press
++ 204.160 EVT t_us=200201781 name=code_key_handled
++ 204.164 EVT t_us=200261630 name=fsm_code_ok
++ 204.167 EVT t_us=200261644 name=fsm_tamper
++ 213.098 EVT t_us=209240108 name=btn_b1_press
++ 213.102 EVT t_us=209250055 name=btn_b1_handled
++ 213.122 EVT,id=1183,t_ms=209162,name=LOCK_ACTIVATED,arg=15000,flash=ok
++ 213.126 EVT t_us=209270077 name=fsm_lock_request
++ 214.689 EVT t_us=210821321 name=pir_trig
++ 214.696 EVT t_us=210848591 name=fsm_motion
++ 228.138 EVT,id=1184,t_ms=224162,name=LOCKED,arg=15000,flash=ok
++ 237.080 CAM,photo,event=1185,status=ok,cap=ok,capture_us=1562777,store_us=841906,aec=ok
++ 237.088 EVT,id=1185,t_ms=230692,name=TAMPER,arg=856,flash=ok
++ 237.091 EVT t_us=230821653 name=fsm_tamper
++ 237.095 EVT t_us=230821669 name=capture_start
++ 237.147 EVT,id=1186,t_ms=233014,name=PHOTO,arg=370,ref=1185,flash=ok
++ 237.152 EVT t_us=232386858 name=capture_done
++ 237.156 EVT t_us=232386866 name=flash_wr_start
++ 239.238 CAM,photo,event=1187,status=ok,cap=ok,capture_us=1203685,store_us=867426,aec=ok
++ 239.246 EVT,id=1187,t_ms=233095,name=TAMPER,arg=835,flash=ok
++ 239.250 EVT t_us=233228779 name=flash_wr_done
++ 239.254 EVT t_us=231423412 name=code_key_press
++ 239.306 EVT,id=1188,t_ms=235085,name=PHOTO,arg=371,ref=1187,flash=ok
++ 239.311 EVT t_us=233251833 name=code_key_handled
++ 239.315 EVT t_us=231912456 name=code_key_press
++ 239.321 EVT t_us=233251845 name=code_key_handled
++ 239.324 EVT t_us=233311634 name=fsm_tamper
++ 239.329 EVT t_us=233313241 name=capture_start
++ 239.333 EVT t_us=234519338 name=capture_done
++ 239.337 EVT t_us=234519346 name=flash_wr_start
++ 239.341 EVT t_us=235386779 name=flash_wr_done
++ 246.858 EVT t_us=242990051 name=code_key_press
++ 246.862 EVT t_us=243010065 name=code_key_handled
++ 249.900 CAM,photo,event=1189,status=ok,cap=ok,capture_us=2057651,store_us=866025,aec=ok
++ 249.907 EVT,id=1189,t_ms=242807,name=TAMPER,arg=60,flash=ok
++ 249.911 EVT t_us=243121659 name=fsm_tamper
++ 249.914 EVT t_us=243121675 name=capture_start
++ 249.966 EVT,id=1190,t_ms=245649,name=PHOTO,arg=372,ref=1189,flash=ok
++ 249.971 EVT t_us=245181738 name=capture_done
++ 249.975 EVT t_us=245181746 name=flash_wr_start
++ 252.032 CAM,photo,event=1191,status=ok,cap=ok,capture_us=1179567,store_us=865546,aec=ok
++ 252.039 EVT,id=1191,t_ms=245729,name=TAMPER,arg=64,flash=ok
++ 252.043 EVT t_us=246047779 name=flash_wr_done
++ 252.047 EVT t_us=246070735 name=code_key_dup_1
++ 252.099 EVT,id=1192,t_ms=247693,name=PHOTO,arg=373,ref=1191,flash=ok
++ 252.104 EVT t_us=246130631 name=fsm_tamper
++ 252.108 EVT t_us=246132239 name=capture_start
++ 252.113 EVT t_us=247314218 name=capture_done
++ 252.117 EVT t_us=247314226 name=flash_wr_start
++ 252.121 EVT t_us=248179779 name=flash_wr_done
++ 261.622 CAM,photo,event=1193,status=ok,cap=ok,capture_us=1066297,store_us=859386,aec=ok
++ 261.629 EVT,id=1193,t_ms=255347,name=TAMPER,arg=12,flash=ok
++ 261.633 EVT t_us=255841653 name=fsm_tamper
++ 261.637 EVT t_us=255841669 name=capture_start
++ 261.688 EVT,id=1194,t_ms=257189,name=PHOTO,arg=374,ref=1193,flash=ok
++ 261.693 EVT t_us=256910378 name=capture_done
++ 261.697 EVT t_us=256910386 name=flash_wr_start
++ 263.753 CAM,photo,event=1195,status=ok,cap=ok,capture_us=1186207,store_us=857906,aec=ok
++ 263.760 EVT,id=1195,t_ms=257270,name=TAMPER,arg=16,flash=ok
++ 263.764 EVT t_us=257769779 name=flash_wr_done
++ 263.768 EVT t_us=256178164 name=code_key_press
++ 263.820 EVT,id=1196,t_ms=259233,name=PHOTO,arg=375,ref=1195,flash=ok
++ 263.826 EVT t_us=257792743 name=code_key_handled
++ 263.830 EVT t_us=256526995 name=code_key_press
++ 263.835 EVT t_us=257792755 name=code_key_handled
++ 263.839 EVT t_us=257852631 name=fsm_tamper
++ 263.843 EVT t_us=257854238 name=capture_start
++ 263.846 EVT t_us=259042858 name=capture_done
++ 263.893 EVT t_us=259042866 name=flash_wr_start
++ 263.897 EVT t_us=259900779 name=flash_wr_done
++ 278.270 EVT t_us=274417395 name=btn_b1_press
++ 278.274 EVT t_us=274420059 name=btn_b1_handled
++ 278.291 EVT t_us=274441662 name=fsm_lock_request
++ 279.610 EVT t_us=275746779 name=pir_trig
++ 281.880 CAM,photo,event=1197,status=ok,cap=ok,capture_us=1397910,store_us=857826,aec=ok
++ 281.887 EVT,id=1197,t_ms=275081,name=MOTION,arg=0,flash=ok
++ 281.891 EVT t_us=275768594 name=fsm_motion
++ 281.946 EVT,id=1198,t_ms=277256,name=PHOTO,arg=376,ref=1197,flash=ok
++ 281.951 EVT t_us=275768616 name=capture_start
++ 281.955 EVT t_us=277168938 name=capture_done
++ 281.961 EVT t_us=277168946 name=flash_wr_start
++ 281.964 EVT t_us=278026779 name=flash_wr_done
++ 311.739 CAM,photo,event=1199,status=ok,cap=ok,capture_us=1819574,store_us=862106,aec=ok
++ 311.746 EVT,id=1199,t_ms=304397,name=TAMPER,arg=100,flash=ok
++ 311.750 EVT t_us=305201656 name=fsm_tamper
++ 311.754 EVT t_us=305201672 name=capture_start
++ 311.805 EVT,id=1200,t_ms=306996,name=PHOTO,arg=377,ref=1199,flash=ok
++ 311.810 EVT t_us=307023658 name=capture_done
++ 311.814 EVT t_us=307023666 name=flash_wr_start
++ 313.863 CAM,photo,event=1201,status=ok,cap=ok,capture_us=1183480,store_us=853626,aec=ok
++ 313.870 EVT,id=1201,t_ms=307077,name=TAMPER,arg=89,flash=ok
++ 313.874 EVT t_us=307885779 name=flash_wr_done
++ 313.878 EVT t_us=307968638 name=fsm_tamper
++ 313.929 EVT,id=1202,t_ms=309032,name=PHOTO,arg=378,ref=1201,flash=ok
++ 313.934 EVT t_us=307970245 name=capture_start
++ 313.938 EVT t_us=309156138 name=capture_done
++ 313.943 EVT t_us=309156145 name=flash_wr_start
++ 313.947 EVT t_us=310009779 name=flash_wr_done
++ 316.911 EVT t_us=313056834 name=btn_b1_press
++ 316.915 EVT t_us=313060056 name=btn_b1_handled
++ 316.931 EVT t_us=313081654 name=fsm_lock_request
++ 317.894 EVT t_us=314001716 name=pir_trig
++ 320.267 CAM,photo,event=1203,status=ok,cap=ok,capture_us=1498501,store_us=860186,aec=ok
++ 320.275 EVT,id=1203,t_ms=313068,name=MOTION,arg=0,flash=ok
++ 320.279 EVT t_us=314052627 name=fsm_motion
++ 320.335 EVT,id=1204,t_ms=315343,name=PHOTO,arg=379,ref=1203,flash=ok
++ 320.340 EVT t_us=314052665 name=capture_start
++ 320.344 EVT t_us=315553578 name=capture_done
++ 320.350 EVT t_us=315553585 name=flash_wr_start
++ 320.353 EVT t_us=316413779 name=flash_wr_done
++ 348.340 EVT t_us=344470047 name=code_key_press
++ 348.344 EVT t_us=344490052 name=code_key_handled
++ 351.186 CAM,photo,event=1205,status=ok,cap=ok,capture_us=1810452,store_us=857226,aec=ok
++ 351.193 EVT,id=1205,t_ms=343554,name=TAMPER,arg=190,flash=ok
++ 351.197 EVT t_us=344661658 name=fsm_tamper
++ 351.201 EVT t_us=344661674 name=capture_start
++ 351.252 EVT,id=1206,t_ms=346141,name=PHOTO,arg=380,ref=1205,flash=ok
++ 351.257 EVT t_us=346474538 name=capture_done
++ 351.261 EVT t_us=346474545 name=flash_wr_start
++ 353.333 CAM,photo,event=1207,status=ok,cap=ok,capture_us=1188367,store_us=871746,aec=ok
++ 353.340 EVT,id=1207,t_ms=346221,name=TAMPER,arg=109,flash=ok
++ 353.344 EVT t_us=347331779 name=flash_wr_done
++ 353.348 EVT t_us=345175745 name=code_key_press
++ 353.400 EVT,id=1208,t_ms=348199,name=PHOTO,arg=381,ref=1207,flash=ok
++ 353.406 EVT t_us=347354839 name=code_key_handled
++ 353.410 EVT t_us=346246345 name=code_key_press
++ 353.415 EVT t_us=347354851 name=code_key_handled
++ 353.419 EVT t_us=347414632 name=fsm_tamper
++ 353.423 EVT t_us=347416239 name=capture_start
++ 353.426 EVT t_us=348607018 name=capture_done
++ 353.430 EVT t_us=348607026 name=flash_wr_start
++ 353.434 EVT t_us=349478779 name=flash_wr_done
++ 373.520 EVT t_us=369669660 name=btn_b1_press
++ 373.524 EVT t_us=369670050 name=btn_b1_handled
++ 373.540 EVT t_us=369690075 name=fsm_lock_request
++ 373.551 EVT t_us=369682442 name=pir_trig
++ 375.714 CAM,photo,event=1209,status=ok,cap=ok,capture_us=1287042,store_us=861706,aec=ok
++ 375.721 EVT,id=1209,t_ms=368404,name=MOTION,arg=0,flash=ok
++ 375.725 EVT t_us=369708581 name=fsm_motion
++ 375.780 EVT,id=1210,t_ms=370471,name=PHOTO,arg=382,ref=1209,flash=ok
++ 375.785 EVT t_us=369708603 name=capture_start
++ 375.789 EVT t_us=370998058 name=capture_done
++ 375.794 EVT t_us=370998066 name=flash_wr_start
++ 375.798 EVT t_us=371859779 name=flash_wr_done
++ 397.972 EVT t_us=394110883 name=pir_trig
++ 400.231 CAM,photo,event=1211,status=ok,cap=ok,capture_us=1390565,store_us=854186,aec=ok
++ 400.238 EVT,id=1211,t_ms=392713,name=MOTION,arg=0,flash=ok
++ 400.241 EVT t_us=394128579 name=fsm_motion
++ 400.297 EVT,id=1212,t_ms=394875,name=PHOTO,arg=383,ref=1211,flash=ok
++ 400.302 EVT t_us=394128601 name=capture_start
++ 400.306 EVT t_us=395521578 name=capture_done
++ 400.311 EVT t_us=395521585 name=flash_wr_start
++ 400.315 EVT t_us=396375779 name=flash_wr_done
++ 403.437 CAM,photo,event=1213,status=ok,cap=ok,capture_us=1796207,store_us=861466,aec=ok
++ 403.445 EVT,id=1213,t_ms=395419,name=TAMPER,arg=82,flash=ok
++ 403.448 EVT t_us=396921663 name=fsm_tamper
++ 403.451 EVT t_us=396921679 name=capture_start
++ 403.503 EVT,id=1214,t_ms=397994,name=PHOTO,arg=384,ref=1213,flash=ok
++ 403.508 EVT t_us=398720298 name=capture_done
++ 403.512 EVT t_us=398720306 name=flash_wr_start
++ 405.554 CAM,photo,event=1215,status=ok,cap=ok,capture_us=1184123,store_us=845986,aec=ok
++ 405.561 EVT,id=1215,t_ms=398075,name=TAMPER,arg=53,flash=ok
++ 405.565 EVT t_us=399581779 name=flash_wr_done
++ 405.569 EVT t_us=396911907 name=code_key_press
++ 405.621 EVT,id=1216,t_ms=400024,name=PHOTO,arg=385,ref=1215,flash=ok
++ 405.626 EVT t_us=399604740 name=code_key_handled
++ 405.630 EVT t_us=397512992 name=code_key_press
++ 405.636 EVT t_us=399604753 name=code_key_handled
++ 405.640 EVT t_us=398143132 name=code_key_press
++ 405.644 EVT t_us=399604765 name=code_key_handled
++ 405.648 EVT t_us=399664636 name=fsm_tamper
++ 405.653 EVT t_us=399666243 name=capture_start
++ 405.657 EVT t_us=400852778 name=capture_done
++ 405.661 EVT t_us=400852786 name=flash_wr_start
++ 405.664 EVT t_us=401698779 name=flash_wr_done
++ 405.668 EVT t_us=401731491 name=pir_trig
++ 411.352 EVT t_us=407489275 name=pir_trig
++ 414.094 CAM,photo,event=1217,status=ok,cap=ok,capture_us=1871666,store_us=856066,aec=ok
++ 414.101 EVT,id=1217,t_ms=405825,name=MOTION,arg=0,flash=ok
++ 414.105 EVT t_us=407508597 name=fsm_motion
++ 414.160 EVT,id=1218,t_ms=408470,name=PHOTO,arg=386,ref=1217,flash=ok
++ 414.165 EVT t_us=407508620 name=capture_start
++ 414.169 EVT t_us=409382698 name=capture_done
++ 414.175 EVT t_us=409382706 name=flash_wr_start
++ 414.178 EVT t_us=410238779 name=flash_wr_done
++ 420.096 > STATS
++ 420.103 STATS_BEGIN git=f5dc804 t_us=416250068 loops=14152689
++ 420.108 STAT name=loop n=14152689 min_us=16 avg_us=25 max_us=2948668
++ 420.136 JITTER name=buttons period_us=10000 min_us=-8798 max_us=2940676 missed=238
++ 420.158 JITTER name=security period_us=20000 min_us=-12337 max_us=2930684 missed=238
++ 420.195 STAT name=camera n=37 min_us=1923947 avg_us=2292937 max_us=2933928
++ 420.245 STAT name=btn_b1_lat n=6 min_us=383 avg_us=4623 max_us=9940
++ 420.253 STAT name=pir_lat n=22 min_us=376 avg_us=101274 max_us=802294
++ 420.270 STAT name=camera n=37 min_us=1060226 avg_us=1427185 max_us=2057651
++ 420.276 STAT name=flash_frame n=37 min_us=837866 avg_us=855500 max_us=871746
++ 420.287 EVQ len=8 pending=0 max_depth=2 posted=51 dropped=0
++ 420.293 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
++ 420.295 EVTLOG pending=1 dropped=0
++ 420.300 DIAG name=fsm state=LOCKED ignored=8 cam_rejected=0
++ 420.305 DIAG name=buttons dropped=0 late=26 key_lost=0
++ 420.312 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++ 420.318 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++ 420.326 DIAG name=journal pending=0 max_depth=3 stored=83 unsaved=0 dropped=0 last_seq=1218
++ 420.335 DIAG name=camlink requested=37 rejected=0 ok=37 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++ 420.344 DIAG name=camera accepted=37 rejected=0 stored=37 capture_err=0 store_err=0 pending=0
++ 420.348 STACK reserved=4096 used=760 free=3336
++ 420.351 HEAP arena=1468 used=1468 free=0
++ 420.352 STATS_END
+#
