@@ -131,6 +131,7 @@
 + 145.459 EVT t_us=140690217 name=flash_wr_start
 + 145.462 EVT t_us=141535777 name=flash_wr_done
 + 270.082 > d
++ 271.018 LOG,addr=0x001CE0,crc=bad
 + 275.084 > STATS
 + 279.081 LOG,SUMMARY,valid=1132,damaged=1,empty=787,first_seq=1,last_seq=1134,order=ok,boot=91
 + 279.086 STATS_BEGIN git=f5dc804 t_us=275243838 loops=10567915
@@ -138,6 +139,7 @@
 + 279.119 JITTER name=buttons period_us=10000 min_us=-7807 max_us=2852780 missed=142
 + 279.142 JITTER name=security period_us=20000 min_us=-10886 max_us=2842781 missed=142
 + 279.179 STAT name=camera n=9 min_us=2052340 avg_us=2294821 max_us=2845945
++ 279.219 STAT name=uart n=282 min_us=1160 avg_us=2059 max_us=8851
 + 279.229 STAT name=btn_b1_lat n=1 min_us=6930 avg_us=6930 max_us=6930
 + 279.237 STAT name=pir_lat n=8 min_us=1618 avg_us=826247 max_us=2507468
 + 279.253 STAT name=camera n=9 min_us=1197783 avg_us=1441448 max_us=2000056
@@ -161,6 +163,7 @@
 + 279.634 JITTER name=buttons period_us=10000 min_us=-8388 max_us=9255881 missed=144
 + 279.657 JITTER name=security period_us=20000 min_us=-10886 max_us=9245881 missed=144
 + 279.693 STAT name=camera n=9 min_us=2052340 avg_us=2294821 max_us=2845945
++ 279.733 STAT name=uart n=290 min_us=4 avg_us=33936 max_us=9259244
 + 279.743 STAT name=btn_b1_lat n=1 min_us=6930 avg_us=6930 max_us=6930
 + 279.752 STAT name=pir_lat n=8 min_us=1618 avg_us=826247 max_us=2507468
 + 279.768 STAT name=camera n=9 min_us=1197783 avg_us=1441448 max_us=2000056

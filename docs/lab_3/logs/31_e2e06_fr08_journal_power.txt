@@ -1,0 +1,178 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-21.
+# Прошивка: main f5dc804 (після злиття PR #50 — стек 4 КБ, і PR #55 — натискання коду через EXTI),
+# у банері git=f5dc804. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make lab3 — PASS,
+# firmware.bin sha256 ff89e2949a5571af8eaed73cac44a075351f95258ad4dd0366dc18e3993ec5e6.
+# Запис: scripts/uart_capture.py, МК скинуто на старті запису. Формат рядка: «+ <с від старту запису> <рядок UART>».
+# Пропущено: LOAD, службові EVT uart_cmd_*, PING/PONG навантаження, відповіді MEM поза STATS; рядки LOG,seq дампу журналу (порівнювались скриптом, див. нижче).
+# E2E-06 «Перезапуск і цілісність журналу W25Q64» (FR-08, FR-10, FR-12), FR-08 (100 подій і кадр після вимкнення
+# живлення), §6.2 «старт після вимкнення живлення» і «відновлення журналу після перерваного запису».
+# Кроки (команди — через --start, оператор лише вимикав живлення):
+#   1. Старт, команда e — 100 пронумерованих подій TEST (seq 1278–1377, arg 1..100); команда d — дамп журналу.
+#   2. USB від'єднано на 10 с (повне вимкнення живлення плати і модулів), підключено знову.
+#   3. Команда d — дамп журналу; CAM LOAD 412 — останній збережений кадр; z — зіпсувати найновіший запис
+#      (модель обриву живлення посеред запису).
+#   4. Скидання МК, d — дамп журналу.
+# Результат:
+#   дамп до: valid=1375 damaged=1 order=ok; дамп після вимкнення: valid=1379 damaged=1 order=ok;
+#   порівняння за seq: 1375 спільних записів, відмінностей 0, зниклих 0; 100/100 подій TEST на місці в тому
+#   самому порядку; нові записи після вимкнення — лише BOOT і подій старту (seq 1378–1381); — PASS
+#   кадр 412 після вимкнення: CAM,load status=ok, event=1274, len=38400, CRC збігається; — PASS
+#   після z і скидання: LOG,MOUNT result=mounted damaged=2 — зіпсований запис пропущено, журнал пише далі
+#   (DOOR_CLOSED id=1382), LOG,SUMMARY order=ok; — PASS
+#   старт після вимкнення живлення: BUILD, self-test fail=0, LOG,MOUNT mounted, BOOT у журналі. — PASS
+# Підсумок: E2E-06 PASS, FR-08 PASS, §6.2 старт/рестарт PASS, відновлення журналу PASS.
+#
+# --- 1. До вимкнення: e, d ---
++   0.866 EVT t_us=1136991699 name=pir_trig
++   1.995 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.011 === Smar�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.368 ST,MPU6050,WARN,who=0x68,a_g=1.111,ax_g=0.114,ay_g=0.024,az_g=1.105,gyro_max_dps=11.8,t_c=23.6
++   3.372 ST,BMP180,OK,id=0x55,t_c=20.6,p_hpa=990.09
++   3.394 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.399 ST,DHT11,OK,t_c=20.9,rh=53.4,raw=3504140956,crc=OK
++   3.414 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.732 LOG,MOUNT,result=mounted,valid=1273,damaged=1,next_seq=1276,boot=94,head=1276,us=256008
++   3.837 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.841 STACK reserved=4096 used=720 free=3376
++   3.844 HEAP arena=1468 used=1468 free=0
++   3.966 EVT,id=1277,t_ms=1953,name=DOOR_CLOSED,arg=0,flash=ok
++   3.970 EVT t_us=121649 name=fsm_door_closed
++   5.047 > e
++   5.318 FLOG,test=100,ok=100,first_seq=1278,last_seq=1377,erases=1,min_us=1762,avg_us=2595,max_us=61998,last=ok
++   5.609 FLOG,readback=PASS,match=100,of=100
++   8.099 > d
++   8.997 LOG,addr=0x001CE0,crc=bad
++  19.014 LOG,SUMMARY,valid=1375,damaged=1,empty=544,first_seq=1,last_seq=1377,order=ok,boot=94
++  41.322 EVT t_us=37467253 name=pir_trig
++  41.329 EVT t_us=37488399 name=fsm_motion
++  55.183 EVT t_us=51330511 name=pir_trig
++  55.189 EVT t_us=51348384 name=fsm_motion
++  67.763 EVT t_us=63914827 name=pir_trig
++  67.770 EVT t_us=63928389 name=fsm_motion
++  75.183 EVT t_us=71333832 name=pir_trig
++  78.233 > STATS
++  78.240 STATS_BEGIN git=f5dc804 t_us=74396356 loops=2714962
++  78.246 STAT name=loop n=2714962 min_us=16 avg_us=23 max_us=10914070
++  78.273 JITTER name=buttons period_us=10000 min_us=-3917 max_us=10907176 missed=35
++  78.295 JITTER name=security period_us=20000 min_us=-12264 max_us=10897176 missed=35
++  78.329 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  78.368 STAT name=uart n=80 min_us=4 avg_us=144924 max_us=10914056
++  78.377 STAT name=btn_b1_lat n=0 min_us=0 avg_us=0 max_us=0
++  78.386 STAT name=pir_lat n=4 min_us=5227 avg_us=8455 max_us=12817
++  78.399 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  78.405 STAT name=flash_frame n=0 min_us=0 avg_us=0 max_us=0
++  78.415 EVQ len=8 pending=0 max_depth=1 posted=4 dropped=0
++  78.421 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
++  78.424 EVTLOG pending=1 dropped=0
++  78.429 DIAG name=fsm state=UNLOCKED ignored=3 cam_rejected=0
++  78.434 DIAG name=buttons dropped=0 late=0 key_lost=0
++  78.441 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++  78.446 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++  78.454 DIAG name=journal pending=0 max_depth=1 stored=1 unsaved=0 dropped=0 last_seq=1377
++  78.464 DIAG name=camlink requested=0 rejected=0 ok=0 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++  78.472 DIAG name=camera accepted=0 rejected=0 stored=0 capture_err=0 store_err=0 pending=0
++  78.476 STACK reserved=4096 used=760 free=3336
++  78.479 HEAP arena=1468 used=1468 free=0
++  78.480 STATS_END
+#
+# --- 3. Після вимкнення живлення: d, CAM LOAD 412, z ---
++   1.976 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   1.993 === SmartLock:�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.350 ST,MPU6050,WARN,who=0x68,a_g=1.109,ax_g=0.105,ay_g=0.027,az_g=1.104,gyro_max_dps=11.8,t_c=23.1
++   3.354 ST,BMP180,OK,id=0x55,t_c=20.5,p_hpa=990.04
++   3.376 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.381 ST,DHT11,OK,t_c=20.9,rh=54.1,raw=3601140954,crc=OK
++   3.396 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.715 LOG,MOUNT,result=mounted,valid=1377,damaged=1,next_seq=1380,boot=96,head=1380,us=256511
++   3.820 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.824 STACK reserved=4096 used=720 free=3376
++   3.827 HEAP arena=1468 used=1468 free=0
++   3.949 EVT,id=1381,t_ms=1954,name=DOOR_CLOSED,arg=0,flash=ok
++   3.953 EVT t_us=121649 name=fsm_door_closed
++   5.033 > d
++   5.930 LOG,addr=0x001CE0,crc=bad
++  10.034 > CAM LOAD 412
++  15.036 > z
++  15.980 LOG,SUMMARY,valid=1379,damaged=1,empty=540,first_seq=1,last_seq=1381,order=ok,boot=96
++  16.152 CAM,load,frame=412,status=ok,event=1274,w=160,h=120,len=38400,crc=0xF7BA1FC1
++  16.157 FLOG,corrupt=DONE,addr=0x00BCA0,seq=1381
++  16.213 EVT t_us=5465825 name=pir_trig
++  16.221 EVT t_us=12395572 name=fsm_motion
++  29.606 EVT t_us=25781657 name=fsm_tamper
++  31.926 EVT t_us=28093115 name=pir_trig
++  31.933 EVT t_us=28108402 name=fsm_motion
++  33.625 EVT t_us=29801658 name=fsm_tamper
++  37.085 EVT t_us=33261655 name=fsm_tamper
++  37.285 EVT t_us=33457345 name=pir_trig
++  41.105 EVT t_us=37268463 name=pir_trig
++  41.112 EVT t_us=37288405 name=fsm_motion
++  41.585 EVT t_us=37761651 name=fsm_tamper
++  44.846 EVT t_us=41021655 name=fsm_tamper
++  78.067 > STATS
++  78.074 STATS_BEGIN git=f5dc804 t_us=74247135 loops=2724811
++  78.080 STAT name=loop n=2724811 min_us=16 avg_us=23 max_us=11130381
++  78.107 JITTER name=buttons period_us=10000 min_us=-4978 max_us=11124067 missed=33
++  78.129 JITTER name=security period_us=20000 min_us=-14977 max_us=11124069 missed=33
++  78.163 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  78.202 STAT name=uart n=82 min_us=4 avg_us=137374 max_us=11130367
++  78.211 STAT name=btn_b1_lat n=0 min_us=0 avg_us=0 max_us=0
++  78.220 STAT name=pir_lat n=4 min_us=2712 avg_us=1724891 max_us=6878297
++  78.233 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  78.239 STAT name=flash_frame n=0 min_us=0 avg_us=0 max_us=0
++  78.249 EVQ len=8 pending=0 max_depth=1 posted=9 dropped=0
++  78.255 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=16
++  78.258 EVTLOG pending=1 dropped=0
++  78.263 DIAG name=fsm state=UNLOCKED ignored=8 cam_rejected=0
++  78.268 DIAG name=buttons dropped=0 late=0 key_lost=0
++  78.275 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++  78.280 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++  78.288 DIAG name=journal pending=0 max_depth=1 stored=1 unsaved=0 dropped=0 last_seq=1381
++  78.298 DIAG name=camlink requested=0 rejected=0 ok=0 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++  78.306 DIAG name=camera accepted=0 rejected=0 stored=0 capture_err=0 store_err=0 pending=0
++  78.310 STACK reserved=4096 used=760 free=3336
++  78.313 HEAP arena=1468 used=1468 free=0
++  78.314 STATS_END
+#
+# --- 4. Після скидання: d ---
++   2.039 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superl�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.396 ST,MPU6050,WARN,who=0x68,a_g=1.115,ax_g=0.112,ay_g=0.029,az_g=1.109,gyro_max_dps=11.7,t_c=23.4
++   3.400 ST,BMP180,OK,id=0x55,t_c=20.5,p_hpa=989.95
++   3.422 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.427 ST,DHT11,OK,t_c=21.0,rh=52.3,raw=340315004C,crc=OK
++   3.442 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.761 LOG,MOUNT,result=mounted,valid=1378,damaged=2,next_seq=1381,boot=97,head=1382,us=256517
++   3.866 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.870 STACK reserved=4096 used=720 free=3376
++   3.873 HEAP arena=1468 used=1468 free=0
++   3.995 EVT,id=1382,t_ms=1954,name=DOOR_CLOSED,arg=0,flash=ok
++   3.999 EVT t_us=121649 name=fsm_door_closed
++   5.076 > d
++   5.973 LOG,addr=0x001CE0,crc=bad
++  16.009 LOG,addr=0x00BCA0,crc=bad
++  16.033 LOG,SUMMARY,valid=1380,damaged=2,empty=538,first_seq=1,last_seq=1382,order=ok,boot=97
++  19.612 EVT t_us=15741648 name=fsm_tamper
++  30.254 > STATS
++  30.260 STATS_BEGIN git=f5dc804 t_us=26389282 loops=665739
++  30.266 STAT name=loop n=665739 min_us=16 avg_us=35 max_us=10956457
++  30.293 JITTER name=buttons period_us=10000 min_us=-3653 max_us=10947139 missed=9
++  30.315 JITTER name=security period_us=20000 min_us=-11911 max_us=10947141 missed=9
++  30.347 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  30.386 STAT name=uart n=25 min_us=4 avg_us=439324 max_us=10956443
++  30.395 STAT name=btn_b1_lat n=0 min_us=0 avg_us=0 max_us=0
++  30.402 STAT name=pir_lat n=0 min_us=0 avg_us=0 max_us=0
++  30.416 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  30.421 STAT name=flash_frame n=0 min_us=0 avg_us=0 max_us=0
++  30.432 EVQ len=8 pending=0 max_depth=1 posted=2 dropped=0
++  30.439 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
++  30.441 EVTLOG pending=1 dropped=0
++  30.446 DIAG name=fsm state=UNLOCKED ignored=1 cam_rejected=0
++  30.450 DIAG name=buttons dropped=0 late=0 key_lost=0
++  30.457 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++  30.463 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++  30.471 DIAG name=journal pending=0 max_depth=1 stored=1 unsaved=0 dropped=0 last_seq=1382
++  30.480 DIAG name=camlink requested=0 rejected=0 ok=0 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++  30.488 DIAG name=camera accepted=0 rejected=0 stored=0 capture_err=0 store_err=0 pending=0
++  30.492 STACK reserved=4096 used=768 free=3328
++  30.496 HEAP arena=1468 used=1468 free=0
++  30.497 STATS_END
+#

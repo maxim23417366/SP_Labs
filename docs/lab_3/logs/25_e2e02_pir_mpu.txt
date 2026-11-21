@@ -150,6 +150,7 @@
 + 240.246 JITTER name=buttons period_us=10000 min_us=-7807 max_us=2461784 missed=128
 + 240.269 JITTER name=security period_us=20000 min_us=-12595 max_us=2451784 missed=128
 + 240.306 STAT name=camera n=10 min_us=1975000 avg_us=2185692 max_us=2448000
++ 240.346 STAT name=uart n=278 min_us=4 avg_us=2460 max_us=8852
 + 240.355 STAT name=btn_b1_lat n=1 min_us=6346 avg_us=6346 max_us=6346
 + 240.364 STAT name=pir_lat n=23 min_us=651 avg_us=8509 max_us=19920
 + 240.379 STAT name=camera n=10 min_us=1098713 avg_us=1320909 max_us=1601756
@@ -264,6 +265,7 @@
 + 240.117 JITTER name=buttons period_us=10000 min_us=-6789 max_us=2977489 missed=123
 + 240.140 JITTER name=security period_us=20000 min_us=-10695 max_us=2967489 missed=123
 + 240.177 STAT name=camera n=7 min_us=2070359 avg_us=2337780 max_us=2964194
++ 240.216 STAT name=uart n=260 min_us=4 avg_us=2033 max_us=8852
 + 240.226 STAT name=btn_b1_lat n=1 min_us=4060 avg_us=4060 max_us=4060
 + 240.234 STAT name=pir_lat n=12 min_us=287 avg_us=11626 max_us=19782
 + 240.250 STAT name=camera n=7 min_us=1197909 avg_us=1470608 max_us=2092345

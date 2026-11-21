@@ -454,6 +454,7 @@
 + 420.136 JITTER name=buttons period_us=10000 min_us=-8798 max_us=2940676 missed=238
 + 420.158 JITTER name=security period_us=20000 min_us=-12337 max_us=2930684 missed=238
 + 420.195 STAT name=camera n=37 min_us=1923947 avg_us=2292937 max_us=2933928
++ 420.235 STAT name=uart n=501 min_us=4 avg_us=3387 max_us=9329
 + 420.245 STAT name=btn_b1_lat n=6 min_us=383 avg_us=4623 max_us=9940
 + 420.253 STAT name=pir_lat n=22 min_us=376 avg_us=101274 max_us=802294
 + 420.270 STAT name=camera n=37 min_us=1060226 avg_us=1427185 max_us=2057651
