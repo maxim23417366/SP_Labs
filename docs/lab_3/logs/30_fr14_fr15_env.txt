@@ -1,0 +1,291 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-21.
+# Прошивка: main f5dc804 (після злиття PR #50 — стек 4 КБ, і PR #55 — натискання коду через EXTI),
+# у банері git=f5dc804. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make lab3 — PASS,
+# firmware.bin sha256 ff89e2949a5571af8eaed73cac44a075351f95258ad4dd0366dc18e3993ec5e6.
+# Запис: scripts/uart_capture.py, МК скинуто на старті запису. Формат рядка: «+ <с від старту запису> <рядок UART>».
+# Пропущено: LOAD, службові EVT uart_cmd_*, PING/PONG навантаження, відповіді MEM поза STATS.
+# FR-14 (DHT11) і FR-15 (BMP180). Межі ENV_WARNING — TBD (sl_env.h): RH > 80 %, T > 40 °C або < 5 °C,
+#   безперервно ≥ 60 с (TBD_ENV_WARN_DURATION_MS). Рядки ENV лишено всі.
+# Результат:
+#   DHT11: T/RH у UART кожні 2 с (ENV,dht=ok,t_c=…,rh=…); — PASS
+#   BMP180: лише тиск (bmp=ok,p_pa=…), окремої температури BMP180 немає, подій і тривог від BMP180 немає; — PASS
+#   коротке перевищення (подих, RH до 81 % ~1 хв з провалами нижче 80 %) — ENV_WARNING немає, як і має бути; — PASS
+#   довге перевищення (волога серветка) — RH 82–84 % лише ~40 с до кінця запису: ENV_WARNING не дочекались; — NOT_RUN
+#   відмова DHT11 (від'єднати DATA) — не проводилась; — NOT_RUN
+#   відмова BMP180 — не проводилась (див. сценарій «відмова I²C» §6.2 — теж не проведено); — NOT_RUN
+#   замок весь час LOCKED: датчики середовища засувкою не керують. — PASS
+# Підсумок: FR-14 — частково (моніторинг і коротке перевищення); FR-15 — моніторинг PASS, відмова NOT_RUN.
+#
+# --- FR-14 / FR-15 ---
++   0.691 ENV,dht=ok,t_c=21.3,rh=49,bmp=ok,p_pa=98978
++   1.994 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.009 === Smar�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.366 ST,MPU6050,WARN,who=0x68,a_g=1.107,ax_g=0.110,ay_g=0.024,az_g=1.102,gyro_max_dps=11.9,t_c=23.2
++   3.370 ST,BMP180,OK,id=0x55,t_c=20.3,p_hpa=989.72
++   3.392 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.397 ST,DHT11,OK,t_c=21.4,rh=52.2,raw=340215044F,crc=OK
++   3.412 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.731 LOG,MOUNT,result=mounted,valid=1218,damaged=1,next_seq=1221,boot=93,head=1221,us=255736
++   3.835 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.839 STACK reserved=4096 used=720 free=3376
++   3.842 HEAP arena=1468 used=1468 free=0
++   3.965 EVT,id=1222,t_ms=1953,name=DOOR_CLOSED,arg=0,flash=ok
++   3.968 EVT t_us=121649 name=fsm_door_closed
++   5.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++   7.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98978
++   9.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++  11.879 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98978
++  13.879 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98969
++  14.480 EVT t_us=10637772 name=pir_trig
++  14.487 EVT t_us=10648394 name=fsm_motion
++  15.879 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98972
++  17.879 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98981
++  19.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++  21.879 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98975
++  23.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98975
++  24.100 EVT t_us=20252810 name=pir_trig
++  24.107 EVT t_us=20268384 name=fsm_motion
++  25.879 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98972
++  27.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++  29.879 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98969
++  31.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++  33.879 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98969
++  35.879 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98972
++  37.879 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98972
++  39.880 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98972
++  41.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++  43.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++  45.880 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98964
++  47.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98964
++  49.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++  51.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++  53.880 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98967
++  55.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98975
++  57.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98964
++  59.881 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98967
++  61.562 EVT t_us=57721643 name=fsm_tamper
++  61.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98975
++  63.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98964
++  65.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++  66.942 EVT t_us=63082051 name=pir_trig
++  66.949 EVT t_us=63108783 name=fsm_motion
++  67.442 EVT t_us=63601652 name=fsm_tamper
++  67.879 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++  69.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98962
++  71.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++  73.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++  75.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98962
++  77.882 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98964
++  79.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98967
++  81.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++  83.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98964
++  85.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++  87.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98964
++  89.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++  91.878 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++  93.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98964
++  95.880 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98964
++  97.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98978
++  99.880 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++ 101.881 ENV,dht=ok,t_c=21.3,rh=52,bmp=ok,p_pa=98972
++ 103.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++ 105.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98975
++ 107.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98978
++ 109.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++ 111.881 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98972
++ 113.881 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98972
++ 115.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98972
++ 116.962 EVT t_us=113104288 name=pir_trig
++ 116.970 EVT t_us=113128594 name=fsm_motion
++ 117.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++ 119.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++ 121.043 EVT t_us=117198701 name=pir_trig
++ 121.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++ 123.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++ 125.323 EVT t_us=121479669 name=pir_trig
++ 125.330 EVT t_us=121488593 name=fsm_motion
++ 125.881 ENV,dht=ok,t_c=21.5,rh=52,bmp=ok,p_pa=98969
++ 127.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++ 129.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98969
++ 131.881 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98967
++ 133.881 ENV,dht=ok,t_c=21.4,rh=52,bmp=ok,p_pa=98967
++ 135.881 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98967
++ 137.881 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98975
++ 139.881 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98969
++ 141.882 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98969
++ 143.881 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98969
++ 145.881 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98969
++ 147.881 ENV,dht=ok,t_c=21.4,rh=53,bmp=ok,p_pa=98975
++ 149.881 ENV,dht=ok,t_c=21.5,rh=53,bmp=ok,p_pa=98972
++ 150.423 EVT t_us=146574285 name=pir_trig
++ 150.430 EVT t_us=146588596 name=fsm_motion
++ 151.881 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98975
++ 153.881 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98967
++ 155.881 ENV,dht=ok,t_c=21.3,rh=54,bmp=ok,p_pa=98975
++ 156.243 EVT t_us=152380631 name=pir_trig
++ 157.132 EVT t_us=153289594 name=btn_b1_press
++ 157.136 EVT t_us=153290054 name=btn_b1_handled
++ 157.156 EVT,id=1223,t_ms=154980,name=LOCK_ACTIVATED,arg=15000,flash=ok
++ 157.160 EVT t_us=153310087 name=fsm_lock_request
++ 157.881 ENV,dht=ok,t_c=21.5,rh=54,bmp=ok,p_pa=98969
++ 159.881 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98975
++ 161.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98972
++ 163.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98972
++ 165.882 ENV,dht=ok,t_c=21.5,rh=54,bmp=ok,p_pa=98972
++ 167.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98981
++ 169.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98978
++ 171.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98978
++ 172.172 EVT,id=1224,t_ms=169980,name=LOCKED,arg=15000,flash=ok
++ 173.883 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98981
++ 175.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98978
++ 177.882 ENV,dht=ok,t_c=21.5,rh=54,bmp=ok,p_pa=98969
++ 179.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98984
++ 181.882 ENV,dht=ok,t_c=21.5,rh=54,bmp=ok,p_pa=98978
++ 183.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98972
++ 185.882 ENV,dht=ok,t_c=21.5,rh=54,bmp=ok,p_pa=98975
++ 186.324 EVT t_us=182460963 name=pir_trig
++ 189.126 CAM,photo,event=1225,status=ok,cap=ok,capture_us=1915047,store_us=873706,aec=ok
++ 189.134 EVT,id=1225,t_ms=184127,name=MOTION,arg=0,flash=ok
++ 189.137 EVT t_us=182488577 name=fsm_motion
++ 189.184 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98975
++ 189.193 EVT,id=1226,t_ms=186834,name=PHOTO,arg=388,ref=1225,flash=ok
++ 189.198 EVT t_us=182488599 name=capture_start
++ 189.201 EVT t_us=184406058 name=capture_done
++ 189.207 EVT t_us=184406066 name=flash_wr_start
++ 189.211 EVT t_us=185279779 name=flash_wr_done
++ 189.882 ENV,dht=ok,t_c=21.5,rh=54,bmp=ok,p_pa=98987
++ 191.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98978
++ 193.883 ENV,dht=ok,t_c=21.5,rh=54,bmp=ok,p_pa=98975
++ 195.882 ENV,dht=ok,t_c=21.4,rh=54,bmp=ok,p_pa=98975
++ 197.882 ENV,dht=ok,t_c=21.6,rh=54,bmp=ok,p_pa=98978
++ 199.882 ENV,dht=ok,t_c=22.5,rh=68,bmp=ok,p_pa=98969
++ 201.882 ENV,dht=ok,t_c=22.9,rh=72,bmp=ok,p_pa=98972
++ 203.882 ENV,dht=ok,t_c=23.0,rh=74,bmp=ok,p_pa=98980
++ 205.882 ENV,dht=ok,t_c=23.4,rh=76,bmp=ok,p_pa=98974
++ 207.723 EVT t_us=203867226 name=pir_trig
++ 210.441 CAM,photo,event=1227,status=ok,cap=ok,capture_us=1839832,store_us=863905,aec=ok
++ 210.448 EVT,id=1227,t_ms=205419,name=MOTION,arg=0,flash=ok
++ 210.452 EVT t_us=203888592 name=fsm_motion
++ 210.498 ENV,dht=ok,t_c=24.0,rh=80,bmp=ok,p_pa=98980
++ 210.506 EVT,id=1228,t_ms=208041,name=PHOTO,arg=389,ref=1227,flash=ok
++ 210.511 EVT t_us=203888614 name=capture_start
++ 210.515 EVT t_us=205730858 name=capture_done
++ 210.521 EVT t_us=205730866 name=flash_wr_start
++ 210.524 EVT t_us=206594778 name=flash_wr_done
++ 211.882 ENV,dht=ok,t_c=24.0,rh=80,bmp=ok,p_pa=98977
++ 213.883 ENV,dht=ok,t_c=24.0,rh=80,bmp=ok,p_pa=98980
++ 215.882 ENV,dht=ok,t_c=24.3,rh=80,bmp=ok,p_pa=98974
++ 217.882 ENV,dht=ok,t_c=24.3,rh=80,bmp=ok,p_pa=98980
++ 219.882 ENV,dht=ok,t_c=24.3,rh=80,bmp=ok,p_pa=98980
++ 220.184 EVT t_us=216329716 name=pir_trig
++ 222.178 CAM,photo,event=1229,status=ok,cap=ok,capture_us=1108468,store_us=871266,aec=ok
++ 222.185 EVT,id=1229,t_ms=217782,name=MOTION,arg=0,flash=ok
++ 222.188 EVT t_us=216348596 name=fsm_motion
++ 222.235 ENV,dht=ok,t_c=24.4,rh=81,bmp=ok,p_pa=98977
++ 222.244 EVT,id=1230,t_ms=219679,name=PHOTO,arg=390,ref=1229,flash=ok
++ 222.249 EVT t_us=216348618 name=capture_start
++ 222.252 EVT t_us=217459498 name=capture_done
++ 222.258 EVT t_us=217459506 name=flash_wr_start
++ 222.262 EVT t_us=218330778 name=flash_wr_done
++ 223.883 ENV,dht=ok,t_c=24.2,rh=81,bmp=ok,p_pa=98980
++ 225.883 ENV,dht=ok,t_c=24.3,rh=81,bmp=ok,p_pa=98977
++ 227.883 ENV,dht=ok,t_c=24.3,rh=81,bmp=ok,p_pa=98980
++ 229.883 ENV,dht=ok,t_c=24.1,rh=81,bmp=ok,p_pa=98986
++ 231.883 ENV,dht=ok,t_c=24.1,rh=81,bmp=ok,p_pa=98983
++ 233.883 ENV,dht=ok,t_c=24.1,rh=81,bmp=ok,p_pa=98972
++ 235.883 ENV,dht=ok,t_c=24.1,rh=81,bmp=ok,p_pa=98972
++ 237.883 ENV,dht=ok,t_c=24.2,rh=81,bmp=ok,p_pa=98980
++ 239.883 ENV,dht=ok,t_c=23.8,rh=81,bmp=ok,p_pa=98983
++ 241.883 ENV,dht=ok,t_c=23.9,rh=81,bmp=ok,p_pa=98977
++ 243.883 ENV,dht=ok,t_c=23.9,rh=81,bmp=ok,p_pa=98977
++ 245.883 ENV,dht=ok,t_c=23.9,rh=81,bmp=ok,p_pa=98977
++ 247.883 ENV,dht=ok,t_c=23.9,rh=81,bmp=ok,p_pa=98980
++ 249.883 ENV,dht=ok,t_c=23.7,rh=80,bmp=ok,p_pa=98975
++ 251.883 ENV,dht=ok,t_c=23.8,rh=81,bmp=ok,p_pa=98983
++ 253.882 ENV,dht=ok,t_c=23.7,rh=80,bmp=ok,p_pa=98975
++ 255.704 EVT t_us=251854685 name=pir_trig
++ 258.437 CAM,photo,event=1231,status=ok,cap=ok,capture_us=1840638,store_us=878105,aec=ok
++ 258.444 EVT,id=1231,t_ms=253174,name=MOTION,arg=0,flash=ok
++ 258.448 EVT t_us=251868586 name=fsm_motion
++ 258.495 ENV,dht=ok,t_c=23.5,rh=80,bmp=ok,p_pa=98975
++ 258.503 EVT,id=1232,t_ms=255811,name=PHOTO,arg=391,ref=1231,flash=ok
++ 258.508 EVT t_us=251868608 name=capture_start
++ 258.512 EVT t_us=253711658 name=capture_done
++ 258.517 EVT t_us=253711666 name=flash_wr_start
++ 258.521 EVT t_us=254589779 name=flash_wr_done
++ 259.883 ENV,dht=ok,t_c=23.5,rh=80,bmp=ok,p_pa=98983
++ 261.883 ENV,dht=ok,t_c=23.6,rh=81,bmp=ok,p_pa=98980
++ 263.883 ENV,dht=ok,t_c=23.6,rh=81,bmp=ok,p_pa=98980
++ 265.883 ENV,dht=ok,t_c=23.6,rh=82,bmp=ok,p_pa=98971
++ 267.883 ENV,dht=ok,t_c=23.7,rh=82,bmp=ok,p_pa=98977
++ 269.883 ENV,dht=ok,t_c=23.7,rh=81,bmp=ok,p_pa=98980
++ 271.883 ENV,dht=ok,t_c=23.7,rh=81,bmp=ok,p_pa=98974
++ 273.883 ENV,dht=ok,t_c=23.6,rh=80,bmp=ok,p_pa=98971
++ 275.883 ENV,dht=ok,t_c=23.6,rh=80,bmp=ok,p_pa=98980
++ 277.883 ENV,dht=ok,t_c=23.7,rh=80,bmp=ok,p_pa=98986
++ 279.883 ENV,dht=ok,t_c=23.7,rh=80,bmp=ok,p_pa=98986
++ 281.883 ENV,dht=ok,t_c=23.6,rh=77,bmp=ok,p_pa=98974
++ 283.883 ENV,dht=ok,t_c=23.9,rh=77,bmp=ok,p_pa=98989
++ 285.884 ENV,dht=ok,t_c=23.8,rh=77,bmp=ok,p_pa=98986
++ 287.884 ENV,dht=ok,t_c=23.8,rh=77,bmp=ok,p_pa=98974
++ 289.884 ENV,dht=ok,t_c=23.9,rh=77,bmp=ok,p_pa=98974
++ 291.884 ENV,dht=ok,t_c=24.1,rh=77,bmp=ok,p_pa=98980
++ 293.884 ENV,dht=ok,t_c=24.1,rh=77,bmp=ok,p_pa=98980
++ 295.884 ENV,dht=ok,t_c=24.3,rh=77,bmp=ok,p_pa=98986
++ 297.884 ENV,dht=ok,t_c=24.3,rh=77,bmp=ok,p_pa=98985
++ 299.884 ENV,dht=ok,t_c=24.5,rh=77,bmp=ok,p_pa=98974
++ 301.884 ENV,dht=ok,t_c=24.6,rh=77,bmp=ok,p_pa=98980
++ 303.884 ENV,dht=ok,t_c=24.5,rh=76,bmp=ok,p_pa=98982
++ 305.884 ENV,dht=ok,t_c=24.6,rh=76,bmp=ok,p_pa=98988
++ 307.884 ENV,dht=ok,t_c=24.7,rh=76,bmp=ok,p_pa=98988
++ 309.884 ENV,dht=ok,t_c=24.6,rh=76,bmp=ok,p_pa=98985
++ 311.885 ENV,dht=ok,t_c=24.9,rh=77,bmp=ok,p_pa=98982
++ 313.884 ENV,dht=ok,t_c=25.3,rh=80,bmp=ok,p_pa=98982
++ 315.885 ENV,dht=ok,t_c=25.5,rh=81,bmp=ok,p_pa=98976
++ 317.885 ENV,dht=ok,t_c=25.7,rh=82,bmp=ok,p_pa=98982
++ 319.886 ENV,dht=ok,t_c=26.2,rh=82,bmp=ok,p_pa=98985
++ 321.885 ENV,dht=ok,t_c=26.3,rh=83,bmp=ok,p_pa=98984
++ 323.885 ENV,dht=ok,t_c=26.5,rh=84,bmp=ok,p_pa=98982
++ 325.885 ENV,dht=ok,t_c=26.8,rh=84,bmp=ok,p_pa=98987
++ 327.885 ENV,dht=ok,t_c=26.9,rh=84,bmp=ok,p_pa=98981
++ 329.885 ENV,dht=ok,t_c=26.9,rh=84,bmp=ok,p_pa=98993
++ 331.885 ENV,dht=ok,t_c=27.3,rh=84,bmp=ok,p_pa=98987
++ 333.885 ENV,dht=ok,t_c=27.3,rh=84,bmp=ok,p_pa=98990
++ 335.885 ENV,dht=ok,t_c=27.4,rh=84,bmp=ok,p_pa=98999
++ 337.885 ENV,dht=ok,t_c=27.5,rh=84,bmp=ok,p_pa=98990
++ 339.885 ENV,dht=ok,t_c=27.8,rh=84,bmp=ok,p_pa=98996
++ 341.885 ENV,dht=ok,t_c=27.8,rh=84,bmp=ok,p_pa=98981
++ 343.885 ENV,dht=ok,t_c=27.7,rh=84,bmp=ok,p_pa=98987
++ 345.885 ENV,dht=ok,t_c=27.8,rh=84,bmp=ok,p_pa=98987
++ 347.886 ENV,dht=ok,t_c=27.9,rh=84,bmp=ok,p_pa=98984
++ 349.886 ENV,dht=ok,t_c=28.1,rh=84,bmp=ok,p_pa=98989
++ 351.886 ENV,dht=ok,t_c=27.9,rh=84,bmp=ok,p_pa=98987
++ 353.886 ENV,dht=ok,t_c=28.1,rh=84,bmp=ok,p_pa=98995
++ 355.886 ENV,dht=ok,t_c=28.2,rh=84,bmp=ok,p_pa=98984
++ 357.886 ENV,dht=ok,t_c=28.3,rh=84,bmp=ok,p_pa=98984
++ 359.886 ENV,dht=ok,t_c=28.4,rh=84,bmp=ok,p_pa=98989
++ 360.092 > STATS
++ 360.099 STATS_BEGIN git=f5dc804 t_us=356251503 loops=14930447
++ 360.105 STAT name=loop n=14930447 min_us=16 avg_us=19 max_us=2813842
++ 360.133 JITTER name=buttons period_us=10000 min_us=-5811 max_us=2812782 missed=180
++ 360.155 JITTER name=security period_us=20000 min_us=-10695 max_us=2802782 missed=180
++ 360.192 STAT name=camera n=4 min_us=1989986 avg_us=2557994 max_us=2799001
++ 360.232 STAT name=uart n=384 min_us=4 avg_us=1660 max_us=8756
++ 360.241 STAT name=btn_b1_lat n=1 min_us=453 avg_us=453 max_us=453
++ 360.249 STAT name=pir_lat n=12 min_us=396 avg_us=9828 max_us=19433
++ 360.265 STAT name=camera n=4 min_us=1108468 avg_us=1675996 max_us=1915047
++ 360.272 STAT name=flash_frame n=4 min_us=863905 avg_us=871746 max_us=878105
++ 360.283 EVQ len=8 pending=0 max_depth=1 posted=14 dropped=0
++ 360.288 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
++ 360.291 EVTLOG pending=1 dropped=0
++ 360.296 DIAG name=fsm state=LOCKED ignored=8 cam_rejected=0
++ 360.301 DIAG name=buttons dropped=0 late=0 key_lost=0
++ 360.307 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++ 360.313 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++ 360.321 DIAG name=journal pending=0 max_depth=2 stored=11 unsaved=0 dropped=0 last_seq=1232
++ 360.331 DIAG name=camlink requested=4 rejected=0 ok=4 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++ 360.339 DIAG name=camera accepted=4 rejected=0 stored=4 capture_err=0 store_err=0 pending=0
++ 360.343 STACK reserved=4096 used=760 free=3336
++ 360.346 HEAP arena=1468 used=1468 free=0
++ 360.347 STATS_END
+#

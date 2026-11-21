@@ -1,0 +1,286 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-21.
+# Прошивка: main f5dc804 (після злиття PR #50 — стек 4 КБ, і PR #55 — натискання коду через EXTI),
+# у банері git=f5dc804. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make lab3 — PASS,
+# firmware.bin sha256 ff89e2949a5571af8eaed73cac44a075351f95258ad4dd0366dc18e3993ec5e6.
+# Запис: scripts/uart_capture.py, МК скинуто на старті запису. Формат рядка: «+ <с від старту запису> <рядок UART>».
+# Пропущено: LOAD, службові EVT uart_cmd_*, PING/PONG навантаження, відповіді MEM поза STATS.
+# E2E-02 «Одночасні сигнали PIR та MPU-6050» (FR-05, FR-06, FR-07, FR-08).
+# Поріг TAMPER — TBD_TAMPER_THRESHOLD_MG 200 мг (не затверджений).
+# Спроба 1: удар по столу — 1 TAMPER на 3 спроби (62 мг), удари слабкі; оператор потрапляв у зону PIR між
+#   спробами (9 MOTION). Спробу не зараховано (процедура).
+# Спроба 2: помах перед PIR одночасно з ударом пальцем по макетці біля GY-521, 3 рази:
+#   89,5 с — MOTION + фото, TAMPER немає; 114,9 с — MOTION + фото, TAMPER 2251 мг через 3 с, одразу після
+#   кінця зйомки; 134,5 с — MOTION + фото, TAMPER немає. FSM весь час LOCKED, усі кадри status=ok.
+# Причина: PIR (EXTI) спрацьовує першим і запускає зйомку, яка блокує цикл на ~2–3 с; MPU-6050 опитується
+#   задачею security раз на 20 мс (переривання MPU_INT не спрацьовує, mpu_lat n=0), тож короткий удар
+#   під час зйомки ніхто не читає.
+# Підсумок E2E-02: FAIL (TAMPER губиться, якщо удар припадає на зйомку від MOTION; MOTION і фото — PASS).
+#
+# --- Спроба 1 (не зарахована: слабкі удари) ---
++   2.013 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.028 === Smar�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.386 ST,MPU6050,WARN,who=0x68,a_g=1.104,ax_g=0.128,ay_g=0.028,az_g=1.097,gyro_max_dps=11.6,t_c=22.6
++   3.390 ST,BMP180,OK,id=0x55,t_c=19.6,p_hpa=989.68
++   3.412 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.417 ST,DHT11,OK,t_c=20.7,rh=48.6,raw=3006140751,crc=OK
++   3.432 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.749 LOG,MOUNT,result=mounted,valid=1016,damaged=1,next_seq=1019,boot=86,head=1019,us=254760
++   3.854 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.858 STACK reserved=4096 used=720 free=3376
++   3.861 HEAP arena=1468 used=1468 free=0
++   3.983 EVT,id=1020,t_ms=1952,name=DOOR_CLOSED,arg=0,flash=ok
++   3.987 EVT t_us=121649 name=fsm_door_closed
++  19.239 EVT t_us=15371426 name=pir_trig
++  19.246 EVT t_us=15388390 name=fsm_motion
++  24.639 EVT t_us=20760148 name=pir_trig
++  32.420 EVT t_us=28551044 name=pir_trig
++  32.427 EVT t_us=28568387 name=fsm_motion
++  35.980 EVT t_us=32116174 name=pir_trig
++  44.339 EVT t_us=40461583 name=pir_trig
++  44.346 EVT t_us=40488393 name=fsm_motion
++  52.979 EVT t_us=49114630 name=pir_trig
++  52.986 EVT t_us=49128398 name=fsm_motion
++  91.541 EVT t_us=87673700 name=btn_b1_press
++  91.545 EVT t_us=87680053 name=btn_b1_handled
++  91.566 EVT,id=1021,t_ms=89444,name=LOCK_ACTIVATED,arg=15000,flash=ok
++  91.570 EVT t_us=87701656 name=fsm_lock_request
++  92.761 EVT t_us=88898512 name=pir_trig
++  92.768 EVT t_us=88908391 name=fsm_motion
++ 102.700 EVT t_us=98824885 name=pir_trig
++ 102.707 EVT t_us=98848394 name=fsm_motion
++ 106.578 EVT,id=1022,t_ms=104442,name=LOCKED,arg=15000,flash=ok
++ 111.200 EVT t_us=107332907 name=pir_trig
++ 113.428 CAM,photo,event=1023,status=ok,cap=ok,capture_us=1351992,store_us=861753,aec=ok
++ 113.435 EVT,id=1023,t_ms=109070,name=MOTION,arg=0,flash=ok
++ 113.439 EVT t_us=107348583 name=fsm_motion
++ 113.554 EVT,id=1024,t_ms=111203,name=PHOTO,arg=313,ref=1023,flash=ok
++ 113.559 EVT t_us=107348605 name=capture_start
++ 113.563 EVT t_us=108703009 name=capture_done
++ 113.568 EVT t_us=108703017 name=flash_wr_start
++ 113.572 EVT t_us=109564778 name=flash_wr_done
++ 124.021 EVT t_us=120142533 name=pir_trig
++ 126.221 CAM,photo,event=1025,status=ok,cap=ok,capture_us=1326867,store_us=859873,aec=ok
++ 126.229 EVT,id=1025,t_ms=121792,name=MOTION,arg=0,flash=ok
++ 126.232 EVT t_us=120168588 name=fsm_motion
++ 126.288 EVT,id=1026,t_ms=123899,name=PHOTO,arg=314,ref=1025,flash=ok
++ 126.293 EVT t_us=120168609 name=capture_start
++ 126.296 EVT t_us=121497889 name=capture_done
++ 126.302 EVT t_us=121497897 name=flash_wr_start
++ 126.306 EVT t_us=122357778 name=flash_wr_done
++ 127.121 EVT t_us=123258936 name=pir_trig
++ 136.541 EVT t_us=132671509 name=pir_trig
++ 138.993 CAM,photo,event=1027,status=ok,cap=ok,capture_us=1601756,store_us=835993,aec=ok
++ 139.000 EVT,id=1027,t_ms=134217,name=MOTION,arg=0,flash=ok
++ 139.004 EVT t_us=132688579 name=fsm_motion
++ 139.059 EVT,id=1028,t_ms=136573,name=PHOTO,arg=315,ref=1027,flash=ok
++ 139.064 EVT t_us=132688600 name=capture_start
++ 139.068 EVT t_us=134292769 name=capture_done
++ 139.073 EVT t_us=134292777 name=flash_wr_start
++ 139.077 EVT t_us=135128778 name=flash_wr_done
++ 140.601 EVT t_us=136730171 name=pir_trig
++ 144.061 EVT t_us=140199419 name=pir_trig
++ 157.081 EVT t_us=153219146 name=pir_trig
++ 159.262 CAM,photo,event=1029,status=ok,cap=ok,capture_us=1320313,store_us=847434,aec=ok
++ 159.270 EVT,id=1029,t_ms=154652,name=MOTION,arg=0,flash=ok
++ 159.273 EVT t_us=153228582 name=fsm_motion
++ 159.329 EVT,id=1030,t_ms=156738,name=PHOTO,arg=316,ref=1029,flash=ok
++ 159.334 EVT t_us=153228604 name=capture_start
++ 159.337 EVT t_us=154551329 name=capture_done
++ 159.343 EVT t_us=154551337 name=flash_wr_start
++ 159.347 EVT t_us=155398778 name=flash_wr_done
++ 162.474 CAM,photo,event=1031,status=ok,cap=ok,capture_us=1245961,store_us=859714,aec=ok
++ 162.481 EVT,id=1031,t_ms=157837,name=TAMPER,arg=62,flash=ok
++ 162.484 EVT t_us=156501660 name=fsm_tamper
++ 162.488 EVT t_us=156501676 name=capture_start
++ 162.540 EVT,id=1032,t_ms=159859,name=PHOTO,arg=317,ref=1031,flash=ok
++ 162.545 EVT t_us=157750049 name=capture_done
++ 162.549 EVT t_us=157750057 name=flash_wr_start
++ 162.554 EVT t_us=158609778 name=flash_wr_done
++ 164.441 EVT t_us=160570112 name=pir_trig
++ 170.901 EVT t_us=167036576 name=pir_trig
++ 173.120 CAM,photo,event=1033,status=ok,cap=ok,capture_us=1361436,store_us=843314,aec=ok
++ 173.127 EVT,id=1033,t_ms=168287,name=MOTION,arg=0,flash=ok
++ 173.131 EVT t_us=167048579 name=fsm_motion
++ 173.186 EVT,id=1034,t_ms=170411,name=PHOTO,arg=318,ref=1033,flash=ok
++ 173.191 EVT t_us=167048601 name=capture_start
++ 173.195 EVT t_us=168412449 name=capture_done
++ 173.200 EVT t_us=168412457 name=flash_wr_start
++ 173.204 EVT t_us=169255778 name=flash_wr_done
++ 176.181 EVT t_us=172301790 name=pir_trig
++ 180.621 EVT t_us=176756099 name=pir_trig
++ 182.723 CAM,photo,event=1035,status=ok,cap=ok,capture_us=1237595,store_us=850153,aec=ok
++ 182.730 EVT,id=1035,t_ms=177913,name=MOTION,arg=0,flash=ok
++ 182.734 EVT t_us=176768580 name=fsm_motion
++ 182.789 EVT,id=1036,t_ms=179918,name=PHOTO,arg=319,ref=1035,flash=ok
++ 182.794 EVT t_us=176768602 name=capture_start
++ 182.798 EVT t_us=178008609 name=capture_done
++ 182.804 EVT t_us=178008617 name=flash_wr_start
++ 182.807 EVT t_us=178858778 name=flash_wr_done
++ 194.622 EVT t_us=190754549 name=pir_trig
++ 196.601 CAM,photo,event=1037,status=ok,cap=ok,capture_us=1098713,store_us=866033,aec=ok
++ 196.608 EVT,id=1037,t_ms=191813,name=MOTION,arg=0,flash=ok
++ 196.611 EVT t_us=190768582 name=fsm_motion
++ 196.667 EVT,id=1038,t_ms=193697,name=PHOTO,arg=320,ref=1037,flash=ok
++ 196.672 EVT t_us=190768604 name=capture_start
++ 196.676 EVT t_us=191869729 name=capture_done
++ 196.681 EVT t_us=191869737 name=flash_wr_start
++ 196.685 EVT t_us=192735778 name=flash_wr_done
++ 201.322 EVT t_us=197440618 name=pir_trig
++ 205.202 EVT t_us=201336456 name=pir_trig
++ 207.255 CAM,photo,event=1039,status=ok,cap=ok,capture_us=1181111,store_us=857634,aec=ok
++ 207.262 EVT,id=1039,t_ms=202299,name=MOTION,arg=0,flash=ok
++ 207.265 EVT t_us=201348584 name=fsm_motion
++ 207.320 EVT,id=1040,t_ms=204256,name=PHOTO,arg=321,ref=1039,flash=ok
++ 207.325 EVT t_us=201348606 name=capture_start
++ 207.329 EVT t_us=202532129 name=capture_done
++ 207.334 EVT t_us=202532137 name=flash_wr_start
++ 207.338 EVT t_us=203389778 name=flash_wr_done
++ 232.622 EVT t_us=228756479 name=pir_trig
++ 234.983 CAM,photo,event=1041,status=ok,cap=ok,capture_us=1483351,store_us=863394,aec=ok
++ 234.990 EVT,id=1041,t_ms=229597,name=MOTION,arg=0,flash=ok
++ 234.994 EVT t_us=228768584 name=fsm_motion
++ 235.049 EVT,id=1042,t_ms=231861,name=PHOTO,arg=322,ref=1041,flash=ok
++ 235.054 EVT t_us=228768606 name=capture_start
++ 235.058 EVT t_us=230254369 name=capture_done
++ 235.063 EVT t_us=230254377 name=flash_wr_start
++ 235.067 EVT t_us=231117778 name=flash_wr_done
++ 240.206 > STATS
++ 240.213 STATS_BEGIN git=f5dc804 t_us=236350475 loops=9216900
++ 240.219 STAT name=loop n=9216900 min_us=16 avg_us=21 max_us=2462841
++ 240.246 JITTER name=buttons period_us=10000 min_us=-7807 max_us=2461784 missed=128
++ 240.269 JITTER name=security period_us=20000 min_us=-12595 max_us=2451784 missed=128
++ 240.306 STAT name=camera n=10 min_us=1975000 avg_us=2185692 max_us=2448000
++ 240.346 STAT name=uart n=278 min_us=4 avg_us=2460 max_us=8852
++ 240.355 STAT name=btn_b1_lat n=1 min_us=6346 avg_us=6346 max_us=6346
++ 240.364 STAT name=pir_lat n=23 min_us=651 avg_us=8509 max_us=19920
++ 240.379 STAT name=camera n=10 min_us=1098713 avg_us=1320909 max_us=1601756
++ 240.386 STAT name=flash_frame n=10 min_us=835993 avg_us=854529 max_us=866033
++ 240.397 EVQ len=8 pending=0 max_depth=1 posted=18 dropped=0
++ 240.403 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
++ 240.405 EVTLOG pending=1 dropped=0
++ 240.410 DIAG name=fsm state=LOCKED ignored=6 cam_rejected=0
++ 240.415 DIAG name=buttons dropped=0 late=0 key_lost=0
++ 240.422 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++ 240.428 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++ 240.436 DIAG name=journal pending=0 max_depth=2 stored=23 unsaved=0 dropped=0 last_seq=1042
++ 240.445 DIAG name=camlink requested=10 rejected=0 ok=10 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++ 240.454 DIAG name=camera accepted=10 rejected=0 stored=10 capture_err=0 store_err=0 pending=0
++ 240.458 STACK reserved=4096 used=760 free=3336
++ 240.461 HEAP arena=1468 used=1468 free=0
++ 240.462 STATS_END
+#
+# --- Спроба 2 ---
++   1.985 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.001 === SmarBUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.358 ST,MPU6050,WARN,who=0x68,a_g=1.110,ax_g=0.124,ay_g=0.019,az_g=1.103,gyro_max_dps=11.7,t_c=22.6
++   3.362 ST,BMP180,OK,id=0x55,t_c=19.7,p_hpa=989.74
++   3.384 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.389 ST,DHT11,OK,t_c=20.5,rh=47.8,raw=2F08140550,crc=OK
++   3.404 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.721 LOG,MOUNT,result=mounted,valid=1040,damaged=1,next_seq=1043,boot=87,head=1043,us=254875
++   3.826 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.830 STACK reserved=4096 used=720 free=3376
++   3.833 HEAP arena=1468 used=1468 free=0
++   3.955 EVT,id=1044,t_ms=1952,name=DOOR_CLOSED,arg=0,flash=ok
++   3.959 EVT t_us=121649 name=fsm_door_closed
++  35.532 EVT t_us=31688991 name=pir_trig
++  35.539 EVT t_us=31708397 name=fsm_motion
++  39.032 EVT t_us=35183186 name=pir_trig
++  43.551 EVT t_us=39716390 name=pir_trig
++  43.558 EVT t_us=39728393 name=fsm_motion
++  49.732 EVT t_us=45884256 name=pir_trig
++  54.152 EVT t_us=50300287 name=pir_trig
++  54.159 EVT t_us=50328403 name=fsm_motion
++  58.352 EVT t_us=54515982 name=btn_b1_press
++  58.356 EVT t_us=54520049 name=btn_b1_handled
++  58.377 EVT,id=1045,t_ms=56311,name=LOCK_ACTIVATED,arg=15000,flash=ok
++  58.381 EVT t_us=54541651 name=fsm_lock_request
++  73.389 EVT,id=1046,t_ms=71309,name=LOCKED,arg=15000,flash=ok
++  93.373 EVT t_us=89525534 name=pir_trig
++  96.340 CAM,photo,event=1047,status=ok,cap=ok,capture_us=2092345,store_us=861594,aec=ok
++  96.348 EVT,id=1047,t_ms=91278,name=MOTION,arg=0,flash=ok
++  96.350 EVT t_us=89548391 name=fsm_motion
++  96.406 EVT,id=1048,t_ms=94151,name=PHOTO,arg=323,ref=1047,flash=ok
++  96.411 EVT t_us=89548413 name=capture_start
++  96.415 EVT t_us=91643169 name=capture_done
++  96.420 EVT t_us=91643177 name=flash_wr_start
++  96.423 EVT t_us=92504778 name=flash_wr_done
++ 101.432 EVT t_us=97585018 name=pir_trig
++ 104.912 EVT t_us=101065556 name=pir_trig
++ 106.999 CAM,photo,event=1049,status=ok,cap=ok,capture_us=1214547,store_us=858194,aec=ok
++ 107.006 EVT,id=1049,t_ms=102722,name=MOTION,arg=0,flash=ok
++ 107.010 EVT t_us=101088588 name=fsm_motion
++ 107.065 EVT,id=1050,t_ms=104713,name=PHOTO,arg=324,ref=1049,flash=ok
++ 107.070 EVT t_us=101088609 name=capture_start
++ 107.074 EVT t_us=102305569 name=capture_done
++ 107.080 EVT t_us=102305577 name=flash_wr_start
++ 107.084 EVT t_us=103163778 name=flash_wr_done
++ 118.753 EVT t_us=114905960 name=pir_trig
++ 120.857 CAM,photo,event=1051,status=ok,cap=ok,capture_us=1235672,store_us=854073,aec=ok
++ 120.864 EVT,id=1051,t_ms=116463,name=MOTION,arg=0,flash=ok
++ 120.867 EVT t_us=114928583 name=fsm_motion
++ 120.923 EVT,id=1052,t_ms=118471,name=PHOTO,arg=325,ref=1051,flash=ok
++ 120.928 EVT t_us=114928605 name=capture_start
++ 120.931 EVT t_us=116166689 name=capture_done
++ 120.937 EVT t_us=116166697 name=flash_wr_start
++ 120.941 EVT t_us=117020778 name=flash_wr_done
++ 124.049 CAM,photo,event=1053,status=ok,cap=ok,capture_us=1421326,store_us=847354,aec=ok
++ 124.056 EVT,id=1053,t_ms=119390,name=TAMPER,arg=2251,flash=ok
++ 124.060 EVT t_us=117941655 name=fsm_tamper
++ 124.064 EVT t_us=117941671 name=capture_start
++ 124.115 EVT,id=1054,t_ms=121575,name=PHOTO,arg=326,ref=1053,flash=ok
++ 124.120 EVT t_us=119365409 name=capture_done
++ 124.124 EVT t_us=119365417 name=flash_wr_start
++ 126.196 CAM,photo,event=1055,status=ok,cap=ok,capture_us=1198236,store_us=861873,aec=ok
++ 126.203 EVT,id=1055,t_ms=121656,name=TAMPER,arg=2231,flash=ok
++ 126.207 EVT t_us=120212778 name=flash_wr_done
++ 126.211 EVT t_us=120295634 name=fsm_tamper
++ 126.262 EVT,id=1056,t_ms=123637,name=PHOTO,arg=327,ref=1055,flash=ok
++ 126.267 EVT t_us=120297241 name=capture_start
++ 126.271 EVT t_us=121497889 name=capture_done
++ 126.276 EVT t_us=121497897 name=flash_wr_start
++ 126.280 EVT t_us=122359778 name=flash_wr_done
++ 126.973 EVT t_us=123139341 name=pir_trig
++ 138.313 EVT t_us=134479782 name=pir_trig
++ 141.111 CAM,photo,event=1057,status=ok,cap=ok,capture_us=1934221,store_us=849514,aec=ok
++ 141.119 EVT,id=1057,t_ms=135748,name=MOTION,arg=0,flash=ok
++ 141.122 EVT t_us=134488594 name=fsm_motion
++ 141.177 EVT,id=1058,t_ms=138450,name=PHOTO,arg=328,ref=1057,flash=ok
++ 141.182 EVT t_us=134488616 name=capture_start
++ 141.186 EVT t_us=136425249 name=capture_done
++ 141.192 EVT t_us=136425257 name=flash_wr_start
++ 141.195 EVT t_us=137274778 name=flash_wr_done
++ 146.514 EVT t_us=142666930 name=pir_trig
++ 148.591 CAM,photo,event=1059,status=ok,cap=ok,capture_us=1197909,store_us=865833,aec=ok
++ 148.599 EVT,id=1059,t_ms=143854,name=MOTION,arg=0,flash=ok
++ 148.602 EVT t_us=142688586 name=fsm_motion
++ 148.658 EVT,id=1060,t_ms=145836,name=PHOTO,arg=329,ref=1059,flash=ok
++ 148.663 EVT t_us=142688608 name=capture_start
++ 148.667 EVT t_us=143888929 name=capture_done
++ 148.672 EVT t_us=143888937 name=flash_wr_start
++ 148.676 EVT t_us=144754778 name=flash_wr_done
++ 240.077 > STATS
++ 240.084 STATS_BEGIN git=f5dc804 t_us=236249018 loops=9471188
++ 240.090 STAT name=loop n=9471188 min_us=16 avg_us=20 max_us=2978740
++ 240.117 JITTER name=buttons period_us=10000 min_us=-6789 max_us=2977489 missed=123
++ 240.140 JITTER name=security period_us=20000 min_us=-10695 max_us=2967489 missed=123
++ 240.177 STAT name=camera n=7 min_us=2070359 avg_us=2337780 max_us=2964194
++ 240.216 STAT name=uart n=260 min_us=4 avg_us=2033 max_us=8852
++ 240.226 STAT name=btn_b1_lat n=1 min_us=4060 avg_us=4060 max_us=4060
++ 240.234 STAT name=pir_lat n=12 min_us=287 avg_us=11626 max_us=19782
++ 240.250 STAT name=camera n=7 min_us=1197909 avg_us=1470608 max_us=2092345
++ 240.256 STAT name=flash_frame n=7 min_us=847354 avg_us=856919 max_us=865833
++ 240.267 EVQ len=8 pending=0 max_depth=1 posted=12 dropped=0
++ 240.273 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
++ 240.276 EVTLOG pending=1 dropped=0
++ 240.281 DIAG name=fsm state=LOCKED ignored=3 cam_rejected=0
++ 240.285 DIAG name=buttons dropped=0 late=0 key_lost=0
++ 240.292 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++ 240.298 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++ 240.306 DIAG name=journal pending=0 max_depth=2 stored=17 unsaved=0 dropped=0 last_seq=1060
++ 240.315 DIAG name=camlink requested=7 rejected=0 ok=7 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++ 240.323 DIAG name=camera accepted=7 rejected=0 stored=7 capture_err=0 store_err=0 pending=0
++ 240.327 STACK reserved=4096 used=760 free=3336
++ 240.331 HEAP arena=1468 used=1468 free=0
++ 240.332 STATS_END
+#

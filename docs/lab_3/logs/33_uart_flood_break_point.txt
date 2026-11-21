@@ -1,0 +1,123 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-21.
+# Прошивка: main f5dc804 (після злиття PR #50 — стек 4 КБ, і PR #55 — натискання коду через EXTI),
+# у банері git=f5dc804. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make lab3 — PASS,
+# firmware.bin sha256 ff89e2949a5571af8eaed73cac44a075351f95258ad4dd0366dc18e3993ec5e6.
+# Запис: scripts/uart_capture.py, МК скинуто на старті запису. Формат рядка: «+ <с від старту запису> <рядок UART>».
+# Пропущено: LOAD, службові EVT uart_cmd_*, PING/PONG навантаження, відповіді MEM поза STATS.
+# §6.2 «UART flood» і «точка зламу». Навантаження — scripts/uart_capture.py --load-profile mixed (PING <n>,
+#   кожна 10-та MEM, кожна 25-та MARK <n>) без очікування відповіді; на старті — CAM TEST (захоплення кадру),
+#   команда блокує цикл ~5,1 с (налаштування камери + захоплення 1,34 с) — довга операція під потоком.
+#   Буфер прийому — DMA-кільце UART_RX_BUF = 2048 Б.
+# 50 Гц, 40 с: надіслано 1697, PONG 1494; UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0, rx_peak=1038 з 2048. — PASS
+# 100 Гц, 40 с: надіслано 3390, PONG 2797; rx_overrun=1 cmd_dropped=1, rx_peak=2048 — кільце переповнилось
+#   за 5,1 с блокування CAM TEST; EVTLOG dropped=1065, loop avg 554 мкс (цикл зайнятий відповідями). — FAIL
+# Без пауз (--load-burst): ПК не зміг передати потік — os.write → BlockingIOError (вихідний буфер VCP ST-LINK
+#   повний), запис перервався через ~2 с. Стенд не дає подати потік без пауз — обмеження ST-LINK VCP (див. лог 22).
+# Точка зламу: між 50 і 100 Гц команд mixed при довгій операції ~5 с — переповнюється кільце 2048 Б
+#   (≈ 100 Гц × 5,1 с × ~4–5 Б на команду). Без довгих операцій 100 Гц — окремо не вимірювалось.
+#
+# --- 50 Гц ---
++   1.987 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.004 === Smart�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.360 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.114,ay_g=0.021,az_g=1.100,gyro_max_dps=11.9,t_c=23.3
++   3.365 ST,BMP180,OK,id=0x55,t_c=20.5,p_hpa=990.07
++   3.386 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.391 ST,DHT11,OK,t_c=21.2,rh=46.1,raw=2E01150246,crc=OK
++   3.406 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.725 LOG,MOUNT,result=mounted,valid=1382,damaged=2,next_seq=1385,boot=99,head=1386,us=256534
++   3.830 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.834 STACK reserved=4096 used=720 free=3376
++   3.837 HEAP arena=1468 used=1468 free=0
++   3.959 EVT,id=1386,t_ms=1954,name=DOOR_CLOSED,arg=0,flash=ok
++   3.963 EVT t_us=121649 name=fsm_door_closed
++   5.046 > CAM TEST
++  10.207 EVT t_us=5000614 name=capture_start
++  10.266 EVT t_us=6343978 name=capture_done
++  38.667 EVT t_us=34832879 name=fsm_tamper
++  40.482 EVT t_us=36645305 name=pir_trig
++  40.489 EVT t_us=36654678 name=fsm_motion
++  40.803 EVT t_us=36968710 name=fsm_tamper
++  42.056 EVT t_us=38221662 name=fsm_tamper
++  42.442 > STATS
++  42.449 STATS_BEGIN git=f5dc804 t_us=38612656 loops=641616
++  42.455 STAT name=loop n=641616 min_us=16 avg_us=56 max_us=5159938
++  42.481 JITTER name=buttons period_us=10000 min_us=-8388 max_us=5157101 missed=132
++  42.504 JITTER name=security period_us=20000 min_us=-11573 max_us=5157103 missed=18
++  42.538 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  42.577 STAT name=uart n=14773 min_us=4 avg_us=1486 max_us=5159924
++  42.586 STAT name=btn_b1_lat n=0 min_us=0 avg_us=0 max_us=0
++  42.594 STAT name=pir_lat n=1 min_us=1037 avg_us=1037 max_us=1037
++  42.609 STAT name=camera n=1 min_us=1340953 avg_us=1340953 max_us=1340953
++  42.615 STAT name=flash_frame n=0 min_us=0 avg_us=0 max_us=0
++  42.625 EVQ len=8 pending=0 max_depth=1 posted=5 dropped=0
++  42.631 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1038
++  42.634 EVTLOG pending=1 dropped=152
++  42.639 DIAG name=fsm state=UNLOCKED ignored=4 cam_rejected=0
++  42.644 DIAG name=buttons dropped=0 late=0 key_lost=0
++  42.651 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++  42.657 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++  42.665 DIAG name=journal pending=0 max_depth=1 stored=1 unsaved=0 dropped=0 last_seq=1386
++  42.674 DIAG name=camlink requested=0 rejected=0 ok=0 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++  42.682 DIAG name=camera accepted=0 rejected=0 stored=0 capture_err=0 store_err=0 pending=0
++  42.686 STACK reserved=4096 used=760 free=3336
++  42.689 HEAP arena=1468 used=1468 free=0
++  42.690 STATS_END
+#
+# --- 100 Гц ---
++   2.005 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.021 === SmartL�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.379 ST,MPU6050,WARN,who=0x68,a_g=1.107,ax_g=0.110,ay_g=0.024,az_g=1.102,gyro_max_dps=12.0,t_c=23.2
++   3.383 ST,BMP180,OK,id=0x55,t_c=20.5,p_hpa=990.04
++   3.405 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.411 ST,DHT11,OK,t_c=21.4,rh=46.2,raw=2E02150449,crc=OK
++   3.425 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.743 LOG,MOUNT,result=mounted,valid=1384,damaged=2,next_seq=1387,boot=100,head=1388,us=256546
++   3.849 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.853 STACK reserved=4096 used=720 free=3376
++   3.856 HEAP arena=1468 used=1468 free=0
++   3.978 EVT,id=1388,t_ms=1954,name=DOOR_CLOSED,arg=0,flash=ok
++   3.981 EVT t_us=121649 name=fsm_door_closed
++   5.061 > CAM TEST
++  10.218 EVT t_us=5000614 name=capture_start
++  10.278 EVT t_us=6344065 name=capture_done
++  42.565 > STATS
++  42.571 STATS_BEGIN git=f5dc804 t_us=38716565 loops=69283
++  42.577 STAT name=loop n=69283 min_us=16 avg_us=554 max_us=5155578
++  42.604 JITTER name=buttons period_us=10000 min_us=-3145 max_us=5149778 missed=37
++  42.627 JITTER name=security period_us=20000 min_us=-11373 max_us=5149780 missed=18
++  42.660 STAT name=camera n=0 min_us=0 avg_us=0 max_us=0
++  42.699 STAT name=uart n=2730 min_us=4 avg_us=12416 max_us=5155564
++  42.707 STAT name=btn_b1_lat n=0 min_us=0 avg_us=0 max_us=0
++  42.715 STAT name=pir_lat n=0 min_us=0 avg_us=0 max_us=0
++  42.730 STAT name=camera n=1 min_us=1341040 avg_us=1341040 max_us=1341040
++  42.736 STAT name=flash_frame n=0 min_us=0 avg_us=0 max_us=0
++  42.746 EVQ len=8 pending=0 max_depth=1 posted=1 dropped=0
++  42.752 UART rx_overrun=1 cmd_overflow=0 cmd_dropped=1 rx_peak=2048
++  42.755 EVTLOG pending=1 dropped=1065
++  42.761 DIAG name=fsm state=UNLOCKED ignored=0 cam_rejected=0
++  42.765 DIAG name=buttons dropped=0 late=0 key_lost=0
++  42.772 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++  42.778 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++  42.786 DIAG name=journal pending=0 max_depth=1 stored=1 unsaved=0 dropped=0 last_seq=1388
++  42.795 DIAG name=camlink requested=0 rejected=0 ok=0 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++  42.803 DIAG name=camera accepted=0 rejected=0 stored=0 capture_err=0 store_err=0 pending=0
++  42.807 STACK reserved=4096 used=760 free=3336
++  42.811 HEAP arena=1468 used=1468 free=0
++  42.812 STATS_END
+#
+# --- Без пауз ---
++   2.003 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.019 === Smar�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.377 ST,MPU6050,WARN,who=0x68,a_g=1.105,ax_g=0.113,ay_g=0.027,az_g=1.099,gyro_max_dps=11.8,t_c=23.2
++   3.381 ST,BMP180,OK,id=0x55,t_c=20.5,p_hpa=990.07
++   3.403 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.408 ST,DHT11,OK,t_c=21.4,rh=46.2,raw=2E02150449,crc=OK
++   3.422 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.741 LOG,MOUNT,result=mounted,valid=1386,damaged=2,next_seq=1389,boot=101,head=1390,us=256557
++   3.847 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.851 STACK reserved=4096 used=720 free=3376
++   3.854 HEAP arena=1468 used=1468 free=0
++   3.976 EVT,id=1390,t_ms=1954,name=DOOR_CLOSED,arg=0,flash=ok
++   3.979 EVT t_us=121649 name=fsm_door_closed
++   5.061 > CAM TEST
+#

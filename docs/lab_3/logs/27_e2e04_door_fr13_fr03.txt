@@ -1,0 +1,154 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-21.
+# Прошивка: main f5dc804 (після злиття PR #50 — стек 4 КБ, і PR #55 — натискання коду через EXTI),
+# у банері git=f5dc804. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make lab3 — PASS,
+# firmware.bin sha256 ff89e2949a5571af8eaed73cac44a075351f95258ad4dd0366dc18e3993ec5e6.
+# Запис: scripts/uart_capture.py, МК скинуто на старті запису. Формат рядка: «+ <с від старту запису> <рядок UART>».
+# Пропущено: LOAD, службові EVT uart_cmd_*, PING/PONG навантаження, відповіді MEM поза STATS.
+# E2E-04 «Затримка 15 с за відчинених дверей» (FR-01–FR-04, FR-13), FR-13 (FORCED_OPEN, дребезг), FR-03.
+# Дії: B1 за зачинених дверей (66,8 с), на 9-й секунді відліку двері відчинили (76,0 с), відлік закінчився
+#   за відчинених дверей; двері зачинили о 126,7 с; потім відкриття в LOCKED; швидкі «смикання» магніту.
+# Результат:
+#   за відчинених дверей після 15 с LOCKED немає — FSM чекає в EXIT_DELAY; — PASS
+#   DOOR_CLOSED і LOCKED в ту саму мілісекунду (arg=59980 — від B1), без нового 15-секундного відліку; — PASS
+#   відкриття в LOCKED → FORCED_OPEN (145,9 с), стан лишився LOCKED, UNLOCKED немає; — PASS
+#   швидкі смикання магніту: хибних подій немає; одне довше за TBD_DOOR_DEBOUNCE_MS (100 мс) — коректний
+#   FORCED_OPEN (163,4 с). Короткий контактний дребезг рукою не відтворити — окремо не вимірювався.
+# FR-03: у логах 24–27 LOCK_ACTIVATED → LOCKED рівно 15 000 мс за таймером МК (4 вимірювання), вимога 15 ± 0,1 с.
+#   PulseView для FR-03 — у S1–S3 не знімали; міряли за мітками МК. — PASS
+# Підсумок E2E-04: PASS.
+#
+# --- E2E-04 ---
++   1.995 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   2.011 === SmartBUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.368 ST,MPU6050,WARN,who=0x68,a_g=1.106,ax_g=0.120,ay_g=0.024,az_g=1.100,gyro_max_dps=11.8,t_c=22.8
++   3.372 ST,BMP180,OK,id=0x55,t_c=20.0,p_hpa=989.82
++   3.394 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.399 ST,DHT11,OK,t_c=21.3,rh=49.5,raw=310515034E,crc=OK
++   3.414 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.731 LOG,MOUNT,result=mounted,valid=1072,damaged=1,next_seq=1075,boot=89,head=1075,us=255033
++   3.836 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.840 STACK reserved=4096 used=720 free=3376
++   3.843 HEAP arena=1468 used=1468 free=0
++   3.965 EVT,id=1076,t_ms=1951,name=DOOR_CLOSED,arg=0,flash=ok
++   3.969 EVT t_us=121648 name=fsm_door_closed
++  53.786 EVT,id=1077,t_ms=51720,name=DOOR_OPEN,arg=0,flash=ok
++  53.789 EVT t_us=49941654 name=fsm_door_open
++  64.326 EVT,id=1078,t_ms=62248,name=DOOR_CLOSED,arg=0,flash=ok
++  64.330 EVT t_us=60481644 name=fsm_door_closed
++  68.822 EVT t_us=64978603 name=btn_b1_press
++  68.826 EVT t_us=64980047 name=btn_b1_handled
++  68.847 EVT,id=1079,t_ms=66764,name=LOCK_ACTIVATED,arg=15000,flash=ok
++  68.851 EVT t_us=65001771 name=fsm_lock_request
++  70.282 EVT t_us=66424625 name=pir_trig
++  70.289 EVT t_us=66448398 name=fsm_motion
++  77.886 EVT t_us=74040049 name=pir_trig
++  78.107 EVT,id=1080,t_ms=76014,name=DOOR_OPEN,arg=0,flash=ok
++  78.110 EVT t_us=74261647 name=fsm_door_open
++  82.822 EVT t_us=78969388 name=pir_trig
++  82.829 EVT t_us=78988396 name=fsm_motion
++  85.283 EVT t_us=81430247 name=btn_b1_press
++  85.287 EVT t_us=81440046 name=btn_b1_handled
++  85.303 EVT t_us=81461647 name=fsm_lock_request
++  86.843 EVT t_us=82988081 name=pir_trig
++ 122.843 EVT t_us=118996115 name=pir_trig
++ 122.850 EVT t_us=119008693 name=fsm_motion
++ 128.887 EVT,id=1081,t_ms=126742,name=DOOR_CLOSED,arg=0,flash=ok
++ 128.891 EVT t_us=125041647 name=fsm_door_closed
++ 128.898 EVT,id=1082,t_ms=126742,name=LOCKED,arg=59980,flash=ok
++ 131.535 CAM,photo,event=1083,status=ok,cap=ok,capture_us=1585004,store_us=859674,aec=ok
++ 131.542 EVT,id=1083,t_ms=126942,name=TAMPER,arg=214,flash=ok
++ 131.546 EVT t_us=125241657 name=fsm_tamper
++ 131.550 EVT t_us=125241673 name=capture_start
++ 131.601 EVT,id=1084,t_ms=129306,name=PHOTO,arg=334,ref=1083,flash=ok
++ 131.606 EVT t_us=126829089 name=capture_done
++ 131.610 EVT t_us=126829097 name=flash_wr_start
++ 133.666 CAM,photo,event=1085,status=ok,cap=ok,capture_us=1185896,store_us=858194,aec=ok
++ 133.673 EVT,id=1085,t_ms=129387,name=MOTION,arg=0,flash=ok
++ 133.677 EVT t_us=127688777 name=flash_wr_done
++ 133.680 EVT t_us=127285541 name=pir_trig
++ 133.731 EVT,id=1086,t_ms=129387,name=TAMPER,arg=224,flash=ok
++ 133.740 EVT t_us=127771636 name=fsm_motion
++ 133.749 EVT,id=1087,t_ms=129387,name=PHOTO_ERR,arg=1,ref=1086,flash=ok
++ 133.757 EVT t_us=127771653 name=fsm_tamper
++ 133.765 EVT,id=1088,t_ms=131350,name=PHOTO,arg=335,ref=1085,flash=ok
++ 133.769 EVT t_us=127773261 name=capture_start
++ 133.772 EVT t_us=128961569 name=capture_done
++ 133.778 EVT t_us=128961577 name=flash_wr_start
++ 133.782 EVT t_us=129819777 name=flash_wr_done
++ 148.228 EVT,id=1089,t_ms=145894,name=FORCED_OPEN,arg=0,flash=ok
++ 148.232 EVT t_us=144381656 name=fsm_door_open
++ 155.048 EVT,id=1090,t_ms=152708,name=DOOR_CLOSED,arg=0,flash=ok
++ 155.052 EVT t_us=151201645 name=fsm_door_closed
++ 156.804 EVT t_us=152942461 name=pir_trig
++ 159.264 CAM,photo,event=1091,status=ok,cap=ok,capture_us=1580295,store_us=865434,aec=ok
++ 159.271 EVT,id=1091,t_ms=154473,name=MOTION,arg=0,flash=ok
++ 159.274 EVT t_us=152968600 name=fsm_motion
++ 159.330 EVT,id=1092,t_ms=156836,name=PHOTO,arg=336,ref=1091,flash=ok
++ 159.334 EVT t_us=152968622 name=capture_start
++ 159.339 EVT t_us=154551329 name=capture_done
++ 159.343 EVT t_us=154551337 name=flash_wr_start
++ 159.347 EVT t_us=155416777 name=flash_wr_done
++ 164.163 EVT t_us=160316399 name=pir_trig
++ 165.809 EVT,id=1093,t_ms=163373,name=FORCED_OPEN,arg=0,flash=ok
++ 165.811 EVT t_us=161961655 name=fsm_door_open
++ 168.839 CAM,photo,event=1094,status=ok,cap=ok,capture_us=1983404,store_us=845274,aec=ok
++ 168.846 EVT,id=1094,t_ms=163571,name=TAMPER,arg=16,flash=ok
++ 168.850 EVT t_us=162161657 name=fsm_tamper
++ 168.854 EVT t_us=162161673 name=capture_start
++ 168.905 EVT,id=1095,t_ms=166315,name=PHOTO,arg=337,ref=1094,flash=ok
++ 168.910 EVT t_us=164147489 name=capture_done
++ 168.914 EVT t_us=164147497 name=flash_wr_start
++ 170.966 CAM,photo,event=1096,status=ok,cap=ok,capture_us=1200320,store_us=839793,aec=ok
++ 170.973 EVT,id=1096,t_ms=166396,name=TAMPER,arg=23,flash=ok
++ 170.977 EVT t_us=164992777 name=flash_wr_done
++ 170.981 EVT t_us=165075631 name=fsm_tamper
++ 171.032 EVT,id=1097,t_ms=168356,name=PHOTO,arg=338,ref=1096,flash=ok
++ 171.038 EVT t_us=165077237 name=capture_start
++ 171.041 EVT t_us=166279969 name=capture_done
++ 173.098 CAM,photo,event=1099,status=ok,cap=ok,capture_us=1205781,store_us=839314,aec=ok
++ 173.106 EVT,id=1098,t_ms=168437,name=DOOR_CLOSED,arg=0,flash=ok
++ 173.110 EVT t_us=166279977 name=flash_wr_start
++ 173.114 EVT t_us=167119777 name=flash_wr_done
++ 173.164 EVT,id=1099,t_ms=168437,name=MOTION,arg=0,flash=ok
++ 173.170 EVT t_us=166386656 name=pir_trig
++ 173.182 EVT,id=1100,t_ms=170402,name=PHOTO,arg=339,ref=1099,flash=ok
++ 173.186 EVT t_us=167202634 name=fsm_door_closed
++ 173.190 EVT t_us=167202644 name=fsm_motion
++ 173.199 EVT t_us=167204256 name=capture_start
++ 173.204 EVT t_us=168412449 name=capture_done
++ 173.208 EVT t_us=168412457 name=flash_wr_start
++ 173.212 EVT t_us=169251777 name=flash_wr_done
++ 186.824 EVT t_us=182969247 name=pir_trig
++ 189.103 CAM,photo,event=1101,status=ok,cap=ok,capture_us=1415019,store_us=849714,aec=ok
++ 189.110 EVT,id=1101,t_ms=184122,name=MOTION,arg=0,flash=ok
++ 189.113 EVT t_us=182988595 name=fsm_motion
++ 189.169 EVT,id=1102,t_ms=186304,name=PHOTO,arg=340,ref=1101,flash=ok
++ 189.174 EVT t_us=182988618 name=capture_start
++ 189.178 EVT t_us=184406049 name=capture_done
++ 189.183 EVT t_us=184406057 name=flash_wr_start
++ 189.187 EVT t_us=185255777 name=flash_wr_done
++ 240.086 > STATS
++ 240.093 STATS_BEGIN git=f5dc804 t_us=236248041 loops=9460603
++ 240.099 STAT name=loop n=9460603 min_us=16 avg_us=21 max_us=2853669
++ 240.126 JITTER name=buttons period_us=10000 min_us=-8388 max_us=2845677 missed=125
++ 240.149 JITTER name=security period_us=20000 min_us=-10695 max_us=2835678 missed=125
++ 240.185 STAT name=camera n=7 min_us=2050369 avg_us=2312126 max_us=2838929
++ 240.225 STAT name=uart n=269 min_us=4 avg_us=2078 max_us=8852
++ 240.234 STAT name=btn_b1_lat n=2 min_us=1437 avg_us=5614 max_us=9791
++ 240.243 STAT name=pir_lat n=10 min_us=3651 avg_us=126017 max_us=756093
++ 240.259 STAT name=camera n=7 min_us=1185896 avg_us=1450817 max_us=1983404
++ 240.265 STAT name=flash_frame n=7 min_us=839314 avg_us=851056 max_us=865434
++ 240.276 EVQ len=8 pending=0 max_depth=2 posted=22 dropped=0
++ 240.282 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=1
++ 240.285 EVTLOG pending=1 dropped=0
++ 240.290 DIAG name=fsm state=LOCKED ignored=4 cam_rejected=1
++ 240.295 DIAG name=buttons dropped=0 late=0 key_lost=0
++ 240.301 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++ 240.307 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++ 240.315 DIAG name=journal pending=0 max_depth=4 stored=27 unsaved=0 dropped=0 last_seq=1102
++ 240.324 DIAG name=camlink requested=8 rejected=1 ok=7 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++ 240.333 DIAG name=camera accepted=7 rejected=1 stored=7 capture_err=0 store_err=0 pending=0
++ 240.337 STACK reserved=4096 used=760 free=3336
++ 240.340 HEAP arena=1468 used=1468 free=0
++ 240.341 STATS_END
+#

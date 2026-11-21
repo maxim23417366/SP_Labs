@@ -1,0 +1,126 @@
+# Стенд SmartLock, Nucleo-F411RE, USART2 115200 8N1 через ST-LINK VCP. Дата: 2026-11-21.
+# Прошивка: main f5dc804 (після злиття PR #50 — стек 4 КБ, і PR #55 — натискання коду через EXTI),
+# у банері git=f5dc804. Збірка в Docker (stm32-builder, arm-none-eabi-gcc 10.3.1), make lab3 — PASS,
+# firmware.bin sha256 ff89e2949a5571af8eaed73cac44a075351f95258ad4dd0366dc18e3993ec5e6.
+# Запис: scripts/uart_capture.py, МК скинуто на старті запису. Формат рядка: «+ <с від старту запису> <рядок UART>».
+# Пропущено: LOAD, службові EVT uart_cmd_*, PING/PONG навантаження, відповіді MEM поза STATS.
+# E2E-03 «Правильний і неправильний код під навантаженням» (FR-09–FR-12) + FR-11 (немає самоблокування 5 хв).
+# Навантаження: scripts/uart_capture.py --load-rate 5 --load-profile mixed — 2250 команд за 450 с,
+#   PONG 1979; UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0, rx_peak=258 з 2048.
+# Неправильний код (червона ×4, звичайний темп): зараховано 3 з 4 (122,43, 123,51, 123,95 с), четверте
+#   натискання припало на другу зйомку поспіль → WRONG_CODE немає. — FAIL (issue #54)
+# Правильний код: 4 з 4 (3 з них під час зйомки, late) → ACCESS_GRANTED, UNLOCKED, серво відчинило. — PASS
+# FR-11: UNLOCKED з 139,8 с до кінця запису (446 с) — 306 с без жодного LOCK_ACTIVATED/LOCKED. — PASS
+# Підсумок E2E-03: FAIL (неправильний код не зареєстровано); FR-11: PASS.
+#
+# --- E2E-03 + FR-11 ---
++   1.805 STACK reserved=4096 used=760 free=3336
++   1.808 HEAP arena=1468 used=1468 free=0
++   2.024 BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superlo�BUILD,fw=SmartLock,lab=LR3,git=f5dc804,cpu_hz=96000000,loop=superloop
++   3.381 ST,MPU6050,WARN,who=0x68,a_g=1.110,ax_g=0.113,ay_g=0.024,az_g=1.104,gyro_max_dps=11.8,t_c=22.7
++   3.386 ST,BMP180,OK,id=0x55,t_c=19.8,p_hpa=989.70
++   3.407 ST,OV7670,OK,pid=0x76,ver=0x73,vsync_hz=1
++   3.412 ST,DHT11,OK,t_c=20.8,rh=46.3,raw=2E0314084D,crc=OK
++   3.427 ST,SUMMARY,WARN,ok=8,warn=2,fail=0,skip=0
++   3.744 LOG,MOUNT,result=mounted,valid=1058,damaged=1,next_seq=1061,boot=88,head=1061,us=254962
++   3.850 CAM,init,status=ok,pid=0x76,ver=0x73,clkrc=0x0F,failed_reg=0x00
++   3.853 STACK reserved=4096 used=720 free=3376
++   3.857 HEAP arena=1468 used=1468 free=0
++   3.894 STACK reserved=4096 used=720 free=3376
++   3.897 HEAP arena=1468 used=1468 free=0
++   3.998 EVT,id=1062,t_ms=1972,name=DOOR_CLOSED,arg=0,flash=ok
++   4.003 EVT t_us=141648 name=fsm_door_closed
++  97.796 EVT t_us=93922883 name=pir_trig
++  97.803 EVT t_us=93948401 name=fsm_motion
++  99.765 EVT t_us=95904294 name=btn_b1_press
++  99.769 EVT t_us=95910057 name=btn_b1_handled
++  99.789 EVT,id=1063,t_ms=97657,name=LOCK_ACTIVATED,arg=15000,flash=ok
++  99.793 EVT t_us=95930086 name=fsm_lock_request
++ 101.316 EVT t_us=97447783 name=pir_trig
++ 114.804 EVT,id=1064,t_ms=112657,name=LOCKED,arg=15000,flash=ok
++ 126.305 EVT t_us=122430054 name=code_key_press
++ 126.309 EVT t_us=122450050 name=code_key_handled
++ 126.457 EVT t_us=122600046 name=code_key_dup_1
++ 129.422 CAM,photo,event=1065,status=ok,cap=ok,capture_us=2052527,store_us=866153,aec=ok
++ 129.429 EVT,id=1065,t_ms=124341,name=TAMPER,arg=966,flash=ok
++ 129.442 EVT t_us=122641654 name=fsm_tamper
++ 129.445 EVT t_us=122641670 name=capture_start
++ 129.497 EVT,id=1066,t_ms=127176,name=PHOTO,arg=330,ref=1065,flash=ok
++ 129.508 EVT t_us=124696609 name=capture_done
++ 129.512 EVT t_us=124696617 name=flash_wr_start
++ 131.552 CAM,photo,event=1067,status=ok,cap=ok,capture_us=1164714,store_us=863674,aec=ok
++ 131.559 EVT,id=1067,t_ms=127270,name=TAMPER,arg=946,flash=ok
++ 131.579 EVT t_us=125562777 name=flash_wr_done
++ 131.634 EVT,id=1068,t_ms=129220,name=PHOTO,arg=331,ref=1067,flash=ok
++ 133.683 CAM,photo,event=1069,status=ok,cap=ok,capture_us=1157622,store_us=862194,aec=ok
++ 133.690 EVT,id=1069,t_ms=129325,name=MOTION,arg=0,flash=ok
++ 133.758 EVT,id=1070,t_ms=131264,name=PHOTO,arg=332,ref=1069,flash=ok
++ 133.773 EVT t_us=123506168 name=code_key_press
++ 133.784 EVT t_us=125594413 name=code_key_handled
++ 133.788 EVT t_us=123950538 name=code_key_press
++ 133.801 EVT t_us=125594425 name=code_key_handled
++ 133.846 EVT t_us=125660356 name=fsm_tamper
++ 133.860 EVT t_us=125661963 name=capture_start
++ 133.864 EVT t_us=126829089 name=capture_done
++ 133.917 EVT t_us=126829097 name=flash_wr_start
++ 133.921 EVT t_us=127692777 name=flash_wr_done
++ 133.968 EVT t_us=127330212 name=pir_trig
++ 134.000 EVT t_us=127799922 name=fsm_motion
++ 134.011 EVT t_us=127801535 name=capture_start
++ 134.014 EVT t_us=128961569 name=capture_done
++ 134.020 EVT t_us=128961577 name=flash_wr_start
++ 134.024 EVT t_us=129823777 name=flash_wr_done
++ 138.337 EVT t_us=134479301 name=pir_trig
++ 142.199 CAM,photo,event=1071,status=ok,cap=ok,capture_us=1522385,store_us=847274,aec=ok
++ 142.207 EVT,id=1071,t_ms=137398,name=TAMPER,arg=203,flash=ok
++ 142.219 EVT t_us=135966676 name=fsm_tamper
++ 142.223 EVT t_us=135966692 name=capture_start
++ 142.275 EVT,id=1072,t_ms=139683,name=PHOTO,arg=333,ref=1071,flash=ok
++ 142.285 EVT t_us=137491489 name=capture_done
++ 142.289 EVT t_us=137491497 name=flash_wr_start
++ 142.298 EVT,id=1073,t_ms=139778,name=ACCESS_GRANTED,arg=4,flash=ok
++ 142.311 EVT t_us=138338777 name=flash_wr_done
++ 142.323 EVT,id=1074,t_ms=139778,name=UNLOCKED,arg=0,flash=ok
++ 142.364 EVT t_us=135958936 name=code_key_press
++ 142.368 EVT t_us=138370408 name=code_key_handled
++ 142.372 EVT t_us=136918204 name=code_key_press
++ 142.376 EVT t_us=138370421 name=code_key_handled
++ 142.380 EVT t_us=137503238 name=code_key_press
++ 142.386 EVT t_us=138370433 name=code_key_handled
++ 142.389 EVT t_us=138071655 name=code_key_press
++ 142.394 EVT t_us=138370445 name=code_key_handled
++ 142.416 EVT t_us=138436359 name=fsm_code_ok
++ 142.421 EVT t_us=138436372 name=fsm_tamper
++ 143.958 EVT t_us=140086968 name=pir_trig
++ 143.965 EVT t_us=140108589 name=fsm_motion
++ 154.799 EVT t_us=150924001 name=pir_trig
++ 154.806 EVT t_us=150948583 name=fsm_motion
++ 199.982 EVT t_us=196111991 name=pir_trig
++ 199.989 EVT t_us=196128586 name=fsm_motion
++ 243.622 EVT t_us=239752337 name=pir_trig
++ 243.629 EVT t_us=239768592 name=fsm_motion
++ 450.106 > STATS
++ 450.113 STATS_BEGIN git=f5dc804 t_us=446246670 loops=17729990
++ 450.119 STAT name=loop n=17729990 min_us=16 avg_us=21 max_us=2952343
++ 450.146 JITTER name=buttons period_us=10000 min_us=-9941 max_us=2944351 missed=362
++ 450.169 JITTER name=security period_us=20000 min_us=-11964 max_us=2934378 missed=226
++ 450.206 STAT name=camera n=4 min_us=2030070 avg_us=2344389 max_us=2928932
++ 450.246 STAT name=uart n=22568 min_us=4 avg_us=1069 max_us=23246
++ 450.256 STAT name=btn_b1_lat n=1 min_us=5756 avg_us=5756 max_us=5756
++ 450.264 STAT name=pir_lat n=8 min_us=766 avg_us=59594 max_us=401571
++ 450.280 STAT name=camera n=4 min_us=1157622 avg_us=1474312 max_us=2052527
++ 450.286 STAT name=flash_frame n=4 min_us=847274 avg_us=859824 max_us=866153
++ 450.298 EVQ len=8 pending=0 max_depth=2 posted=13 dropped=0
++ 450.303 UART rx_overrun=0 cmd_overflow=0 cmd_dropped=0 rx_peak=258
++ 450.306 EVTLOG pending=1 dropped=9
++ 450.311 DIAG name=fsm state=UNLOCKED ignored=6 cam_rejected=0
++ 450.316 DIAG name=buttons dropped=0 late=6 key_lost=0
++ 450.323 DIAG name=security mpu_ok=1 mpu_err=0 mpu_zero=0 lost=0 door_retries=0
++ 450.328 DIAG name=env dht_err=0 bmp_err=0 warnings=0 post_failed=0
++ 450.337 DIAG name=journal pending=0 max_depth=2 stored=13 unsaved=0 dropped=0 last_seq=1074
++ 450.346 DIAG name=camlink requested=4 rejected=0 ok=4 failed=0 timeouts=0 unknown=0 no_id=0 pending=0
++ 450.354 DIAG name=camera accepted=4 rejected=0 stored=4 capture_err=0 store_err=0 pending=0
++ 450.358 STACK reserved=4096 used=760 free=3336
++ 450.361 HEAP arena=1468 used=1468 free=0
++ 450.362 STATS_END
+#
