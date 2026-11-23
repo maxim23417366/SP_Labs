@@ -69,6 +69,22 @@
 Статика скрізь трохи більша за вимір (на 3–9 %): вона враховує гілки `printf` з newlib, які
 фактично не виконувались. Найгірший випадок 1 344 Б з резерву 4 096 Б — запас 67 %.
 
+Найглибший ланцюжок кожної задачі планувальника (тим самим методом; задачі — `Sched_Add` у
+`App/app_tasks.c`). У super loop задачі ділять один стек, тому потрібен лише найбільший ланцюжок;
+у ЛР4 кожна задача отримає свій стек, і орієнтиром стане сума:
+
+| Задача | Ланцюжок | Що його визначає |
+|---|---:|---|
+| `uart` | 1 072 Б | команда ЛР2 `h`: `Bench_Command → dht11_line → … → vsnprintf` |
+| `camera` | 664 Б | `CamTest_Capture → cam_init → printf` |
+| `env` | 640 Б | `SmartLock_EnvPoll → printf` |
+| `storage` | 624 Б | `Storage_Append → erase_if_needed → printf` |
+| `mem` | 560 Б | `AppTasks_PrintMem → printf` |
+| `security` | 288 Б | `mpu6050_read_raw → HAL_I2C_Mem_Read` |
+| `buttons` | 152 Б | `Evt_Log → Perf_TimeUs64` |
+| `fsm` | 136 Б | `SmartLock_TakeEvent → Evt_Log` |
+| **сума 8 задач** | **4 136 Б** | |
+
 ## 3. Heap
 
 | | S1 | S2 (67 хв) | S3 |
