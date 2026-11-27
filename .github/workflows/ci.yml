@@ -8,6 +8,11 @@ on:
   push:
     branches: [main]
 
+# H06 (ЛР4): fw-check вимагає FreeRTOS у прошивці. Поки ядра в main немає, RTOS_REQUIRED=0 —
+# відсутність FreeRTOS лише попередження. K02 (ядро FreeRTOS) ставить тут 1 у тому ж PR.
+env:
+  RTOS_REQUIRED: 0
+
 jobs:
   build-and-test:
     runs-on: ubuntu-22.04
@@ -38,8 +43,8 @@ jobs:
       - name: Firmware build (Docker, arm-none-eabi-gcc)
         run: make build GIT_HASH="$GIT_HASH"
 
-      - name: Single firmware check - no RTOS, strong modules, git hash (I10)
-        run: make fw-check REQUIRE_GIT=1 GIT_HASH="$GIT_HASH"
+      - name: Single firmware check - FreeRTOS, strong modules, git hash (I10, H06)
+        run: make fw-check REQUIRE_GIT=1 RTOS_REQUIRED="$RTOS_REQUIRED" GIT_HASH="$GIT_HASH"
 
       - name: Memory report (I06)
         run: make mem-report GIT_HASH="$GIT_HASH"
@@ -65,3 +70,33 @@ jobs:
             firmware/build/mem/*.txt
             tests/build/I11_host_checks.log
           if-no-files-found: warn
+
+  # H06: прошивка ЛР3 (Super Loop) з тегу lab3 — щоб її завжди можна було прошити для
+  # порівняння з ЛР4 (docs/baseline-lab4.md). Збирається й перевіряється скриптами самого
+  # тегу (там fw-check ще з правилом «без RTOS»), тож не залежить від змін у main.
+  lab3-tag-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: lab3
+
+      - name: Git hash of the lab3 tag
+        run: echo "GIT_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Firmware build of lab3 (Docker, arm-none-eabi-gcc)
+        run: make build GIT_HASH="$GIT_HASH"
+
+      - name: Single firmware check of lab3 - no RTOS (rules of the tag)
+        run: make fw-check REQUIRE_GIT=1 GIT_HASH="$GIT_HASH"
+
+      - name: Upload lab3 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-lab3-${{ env.GIT_HASH }}
+          path: |
+            firmware/build/firmware.elf
+            firmware/build/firmware.hex
+            firmware/build/firmware.bin
+            firmware/build/firmware.map
+          if-no-files-found: error

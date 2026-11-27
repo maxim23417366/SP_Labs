@@ -91,10 +91,13 @@ tools-test: image
 check-deps: image
 	$(DOCKER_RUN) sh -c "tr -d '\r' < scripts/check_deps.sh | sh"
 
-# ЛР3 (I10): зібрана прошивка — одна, без RTOS, з усіма модулями і цим git-хешем.
-# REQUIRE_GIT=1 (CI) — збірка без git (nogit) є помилкою
+# ЛР4 (H06): зібрана прошивка — одна, з FreeRTOS, з усіма модулями і цим git-хешем.
+# REQUIRE_GIT=1 (CI) — збірка без git (nogit) є помилкою.
+# RTOS_REQUIRED=1 — прошивка без FreeRTOS є помилкою. Поки ядра в main немає (до K02),
+# за замовчуванням 0: відсутність FreeRTOS — лише попередження. K02 ставить тут 1.
+RTOS_REQUIRED ?= 0
 fw-check: build
-	$(DOCKER_RUN) sh -c "tr -d '\r' < scripts/check_firmware.sh | GIT_HASH=$(GIT_HASH) REQUIRE_GIT=$(REQUIRE_GIT) sh"
+	$(DOCKER_RUN) sh -c "tr -d '\r' < scripts/check_firmware.sh | GIT_HASH=$(GIT_HASH) REQUIRE_GIT=$(REQUIRE_GIT) RTOS_REQUIRED=$(RTOS_REQUIRED) sh"
 
 # Який хеш отримає прошивка, якщо зібрати зараз
 version:
@@ -124,7 +127,7 @@ help:
 	@echo make tools-test - frame export: C -> UART log -> tools/frame_decode.py -> PNG
 	@echo make check-deps - check include rules between firmware layers
 	@echo make mem-report - LR3 memory reports in firmware/build/mem
-	@echo make fw-check - LR3 single firmware: no RTOS, all modules strong, git hash in .elf
+	@echo make fw-check - LR4 single firmware: FreeRTOS (RTOS_REQUIRED=1 strict), all modules strong, git hash in .elf
 	@echo make lab3    - LR3 full check: check-deps build fw-check mem-report host-checks
 	@echo make host-checks - LR3 all checks without board + tests/build/I11_host_checks.log
 	@echo make version - print GIT_HASH that the next build will embed
