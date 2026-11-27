@@ -36,19 +36,20 @@ import os
 import re
 import select
 import sys
-import termios
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-BAUDS = {
-    9600: termios.B9600,
-    19200: termios.B19200,
-    38400: termios.B38400,
-    57600: termios.B57600,
-    115200: termios.B115200,
-}
+try:
+    import termios  # лише Linux / macOS; на Windows — через WSL
+except ImportError:  # pragma: no cover - залежить від ОС
+    termios = None  # type: ignore[assignment]
+
+BAUD_RATES = (9600, 19200, 38400, 57600, 115200)
+# Константи швидкості termios; на Windows термінала немає, а скрипт імпортується лише заради
+# чистих функцій (тести, uart_load), тож значення не потрібні
+BAUDS = {b: (getattr(termios, f"B{b}") if termios else None) for b in BAUD_RATES}
 
 RE_BUILD = re.compile(r"^BUILD,.*\bgit=(?P<git>[^,\s]+)")
 
@@ -91,6 +92,7 @@ class Capture:
     load_pongs: int = 0         # PONG у відповідь на PING навантаження
     load_first: Optional[float] = None
     load_last: Optional[float] = None
+    load_chunks: int = 0        # пауз між пакетами (--load-chunk)
     _partial: bytes = b""
 
     def feed(self, data: bytes) -> List[str]:
@@ -160,6 +162,31 @@ def load_command(step: int, profile: str) -> str:
     return f"PING {step}"
 
 
+# ST-LINK VCP зависає на безперервному потоці з ПК довшому за ~380 Б, якщо плата
+# одночасно відповідає (docs/lab_3/bench-runs.md, «Відомі обмеження»; лог 22).
+STLINK_SAFE_BYTES = 380
+
+
+def chunk_bytes(first_step: int, count: int, profile: str) -> int:
+    """Байтів у пакеті з count команд навантаження, починаючи з кроку first_step."""
+    return sum(len(encode_command(load_command(first_step + i, profile))) for i in range(count))
+
+
+def pace_after_load(in_chunk: int, chunk: int, gap: float, now: float,
+                    next_load: float) -> Tuple[int, float, bool]:
+    """
+    Пакетна подача навантаження (--load-chunk): після chunk команд — пауза gap с,
+    поки плата відповідає і буфер ST-LINK спорожнюється. Повертає (команд у поточному
+    пакеті, час наступної команди, чи щойно закрито пакет). chunk = 0 — без пакетів.
+    """
+    if chunk <= 0:
+        return in_chunk, next_load, False
+    in_chunk += 1
+    if in_chunk >= chunk:
+        return 0, max(next_load, now + gap), True
+    return in_chunk, next_load, False
+
+
 def encode_command(text: str) -> bytes:
     """
     Один символ — стендова команда без завершення; інше — рядкова команда з \\r\\n.
@@ -187,6 +214,9 @@ def parse_operator(text: str, next_mark: int) -> Tuple[str, Optional[str], str]:
 
 
 def open_port(path: str, baud: int) -> int:
+    if termios is None:
+        raise SystemExit("uart_capture.py працює з портом через termios — лише Linux / macOS "
+                         "(на Windows запускати у WSL)")
     fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     attrs = termios.tcgetattr(fd)
     attrs[0] = 0  # iflag: без перетворень і програмного керування потоком
@@ -205,6 +235,9 @@ def load_summary(cap: Capture, args: argparse.Namespace) -> str:
     if not (args.load_rate > 0 or args.load_burst):
         return "немає"
     mode = "без пауз (--load-burst)" if args.load_burst else f"{args.load_rate:g} Гц"
+    if args.load_chunk > 0:
+        mode += (f", пакетами по {args.load_chunk} команд з паузою {args.load_chunk_gap:g} с "
+                 f"(пауз: {cap.load_chunks})")
     span = (cap.load_last - cap.load_first) if (cap.load_first and cap.load_last) else 0.0
     eff = f", фактично {cap.load_sent / span:.1f} команд/с" if span > 0 else ""
     return (f"профіль {args.load_profile}, {mode}{eff}; надіслано {cap.load_sent}, "
@@ -385,9 +418,16 @@ def run(args: argparse.Namespace) -> int:
         period = 0.0 if args.load_burst else (1.0 / args.load_rate if load_on else 0.0)
         next_load = time.time()
         step = 1
+        in_chunk = 0
         if load_on:
             note(f"навантаження UART: профіль {args.load_profile}, "
-                 + ("без пауз" if args.load_burst else f"{args.load_rate:g} Гц"))
+                 + ("без пауз" if args.load_burst else f"{args.load_rate:g} Гц")
+                 + (f", пакетами по {args.load_chunk} з паузою {args.load_chunk_gap:g} с"
+                    if args.load_chunk > 0 else ""))
+            if args.load_chunk > 0:
+                worst = max(chunk_bytes(s, args.load_chunk, args.load_profile) for s in (1, 251, 9976))
+                if worst > STLINK_SAFE_BYTES:
+                    note(f"УВАГА: пакет до {worst} Б > {STLINK_SAFE_BYTES} Б — зменште --load-chunk")
         try:
             while deadline is None or time.time() < deadline:
                 while plan and time.time() - cap.t0 >= plan[0][0] * 60.0:
@@ -401,6 +441,10 @@ def run(args: argparse.Namespace) -> int:
                     cap.load_last = now
                     step += 1
                     next_load = now if args.load_burst else max(next_load + period, now - period)
+                    in_chunk, next_load, closed = pace_after_load(
+                        in_chunk, args.load_chunk, args.load_chunk_gap, now, next_load)
+                    if closed:
+                        cap.load_chunks += 1
                     pump(0.0)
                     continue
                 pump(min(0.2, max(0.0, next_load - time.time())) if load_on else 0.2)
@@ -451,6 +495,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Гц навантаження UART для S3 (PING/MARK/MEM без очікування відповіді); 0 — вимкнено")
     p.add_argument("--load-burst", action="store_true",
                    help="навантаження без пауз (методичка §6.2.3); темп обмежує --char-gap")
+    p.add_argument("--load-chunk", type=int, default=0,
+                   help="подавати навантаження пакетами по N команд з паузою --load-chunk-gap "
+                        "(обхід зависання ST-LINK VCP на потоці > ~380 Б; рекомендовано 25 для "
+                        "--load-burst і ≥ 50 Гц). 0 — без пакетів, як у прогонах ЛР3. Для порівняння "
+                        "ЛР3 / ЛР4 задавати однаково для обох прошивок")
+    p.add_argument("--load-chunk-gap", type=float, default=0.3,
+                   help="с паузи між пакетами --load-chunk (плата відповідає, буфер ST-LINK спорожнюється)")
     p.add_argument("--load-profile", choices=("ping", "mixed"), default="mixed",
                    help="профіль команд як у scripts/uart_load.py (за замовчуванням mixed)")
     p.add_argument("--boot-wait", type=float, default=10.0,
