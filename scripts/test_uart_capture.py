@@ -2,7 +2,6 @@
 """Автотести для scripts/uart_capture.py: розбір рядків і повний запис через псевдотермінал (без плати)."""
 
 import os
-import pty
 import select
 import sys
 import tempfile
@@ -11,10 +10,20 @@ import time
 import unittest
 from pathlib import Path
 
+try:
+    import pty  # лише Linux / macOS
+except ImportError:  # Windows: тести з псевдотерміналом пропускаються, решта виконується
+    pty = None
+
+NEED_PTY = unittest.skipUnless(pty is not None, "потрібен псевдотермінал (pty) — Linux / macOS")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parse_uart_logs import parse_log_file  # noqa: E402
-from uart_capture import Capture, build_parser, encode_command, load_command, parse_operator, run  # noqa: E402
+from uart_capture import (  # noqa: E402
+    STLINK_SAFE_BYTES, Capture, build_parser, chunk_bytes, encode_command, load_command,
+    pace_after_load, parse_operator, run,
+)
 from uart_load import build_command_for_step  # noqa: E402
 
 BOARD_OUTPUT = (
@@ -59,6 +68,7 @@ class OperatorInputTest(unittest.TestCase):
         self.assertEqual(encode_command("STATS"), b"\rSTATS\r\n")
 
 
+@NEED_PTY
 class PtyRunTest(unittest.TestCase):
     """Повний запуск run() на псевдотерміналі замість ST-LINK VCP."""
 
@@ -160,6 +170,7 @@ class LoadModeTest(unittest.TestCase):
             for step in range(1, 120):
                 self.assertEqual(load_command(step, profile), build_command_for_step(step, profile))
 
+    @NEED_PTY
     def test_s3_capture_and_load_share_one_port(self):
         master, slave = pty.openpty()
         received = bytearray()
@@ -228,6 +239,32 @@ class ExpectedReplyTest(unittest.TestCase):
         self.assertFalse(expected_reply("MARK 3").search("EVT t_us=1 name=mark_33"))
         self.assertIsNone(expected_reply("d"))
         self.assertIsNone(expected_reply("LOG ERASE"))
+
+
+
+class LoadChunkTest(unittest.TestCase):
+    """M03 (ЛР4): пакети ≤ 25 команд — обхід зависання ST-LINK VCP на потоці > ~380 Б."""
+
+    def test_default_is_off_as_in_lab3(self):
+        args = build_parser().parse_args(["--port", "x", "--name", "S3"])
+        self.assertEqual(args.load_chunk, 0)
+        self.assertEqual(pace_after_load(0, 0, 0.3, 10.0, 10.05), (0, 10.05, False))
+
+    def test_pause_after_each_chunk(self):
+        in_chunk, nxt, closed = 0, 0.0, False
+        closes = []
+        for i in range(60):
+            now = i * 0.01
+            in_chunk, nxt, closed = pace_after_load(in_chunk, 25, 0.3, now, now)
+            if closed:
+                closes.append((i + 1, nxt))
+        self.assertEqual([n for n, _ in closes], [25, 50])
+        self.assertAlmostEqual(closes[0][1], 0.24 + 0.3)
+
+    def test_chunk_of_25_fits_stlink_limit(self):
+        for profile in ("ping", "mixed"):
+            for first in (1, 251, 9976):
+                self.assertLessEqual(chunk_bytes(first, 25, profile), STLINK_SAFE_BYTES)
 
 
 if __name__ == "__main__":

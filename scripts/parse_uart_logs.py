@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
 """
-Парсер та аналізатор діагностичних UART-логів SmartLock (ЛР3, задача M03).
+Парсер та аналізатор діагностичних UART-логів SmartLock (ЛР3 — M03, ЛР4 — M03).
+
+Один і той самий скрипт обробляє логи обох прошивок: super loop (тег lab3,
+банер loop=superloop) і FreeRTOS (loop=freertos). Рядки ЛР3 розбираються без
+змін, рядки ЛР4 лише додаються (docs/baseline-lab4.md §5, рецензія K01 у PR #68):
+
+  STACK task=<ім'я> reserved=<Б> used=<Б> free=<Б>   стек задачі; task=MSP — стек переривань
+  STACK task=<ім'я> free_min_words=<слів>            варіант з методички ЛР4 §6.3
+  OSHEAP free=<Б> min_ever_free=<Б> total=<Б>       heap ОС (HEAP free=… — варіант методички §6.4)
+  TASKS_BEGIN [total=<такти>] … TASKS_END            run-time stats (методичка ЛР4 §6.2):
+      TASK name=<ім'я> [prio=<p>] runtime=<такти> pct=<%>   або сирий рядок vTaskGetRunTimeStats
+  TRACE t_us=<мкс> task=<ім'я>                       перемикання контексту (traceTASK_SWITCHED_IN)
 
 Узгоджено з:
 - docs/metrics/metrics-spec.md (§2, §3, §5)
@@ -42,7 +53,7 @@ RE_BUILD = re.compile(
     r"cpu_hz=(?P<cpu_hz>\d+),loop=(?P<loop>\S+)$"
 )
 RE_STATS_BEGIN = re.compile(
-    r"^STATS_BEGIN git=(?P<git>\S+) t_us=(?P<t_us>\d+) loops=(?P<loops>\d+)$"
+    r"^STATS_BEGIN git=(?P<git>\S+) t_us=(?P<t_us>\d+)(?: loops=(?P<loops>\d+))?$"
 )
 RE_STATS_END = re.compile(r"^STATS_END$")
 RE_STAT_US = re.compile(
@@ -74,9 +85,8 @@ RE_EVQ = re.compile(
     r"^EVQ len=(?P<len>\d+) pending=(?P<pending>\d+) max_depth=(?P<max_depth>\d+) "
     r"posted=(?P<posted>\d+) dropped=(?P<dropped>\d+)$"
 )
-RE_UART = re.compile(
-    r"^UART rx_overrun=(?P<rx_overrun>\d+) cmd_overflow=(?P<cmd_overflow>\d+)$"
-)
+# UART: з PR #42 (DMA) додались cmd_dropped і rx_peak — приймаємо будь-які поля ключ=число
+RE_UART = re.compile(r"^UART (?P<fields>\w+=\d+(?: \w+=\d+)*)$")
 RE_EVTLOG = re.compile(r"^EVTLOG pending=(?P<pending>\d+) dropped=(?P<dropped>\d+)$")
 RE_LOAD = re.compile(r"^LOAD pct=(?P<pct>\d+)$")
 RE_EVT = re.compile(r"^EVT t_us=(?P<t_us>\d+) name=(?P<name>\S+)$")
@@ -86,6 +96,35 @@ RE_STACK = re.compile(
 RE_HEAP = re.compile(
     r"^HEAP arena=(?P<arena>\d+) used=(?P<used>\d+) free=(?P<free>\d+)$"
 )
+
+# ---- ЛР4 (FreeRTOS): нові рядки, рядки ЛР3 не змінюються ----
+RE_STACK_TASK = re.compile(
+    r"^STACK task=(?P<task>\S+) reserved=(?P<reserved>\d+) used=(?P<used>\d+) free=(?P<free>\d+)$"
+)
+RE_STACK_WORDS = re.compile(r"^STACK task=(?P<task>\S+) free_min_words=(?P<words>\d+)$")
+RE_OSHEAP = re.compile(
+    r"^(?:OSHEAP|HEAP) free=(?P<free>\d+) min_ever_free=(?P<min_ever_free>\d+) total=(?P<total>\d+)$"
+)
+RE_TASKS_BEGIN = re.compile(r"^TASKS_BEGIN(?: total=(?P<total>\d+))?$")
+RE_TASKS_END = re.compile(r"^TASKS_END$")
+RE_TASK = re.compile(
+    r"^TASK name=(?P<name>\S+)(?: prio=(?P<prio>\d+))? runtime=(?P<runtime>\d+) "
+    r"pct=(?P<pct><?\d+(?:\.\d+)?)%?$"
+)
+# Сирий рядок vTaskGetRunTimeStats: «ім'я<таб>абсолютний час<таб>відсоток%» (ім'я може мати пробіл: «Tmr Svc»)
+RE_TASK_RAW = re.compile(r"^(?P<name>\S(?:.*?\S)?)\s+(?P<runtime>\d+)\s+(?P<pct><?\d+)%$")
+RE_TRACE = re.compile(r"^TRACE t_us=(?P<t_us>\d+) task=(?P<task>\S+)$")
+RE_TRACE_META = re.compile(r"^TRACE_(?:BEGIN|END)(?: .*)?$")
+
+IDLE_TASK_NAMES = ("IDLE", "IDLE0")
+
+# Імена задач ЛР3 -> ЛР4 (docs/rtos-design.md §2): uart ділиться на cmd і logger,
+# mem переходить у logger, головного циклу (loop) у ЛР4 немає
+TASK_ALIASES_LAB3_TO_LAB4: Dict[str, Tuple[str, ...]] = {
+    "uart": ("cmd", "logger"),
+    "mem": ("logger",),
+    "loop": (),
+}
 
 
 @dataclass
@@ -147,6 +186,26 @@ class HeapSnapshot:
 
 
 @dataclass
+class TaskRuntime:
+    name: str
+    runtime: int
+    pct: float          # з рядка прошивки (для «<1%» — 0.5)
+    prio: Optional[int] = None
+
+
+@dataclass
+class OsHeapSnapshot:
+    free: int = 0
+    min_ever_free: int = 0
+    total: int = 0
+
+    @property
+    def used_max(self) -> int:
+        """Найбільше використання за весь час: total − min_ever_free (методичка ЛР4 §6.4)."""
+        return self.total - self.min_ever_free
+
+
+@dataclass
 class LogReport:
     source_file: str
     scenario: str
@@ -169,6 +228,15 @@ class LogReport:
     event_latencies: Dict[str, EventPairSummary] = field(default_factory=dict)
     stack_peak: Optional[MemSnapshot] = None
     heap_peak: Optional[HeapSnapshot] = None
+    # ЛР4
+    stack_tasks: Dict[str, MemSnapshot] = field(default_factory=dict)
+    stack_free_min_words: Dict[str, int] = field(default_factory=dict)
+    os_heap: Optional[OsHeapSnapshot] = None
+    tasks_total: Optional[int] = None
+    tasks_runtime: Dict[str, TaskRuntime] = field(default_factory=dict)
+    cpu_from_idle_pct: Optional[float] = None
+    trace_events: List[Tuple[int, str]] = field(default_factory=list)
+    trace_summary: Dict[str, Dict[str, float]] = field(default_factory=dict)
     parsed_lines: int = 0
     ignored_lines: int = 0
     warnings: List[str] = field(default_factory=list)
@@ -220,6 +288,7 @@ def parse_log_file(
         f"{s}->{e}": (s, e, d) for s, e, d in pairs
     }
 
+    in_tasks = False
     text = path.read_text(encoding="utf-8", errors="replace")
     for line_no, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.strip()
@@ -231,6 +300,86 @@ def parse_log_file(
             report.build = m.groupdict()
             report.cpu_hz = int(m.group("cpu_hz"))
             pending_starts.clear()  # скидаємо незавершені пари після рестарту МК
+            # Stack painting, heap і лічильники ОС рахуються від скидання МК: рядки
+            # до банера BUILD — попередній сеанс плати (у S3 ЛР3 — 800 Б замість 760 Б).
+            # Команда VER теж друкує BUILD; це не шкодить: наступні STACK / HEAP /
+            # OSHEAP знову покажуть накопичений від старту максимум.
+            report.stack_peak = None
+            report.heap_peak = None
+            report.stack_tasks.clear()
+            report.stack_free_min_words.clear()
+            report.os_heap = None
+            in_tasks = False
+            report.parsed_lines += 1
+            continue
+
+        # ---- ЛР4: run-time stats (блок TASKS_BEGIN … TASKS_END) ----
+        m = RE_TASKS_BEGIN.match(line)
+        if m:
+            in_tasks = True
+            report.tasks_runtime = {}
+            report.tasks_total = int(m.group("total")) if m.group("total") else None
+            report.parsed_lines += 1
+            continue
+        if in_tasks:
+            if RE_TASKS_END.match(line):
+                in_tasks = False
+                report.parsed_lines += 1
+                continue
+            m = RE_TASK.match(line) or RE_TASK_RAW.match(line)
+            if m:
+                pct_txt = m.group("pct")
+                pct = 0.5 if pct_txt.startswith("<") else float(pct_txt)
+                prio = m.groupdict().get("prio")
+                name = m.group("name").replace(" ", "_")
+                report.tasks_runtime[name] = TaskRuntime(
+                    name=name, runtime=int(m.group("runtime")), pct=pct,
+                    prio=int(prio) if prio else None,
+                )
+                report.parsed_lines += 1
+                continue
+
+        m = RE_STACK_TASK.match(line)
+        if m:
+            task = m.group("task")
+            snap = MemSnapshot(
+                reserved=int(m.group("reserved")),
+                used=int(m.group("used")),
+                free=int(m.group("free")),
+            )
+            prev = report.stack_tasks.get(task)
+            if prev is None or snap.used >= prev.used:
+                report.stack_tasks[task] = snap
+            report.parsed_lines += 1
+            continue
+
+        m = RE_STACK_WORDS.match(line)
+        if m:
+            task = m.group("task")
+            words = int(m.group("words"))
+            prev_w = report.stack_free_min_words.get(task)
+            report.stack_free_min_words[task] = words if prev_w is None else min(prev_w, words)
+            report.parsed_lines += 1
+            continue
+
+        m = RE_OSHEAP.match(line)
+        if m:
+            snap_h = OsHeapSnapshot(
+                free=int(m.group("free")),
+                min_ever_free=int(m.group("min_ever_free")),
+                total=int(m.group("total")),
+            )
+            if report.os_heap is None or snap_h.min_ever_free <= report.os_heap.min_ever_free:
+                report.os_heap = snap_h
+            report.parsed_lines += 1
+            continue
+
+        m = RE_TRACE.match(line)
+        if m:
+            report.trace_events.append((int(m.group("t_us")), m.group("task")))
+            report.parsed_lines += 1
+            continue
+        if RE_TRACE_META.match(line):
             report.parsed_lines += 1
             continue
 
@@ -334,7 +483,9 @@ def parse_log_file(
 
         m = RE_UART.match(line)
         if m:
-            report.uart_errors = {k: int(v) for k, v in m.groupdict().items()}
+            report.uart_errors = {
+                k: int(v) for k, v in (kv.split("=") for kv in m.group("fields").split())
+            }
             report.parsed_lines += 1
             continue
 
@@ -444,6 +595,31 @@ def parse_log_file(
                 samples_us=deltas,
             )
 
+    # ЛР4: завантаження CPU як 100 − частка IDLE (рахується за абсолютним часом, а не
+    # за округленим відсотком прошивки)
+    if report.tasks_runtime:
+        total_rt = sum(t.runtime for t in report.tasks_runtime.values())
+        idle = [t for n, t in report.tasks_runtime.items() if n in IDLE_TASK_NAMES]
+        if idle and total_rt > 0:
+            idle_rt = sum(t.runtime for t in idle)
+            report.cpu_from_idle_pct = round(100.0 * (1.0 - idle_rt / total_rt), 2)
+
+    # ЛР4: хронологія задач — кожна подія TRACE означає «задача отримала CPU»;
+    # її відрізок триває до наступного перемикання
+    if len(report.trace_events) >= 2:
+        ev = sorted(report.trace_events)
+        window = ev[-1][0] - ev[0][0]
+        summ: Dict[str, Dict[str, float]] = {}
+        for (t0, task), (t1, _) in zip(ev, ev[1:]):
+            d = summ.setdefault(task, {"slices": 0, "total_us": 0, "max_slice_us": 0})
+            dt = t1 - t0
+            d["slices"] += 1
+            d["total_us"] += dt
+            d["max_slice_us"] = max(d["max_slice_us"], dt)
+        for d in summ.values():
+            d["share_pct"] = round(100.0 * d["total_us"] / window, 2) if window > 0 else 0.0
+        report.trace_summary = summ
+
     if report.evtlog.get("dropped", 0) > 0:
         report.warnings.append(
             f"Увага: кільцевий буфер EVT втратив {report.evtlog['dropped']} подій (EVTLOG dropped > 0)"
@@ -474,7 +650,7 @@ def render_single_markdown(rep: LogReport) -> str:
         "",
         f"* **Файл:** `{rep.source_file}`",
         f"* **Збірка:** `git={rep.build.get('git', rep.stats_meta.get('git', 'unknown'))}`, "
-        f"`cpu_hz={rep.cpu_hz}`",
+        f"`cpu_hz={rep.cpu_hz}`, `loop={rep.build.get('loop', '?')}`",
         f"* **Рядків оброблено / пропущено:** `{rep.parsed_lines}` / `{rep.ignored_lines}` "
         f"(подій `EVT`: `{rep.evt_count}`)",
         "",
@@ -564,7 +740,141 @@ def render_single_markdown(rep: LogReport) -> str:
             lines.append(f"* **ISR overruns (`OVR`):** `{rep.overruns}`")
         lines.append("")
 
+    lines.extend(render_os_markdown(rep))
     return "\n".join(lines)
+
+
+def render_os_markdown(rep: LogReport) -> List[str]:
+    """Розділ метрик ОС (ЛР4); для логів ЛР3 порожній."""
+    if not (rep.tasks_runtime or rep.stack_tasks or rep.stack_free_min_words
+            or rep.os_heap or rep.trace_summary):
+        return []
+    out: List[str] = ["### 5. Метрики ОС (ЛР4)", ""]
+    if rep.tasks_runtime:
+        total_rt = sum(t.runtime for t in rep.tasks_runtime.values())
+        out += ["Завантаження за задачами (`TASKS`, run-time stats):", "",
+                "| Задача | Пріоритет | Час, такти | Частка | Частка за тактами |",
+                "| :--- | :---: | ---: | ---: | ---: |"]
+        for t in sorted(rep.tasks_runtime.values(), key=lambda t: -t.runtime):
+            share = f"{100.0 * t.runtime / total_rt:.2f}%" if total_rt else "—"
+            pct = "<1%" if t.pct == 0.5 else f"{t.pct:g}%"
+            out.append(f"| `{t.name}` | {t.prio if t.prio is not None else '—'} | {t.runtime} | {pct} | {share} |")
+        if rep.cpu_from_idle_pct is not None:
+            out.append("")
+            out.append(f"* **CPU за IDLE (100 − IDLE):** `{rep.cpu_from_idle_pct}%`")
+        out.append("")
+    if rep.stack_tasks or rep.stack_free_min_words:
+        out += ["Стек кожної задачі (пік від старту МК):", "",
+                "| Задача | Зарезервовано, Б | Використано, Б | Вільно, Б | Запас |",
+                "| :--- | ---: | ---: | ---: | ---: |"]
+        for name, sp in sorted(rep.stack_tasks.items()):
+            margin = f"{100.0 * sp.free / sp.reserved:.0f}%" if sp.reserved else "—"
+            out.append(f"| `{name}` | {sp.reserved} | {sp.used} | {sp.free} | {margin} |")
+        for name, w in sorted(rep.stack_free_min_words.items()):
+            if name not in rep.stack_tasks:
+                out.append(f"| `{name}` | — | — | {4 * w} (`free_min_words={w}`) | — |")
+        res, used = stack_totals(rep)
+        if res:
+            out.append(f"| **разом задачі** | **{res}** | **{used}** | | |")
+        out.append("")
+    if rep.os_heap:
+        h = rep.os_heap
+        out.append(f"* **Heap ОС:** total = `{h.total}` Б, free = `{h.free}` Б, "
+                   f"min_ever_free = `{h.min_ever_free}` Б → використано max = `{h.used_max}` Б")
+        out.append("")
+    if rep.trace_summary:
+        n = len(rep.trace_events)
+        out += [f"Хронологія задач (`TRACE`, {n} перемикань):", "",
+                "| Задача | Відрізків | Час, мкс | Частка вікна | Найдовший відрізок, мкс |",
+                "| :--- | ---: | ---: | ---: | ---: |"]
+        for name, d in sorted(rep.trace_summary.items(), key=lambda kv: -kv[1]["total_us"]):
+            out.append(f"| `{name}` | {int(d['slices'])} | {int(d['total_us'])} | {d['share_pct']}% | {int(d['max_slice_us'])} |")
+        out.append("")
+    return out
+
+
+def stack_totals(rep: LogReport) -> Tuple[int, int]:
+    """Сума зарезервованого й використаного стека задач (без MSP — стека переривань)."""
+    tasks = {k: v for k, v in rep.stack_tasks.items() if k.upper() != "MSP"}
+    return sum(v.reserved for v in tasks.values()), sum(v.used for v in tasks.values())
+
+
+def render_side_by_side(reports: Dict[str, LogReport]) -> str:
+    """Ключові метрики кількох логів поруч (напр. S3 ЛР3 і S3 ЛР4) — для порівняльної таблиці §7.3."""
+    labels = list(reports)
+
+    def pair(rep: LogReport, pid: str) -> str:
+        ev = rep.event_latencies.get(pid)
+        return f"{ev.max_us} / {ev.p99_us:.0f} мкс (n={ev.n})" if ev else "—"
+
+    def jit(rep: LogReport, task: str) -> str:
+        j = rep.jitter.get(task)
+        return f"{j.max_us} мкс, missed {j.missed}" if j else "—"
+
+    def load(rep: LogReport) -> str:
+        if not rep.load_summary:
+            return "—"
+        ls = rep.load_summary
+        return f"{ls['avg_pct']:.1f}% / {ls['max_pct']:.1f}%"
+
+    def stack(rep: LogReport) -> str:
+        if rep.stack_tasks:
+            res, used = stack_totals(rep)
+            msp = rep.stack_tasks.get("MSP")
+            tail = f"; MSP {msp.used} / {msp.reserved} Б" if msp else ""
+            return f"задачі {used} / {res} Б{tail}"
+        if rep.stack_peak:
+            return f"{rep.stack_peak.used} / {rep.stack_peak.reserved} Б"
+        return "—"
+
+    def heap(rep: LogReport) -> str:
+        parts = []
+        if rep.heap_peak:
+            parts.append(f"newlib {rep.heap_peak.used} Б")
+        if rep.os_heap:
+            parts.append(f"ОС {rep.os_heap.used_max} / {rep.os_heap.total} Б")
+        return ", ".join(parts) or "—"
+
+    def counters(rep: LogReport) -> str:
+        peak = rep.uart_errors.get("rx_peak")
+        return (f"EVQ {rep.evq.get('dropped', '—')}, rx_overrun {rep.uart_errors.get('rx_overrun', '—')}"
+                + (f" (rx_peak {peak} Б)" if peak is not None else "")
+                + f", OVR {sum(rep.overruns.values()) if rep.overruns else 0}")
+
+    rows = [
+        ("Прошивка (`loop`, `git`)", lambda r: f"`{r.build.get('loop', '?')}` `{r.build.get('git', '?')}`"),
+        ("Реакція B1, max / p99", lambda r: pair(r, "btn_b1_press->btn_b1_handled")),
+        ("Реакція PIR, max / p99", lambda r: pair(r, "pir_trig->pir_handled")),
+        ("Код: натискання → обробка, max / p99", lambda r: pair(r, "code_key_press->code_key_handled")),
+        ("Команда UART, max / p99", lambda r: pair(r, "uart_cmd_rx->uart_cmd_tx")),
+        ("Джитер `security`, max", lambda r: jit(r, "security")),
+        ("Джитер `env`, max", lambda r: jit(r, "env")),
+        ("Захоплення кадру, max", lambda r: pair(r, "capture_start->capture_done")),
+        ("Запис кадру у Flash, max", lambda r: pair(r, "flash_wr_start->flash_wr_done")),
+        ("CPU `LOAD pct`, avg / max", load),
+        ("CPU за IDLE (ЛР4)", lambda r: f"{r.cpu_from_idle_pct}%" if r.cpu_from_idle_pct is not None else "—"),
+        ("Стек: використано / зарезервовано", stack),
+        ("Heap: використано", heap),
+        ("Втрати: EVQ, UART, OVR", counters),
+    ]
+    out = ["## Порівняння логів поруч (`--log`)", "",
+           "| Метрика | " + " | ".join(f"`{l}`" for l in labels) + " |",
+           "| :--- | " + " | ".join(":---:" for _ in labels) + " |"]
+    for title, fn in rows:
+        out.append(f"| {title} | " + " | ".join(fn(reports[l]) for l in labels) + " |")
+    # STAT за іменами задач: ЛР3 і ЛР4 мають різні імена (TASK_ALIASES_LAB3_TO_LAB4)
+    names = sorted({n for r in reports.values() for n in r.stats})
+    if names:
+        out += ["", "`STAT` за іменами (max, мкс). Відповідність імен ЛР3 → ЛР4: "
+                + "; ".join(f"`{k}` → " + (", ".join(f"`{x}`" for x in v) if v else "немає")
+                            for k, v in TASK_ALIASES_LAB3_TO_LAB4.items()) + ".", "",
+                "| `STAT name` | " + " | ".join(f"`{l}`" for l in labels) + " |",
+                "| :--- | " + " | ".join(":---:" for _ in labels) + " |"]
+        for n in names:
+            out.append(f"| `{n}` | " + " | ".join(
+                str(reports[l].stats[n].max_us) if n in reports[l].stats else "—" for l in labels) + " |")
+    out.append("")
+    return "\n".join(out)
 
 
 def render_comparison_table(reports: Dict[str, LogReport]) -> str:
@@ -691,6 +1001,23 @@ def write_csv(reports: List[LogReport], csv_path: Path) -> None:
                 writer.writerow(
                     [rep.scenario, git_hash, "STACK_B", "stack", "", "", "", sp.used, "", f"reserved={sp.reserved};free={sp.free}"]
                 )
+            for name, sp in rep.stack_tasks.items():
+                writer.writerow(
+                    [rep.scenario, git_hash, "STACK_TASK_B", name, "", "", "", sp.used, "", f"reserved={sp.reserved};free={sp.free}"]
+                )
+            if rep.os_heap:
+                h = rep.os_heap
+                writer.writerow(
+                    [rep.scenario, git_hash, "OSHEAP_B", "os_heap", "", "", "", h.used_max, "", f"total={h.total};min_ever_free={h.min_ever_free}"]
+                )
+            for t in rep.tasks_runtime.values():
+                writer.writerow(
+                    [rep.scenario, git_hash, "TASK_PCT", t.name, "", "", t.pct, "", "", f"runtime={t.runtime};prio={t.prio}"]
+                )
+            if rep.cpu_from_idle_pct is not None:
+                writer.writerow(
+                    [rep.scenario, git_hash, "CPU_IDLE_PCT", "cpu_from_idle", "", "", rep.cpu_from_idle_pct, "", "", "unit=%"]
+                )
 
 
 def parse_extra_pair(spec: str) -> Tuple[str, str, str]:
@@ -698,6 +1025,13 @@ def parse_extra_pair(spec: str) -> Tuple[str, str, str]:
         raise argparse.ArgumentTypeError("Формат пари подій має бути start_event:end_event")
     start_ev, end_ev = spec.split(":", 1)
     return (start_ev.strip(), end_ev.strip(), f"Custom pair {start_ev} -> {end_ev}")
+
+
+def parse_labeled_log(spec: str) -> Tuple[str, Path]:
+    if "=" not in spec:
+        raise argparse.ArgumentTypeError("Формат: МІТКА=ФАЙЛ, напр. S3_lab4=docs/metrics/lab4/S3_uart_raw.txt")
+    label, path = spec.split("=", 1)
+    return label.strip(), Path(path.strip())
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -715,6 +1049,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=[],
         help="Додаткова пара подій start_event:end_event (можна вказати кілька разів)",
     )
+    parser.add_argument(
+        "--log",
+        action="append",
+        type=parse_labeled_log,
+        default=[],
+        metavar="МІТКА=ФАЙЛ",
+        help="Лог з довільною міткою, напр. S3_lab3=… і S3_lab4=…: ключові метрики виводяться поруч "
+        "(можна вказати кілька разів; разом із --s1/--s2/--s3 теж)",
+    )
     parser.add_argument("--md", type=Path, help="Зберегти Markdown-звіт у вказаний файл")
     parser.add_argument("--json", type=Path, help="Зберегти повний JSON-дамп метрик у вказаний файл")
     parser.add_argument("--csv", type=Path, help="Зберегти зведену CSV-таблицю у вказаний файл")
@@ -730,9 +1073,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         inputs.append(("S2", args.s2))
     if args.s3:
         inputs.append(("S3", args.s3))
+    for label, path in args.log:
+        if label in {name for name, _ in inputs}:
+            parser.error(f"Мітка '{label}' повторюється.")
+        inputs.append((label, path))
 
     if not inputs:
-        parser.error("Вкажіть лог-файл або хоча б один параметр --s1 / --s2 / --s3.")
+        parser.error("Вкажіть лог-файл або хоча б один параметр --s1 / --s2 / --s3 / --log.")
 
     reports_by_name: Dict[str, LogReport] = {}
     for scen, fpath in inputs:
@@ -744,6 +1091,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     md_parts: List[str] = []
     if any(k in reports_by_name for k in ("S1", "S2", "S3")):
         md_parts.append(render_comparison_table(reports_by_name))
+    if args.log:
+        md_parts.append(render_side_by_side(reports_by_name))
     for rep in reports_by_name.values():
         md_parts.append(render_single_markdown(rep))
 
