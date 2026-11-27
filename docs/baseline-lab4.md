@@ -143,6 +143,7 @@ S1 / S2 / S3 — прошивка `5774b8a`. Деталі й пояснення 
 ### 4.2. Формати логів
 
 Контракт — `metrics/metrics-spec.md` §3: `BUILD`, `STAT`, `EVT`, `JITTER`, `LOAD`, `STACK` / `HEAP`.
+Нові рядки ЛР4 — у §3.7: `STACK task=`, `OSHEAP`, `TASKS`, `TRACE`.
 Регулярні вирази там же; парсер M03 на них покладається.
 
 ### 4.3. Хост-скрипти
@@ -150,7 +151,7 @@ S1 / S2 / S3 — прошивка `5774b8a`. Деталі й пояснення 
 | Скрипт | Що робить |
 |---|---|
 | `scripts/uart_capture.py` | запис UART: `_uart_raw.txt`, `_uart_ts.txt`, `_conditions.md`; навантаження `--load-rate` / `--load-burst` |
-| `scripts/parse_uart_logs.py` | таблиці S1/S2/S3: STAT, пари EVT (p99), JITTER, LOAD, MEM (M03) |
+| `scripts/parse_uart_logs.py` | таблиці S1/S2/S3: STAT, пари EVT (p99), JITTER, LOAD, MEM; у ЛР4 — ще TASKS, стеки задач, OSHEAP, TRACE і `--log ЛР3=… --log ЛР4=…` для порівняння поруч (M03) |
 | `scripts/uart_load.py` | окреме навантаження UART без запису (`metrics/uart-load-guide.md`) |
 | `tools/frame_decode.py` | кадр з `CAM EXPORT` → PNG |
 | `scripts/host_checks.py` (`make host-checks`) | усі хостові тести, зокрема тести скриптів |
@@ -163,10 +164,26 @@ DWT-мітки подій і статистика задач (I03, I04), слу�
 
 ## 5. Що змінити в ЛР4 і що — ні
 
-* **Без змін:** сценарії й команди запису (розділ 1), формати рядків `metrics-spec.md` §3, імена подій
-  `EVT`, піни `PROBE_*` і канали аналізатора, `parse_uart_logs.py`, налаштування аналізатора.
+* **Без змін:** сценарії й команди запису (розділ 1), формати рядків `metrics-spec.md` §3.1–3.6, імена подій
+  `EVT`, піни `PROBE_*` і канали аналізатора, налаштування аналізатора. `parse_uart_logs.py` після M03
+  розбирає логи ЛР3 так само, як раніше, а рядки ЛР4 лише додано.
 * **Банер:** `loop=freertos` замість `loop=superloop` — так логи ЛР3 і ЛР4 не переплутати.
-* **Нове в ЛР4 — лише додавати, не замінювати:** стек кожної задачі — рядок у тому самому форматі
-  `STACK task=<ім'я> reserved=… used=… free=…` (з `uxTaskGetStackHighWaterMark`); heap FreeRTOS —
-  `HEAP` з `xPortGetFreeHeapSize()`; `PROBE_LOOP` — на час роботи обраної задачі.
+* **Нове в ЛР4 — лише додавати, не замінювати** (формати — `metrics-spec.md` §3.7): стек кожної задачі —
+  `STACK task=<ім'я> reserved=… used=… free=…` у байтах (з `uxTaskGetStackHighWaterMark`), стек переривань —
+  `STACK task=MSP …`; heap FreeRTOS — `OSHEAP free=… min_ever_free=… total=…` з `xPortGetFreeHeapSize()` /
+  `xPortGetMinimumEverFreeHeapSize()` (рядок newlib `HEAP arena=…` лишається); run-time stats — блок `TASKS`;
+  `PROBE_LOOP` — на час роботи обраної задачі.
 * Числа ЛР4 класти в ту саму таблицю, що в розділі 2, поруч зі значеннями ЛР3.
+
+Щоб числа ЛР3 і ЛР4 можна було порівнювати, метрики в ЛР4 вимірюються так само, як у ЛР3
+(погоджено в рев'ю K01, `rtos-design.md`):
+
+| Метрика | Як у ЛР3 | Що зробити в ЛР4 |
+|---|---|---|
+| реакція на B1 (`btn_b1_handled`, PB1) | мітка ставиться, коли задача забирає подію від ISR, до антидребезгу (`app_tasks.c`, `take()`) | мітку ставимо там само: одразу після `xQueueReceive` з `qKeys` у задачі `buttons`, до таймера антидребезгу |
+| завантаження CPU (`LOAD pct=`) | сума тривалостей задач за вікно 1 с (`sched.c`) | `LOAD pct=` рахуємо так само; `100 − IDLE` з `TASKS` друкуємо поруч для довідки |
+| джитер і пропуски (`JITTER`) | `dt − period`; пропуск, якщо `dt > 2 × period` (`note_jitter`) | той самий код одразу після `vTaskDelayUntil` |
+| імена `STAT` | `uart`, `mem`, `loop` | `uart` → `cmd` + `logger`, `mem` → `logger`, `loop` → немає (парсер зіставляє сам) |
+| час `EVT t_us` | 64-бітний DWT | 64-бітний DWT; розширення старших 32 біт — у tick hook |
+| навантаження вимірюванням | друк лише `EVT`, `LOAD`, `STAT` за командою | трасування й автоматичний `TASKS` під час S1–S3 вимкнені прапорцем збірки |
+

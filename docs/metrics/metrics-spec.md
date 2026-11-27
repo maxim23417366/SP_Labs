@@ -1,10 +1,10 @@
-# Специфікація метрик, форматів логів та шаблонів результатів (SmartLock — ЛР3)
+# Специфікація метрик, форматів логів та шаблонів результатів (SmartLock — ЛР3, ЛР4)
 
 ## 1. Апаратна та системна база вимірювань
 
 * **Мікроконтролер:** STM32F411RET6 (NUCLEO-F411RE)
 * **Тактування:** `SYSCLK = 96 МГц` (HSE 8 МГц bypass), `APB1 = 48 МГц`, `APB2 = 96 МГц`
-* **Ресурси пам'яті:** `FLASH = 512 КБ`, `RAM = 96 КБ`
+* **Ресурси пам'яті:** `FLASH = 512 КБ`, `RAM = 128 КБ`
 * **Дискретність лічильника циклів `DWT->CYCCNT`:** 1 такт = $\approx 10.42\text{ нс}$ (період переповнення 32-бітного лічильника при 96 МГц становить $\approx 44.74\text{ с}$)
 * **Інтерфейс виводу діагностики:** `USART2` (`PA2/PA3`, `115200 8N1`) через ST-LINK VCP / YP-05
 * **Комбіновані методи вимірювання:**
@@ -40,6 +40,8 @@
 BUILD,fw=SmartLock,lab=LR3,git=<short_hash>,cpu_hz=96000000,loop=superloop
 ```
 *Приклад:* `BUILD,fw=SmartLock,lab=LR3,git=a1b2c3d,cpu_hz=96000000,loop=superloop`
+
+У ЛР4: `lab=LR4`, `loop=freertos` — так логи ЛР3 і ЛР4 не переплутати.
 
 ### 3.2. Статистика часу виконання задач та затримок (`STAT`)
 Виводиться за командою `STATS` або після завершення тестового прогону:
@@ -107,6 +109,74 @@ HEAP arena=0 used=0 free=0
 
 ---
 
+### 3.7. Нові рядки ЛР4 (FreeRTOS)
+
+Рядки §3.1–3.6 у ЛР4 лишаються без змін і з тими самими іменами подій. Нові рядки ЛР4 лише
+додаються до них. Їх розбирає `scripts/parse_uart_logs.py` (M03). Формати погоджено в рев'ю
+K01 (`docs/rtos-design.md`, PR #68).
+
+**Стек кожної задачі** — за командою `MEM`, один рядок на задачу, у байтах (із
+`uxTaskGetStackHighWaterMark` × 4). Стек переривань (MSP, `_Min_Stack_Size` = 4 096 Б) — рядок з `task=MSP`:
+```text
+STACK task=<ім'я задачі> reserved=<bytes> used=<bytes> free=<bytes>
+```
+*Приклад:*
+```text
+STACK task=buttons reserved=640 used=212 free=428
+STACK task=MSP reserved=4096 used=520 free=3576
+```
+*Регулярний вираз:* `^STACK task=(\S+) reserved=(\d+) used=(\d+) free=(\d+)$`.
+Допустимий скорочений варіант (лише high water mark у словах): `STACK task=<ім'я> free_min_words=<слова>`.
+Рядок `STACK reserved=…` без `task=` (§3.6) — це стек ЛР3. Сума стеків задач рахується без `MSP`.
+
+**Heap FreeRTOS** — за командою `MEM`, з `xPortGetFreeHeapSize()` і `xPortGetMinimumEverFreeHeapSize()`.
+Рядок newlib `HEAP arena=…` (§3.6) лишається поряд, тому heap ОС має інший префікс:
+```text
+OSHEAP free=<bytes> min_ever_free=<bytes> total=<configTOTAL_HEAP_SIZE>
+```
+*Приклад:* `OSHEAP free=9216 min_ever_free=8704 total=20480` → пік використання = `total − min_ever_free`.
+*Регулярний вираз:* `^OSHEAP free=(\d+) min_ever_free=(\d+) total=(\d+)$` (парсер приймає й префікс `HEAP free=`).
+
+**Час CPU по задачах** (run-time stats) — за командою `STATS`, блок між `TASKS_BEGIN` і `TASKS_END`:
+```text
+TASKS_BEGIN total=<загальний час лічильника>
+TASK name=<ім'я> prio=<пріоритет> runtime=<ticks> pct=<0..100>
+TASKS_END
+```
+*Приклад:*
+```text
+TASKS_BEGIN total=60000000
+TASK name=IDLE prio=0 runtime=52800000 pct=88
+TASK name=security prio=5 runtime=2400000 pct=4
+TASK name=camera prio=1 runtime=4800000 pct=8
+TASKS_END
+```
+Блок містить усі задачі, і `IDLE` теж. Сума `runtime` дорівнює `total`.
+*Регулярний вираз:* `^TASK name=(\S+)(?: prio=(\d+))? runtime=(\d+) pct=(<?\d+(?:\.\d+)?)%?$`.
+Усередині блоку дозволено й сирий вивід `vTaskGetRunTimeStats` (`ім'я<таб>час<таб>відсоток%`,
+`<1%` → 0,5 %). Пробіл в імені (`Tmr Svc`) парсер замінює на `_`.
+
+**Завантаження CPU у ЛР4 (M-05)** друкується двома способами:
+* `LOAD pct=` (§3.5) рахується так само, як у ЛР3: сума тривалостей задач за вікно 1 с;
+* у звіті парсера — `100 − частка IDLE` з блоку `TASKS` (рахується за `runtime`). У прикладі вище це 12 %.
+
+У порівнянні з ЛР3 використовують перший спосіб, а другий наводять для довідки.
+
+**Трасування перемикань** (`traceTASK_SWITCHED_IN`) — необов'язкове, між `TRACE_BEGIN` і `TRACE_END`:
+```text
+TRACE t_us=<64-бітний час DWT> task=<ім'я>
+```
+*Регулярний вираз:* `^TRACE t_us=(\d+) task=(\S+)$`.
+
+**Паритет вимірювань.** Під час S1–S3 трасування й автоматичний вивід `TASKS` вимкнені прапорцем
+збірки. Їх вмикають лише в окремих прогонах, щоб друк не додавав навантаження, якого не було в ЛР3.
+
+**Імена `STAT` у ЛР3 і ЛР4.** `STAT name=<задача>` друкується з іменами задач FreeRTOS. Для
+порівняння парсер зіставляє імена ЛР3 так: `uart` → `cmd` + `logger`, `mem` → `logger`,
+`loop` → немає відповідника (у ЛР4 немає головного циклу). Решта імен збігаються.
+
+---
+
 ## 4. Сценарії тестування для збору метрик
 
 Усі вимірювання виконуються на одній і тій самій збірці прошивки (однаковий `git` у банері `BUILD` та частота UART):
@@ -133,5 +203,6 @@ HEAP arena=0 used=0 free=0
 | Час захоплення кадру OV7670 | — | — | — | Теоретичні оцінки | DWT + PulseView | — |
 | Час запису/стирання W25Q64 | — | — | — | Datasheet / теоретичні оцінки | DWT | — |
 | Завантаження CPU, avg / max | — | — | — | $< 100\%$ | DWT (`LOAD`) | — |
-| Використання Flash / Static RAM | — | — | — | $\le 512$ КБ / $\le 96$ КБ | Linker map | — |
+| Використання Flash / Static RAM | — | — | — | $\le 512$ КБ / $\le 128$ КБ | Linker map | — |
 | Глибина стека (Static / Painted) | — | — | — | Запас $> 20\%$ | `-fstack-usage` + Paint | — |
+
